@@ -11,6 +11,7 @@ from app.models import EmailVerificationToken, User
 
 load_dotenv()
 
+
 VERIFICATION_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("VERIFICATION_TOKEN_EXPIRE_MINUTES", "30")
 )
@@ -25,14 +26,33 @@ async def create_verification_token(
     session: AsyncSession,
 ) -> EmailVerificationToken:
 
+    now = datetime.now(timezone.utc)
+
+    # Expire all currently active tokens for this user.
+    result = await session.execute(
+        select(EmailVerificationToken).where(
+            EmailVerificationToken.user_id == user_id,
+            EmailVerificationToken.used_at.is_(None),
+            EmailVerificationToken.expires_at > now,
+        )
+    )
+
+    active_tokens = result.scalars().all()
+
+    for old_token in active_tokens:
+        old_token.expires_at = now
+
+    # Create the new token.
     token = generate_verification_token()
 
     verification_token = EmailVerificationToken(
         user_id=user_id,
         token=token,
         expires_at=(
-            datetime.now(timezone.utc)
-            + timedelta(minutes=VERIFICATION_TOKEN_EXPIRE_MINUTES)
+            now
+            + timedelta(
+                minutes=VERIFICATION_TOKEN_EXPIRE_MINUTES
+            )
         ),
     )
 
@@ -40,10 +60,13 @@ async def create_verification_token(
 
     return verification_token
 
+
 async def verify_email_token(
     token: str,
-    session: AsyncSession
+    session: AsyncSession,
 ) -> None:
+
+    now = datetime.now(timezone.utc)
 
     result = await session.execute(
         select(EmailVerificationToken).where(
@@ -57,10 +80,14 @@ async def verify_email_token(
         raise ValueError("Invalid verification token")
 
     if verification_token.used_at is not None:
-        raise ValueError("Verification token has already been used")
+        raise ValueError(
+            "Verification token has already been used"
+        )
 
-    if verification_token.expires_at <= datetime.now(timezone.utc):
-        raise ValueError("Verification token has expired")
+    if verification_token.expires_at <= now:
+        raise ValueError(
+            "Verification token has expired"
+        )
 
     result = await session.execute(
         select(User).where(
@@ -73,12 +100,7 @@ async def verify_email_token(
     if user is None:
         raise ValueError("User not found")
 
-    user.email_verified_at = datetime.now(timezone.utc)
-
-    verification_token.used_at = datetime.now(timezone.utc)
+    user.email_verified_at = now
+    verification_token.used_at = now
 
     await session.commit()
-
-
-
-

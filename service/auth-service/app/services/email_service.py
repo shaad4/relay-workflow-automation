@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from jinja2 import Template
 
+
 load_dotenv()
 
 
@@ -17,17 +18,23 @@ SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL")
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Relay")
 
 FRONTEND_URL = os.getenv("FRONTEND_URL")
+BACKEND_URL = os.getenv("BACKEND_URL")
+
+TEMPLATE_DIR = (
+    Path(__file__).resolve().parent.parent / "templates"
+)
 
 
-TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
-
-
-async def send_verification_email(
+def send_verification_email(
     email: str,
     name: str,
-    verification_url: str,
+    token: str,
     expiration_minutes: int,
 ) -> None:
+
+    verification_url = (
+        f"{BACKEND_URL}/auth/verify-email?token={token}"
+    )
 
     template_path = TEMPLATE_DIR / "email_verification.html"
 
@@ -44,11 +51,14 @@ async def send_verification_email(
     message = EmailMessage()
 
     message["Subject"] = "Verify your Relay account"
-    message["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+    message["From"] = (
+        f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+    )
     message["To"] = email
 
     message.set_content(
-        "Please verify your Relay account using the verification link."
+        "Please verify your Relay account using "
+        "the verification link."
     )
 
     message.add_alternative(
@@ -56,10 +66,20 @@ async def send_verification_email(
         subtype="html",
     )
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
-        smtp.starttls()
-        smtp.login(
-            SMTP_USERNAME,
-            SMTP_PASSWORD,
-        )
-        smtp.send_message(message)
+    try:
+        with smtplib.SMTP(
+            SMTP_HOST,
+            SMTP_PORT,
+        ) as smtp:
+
+            smtp.starttls()
+
+            smtp.login(
+                SMTP_USERNAME,
+                SMTP_PASSWORD,
+            )
+
+            smtp.send_message(message)
+    except Exception as exc:
+        print(f"Error sending verification email to {email}: {exc}")
+        raise

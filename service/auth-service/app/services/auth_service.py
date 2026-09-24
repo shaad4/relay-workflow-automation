@@ -7,6 +7,7 @@ from app.models import User, Workspace
 from app.schemas.auth import LoginRequest, RegisterRequest
 from app.core.jwt import create_access_token, create_refresh_token, decode_token
 from app.services.email_verification_service import create_verification_token
+from app.core.exceptions import EmailVerificationRequired
 
 async def register_user(
     data: RegisterRequest,
@@ -57,28 +58,60 @@ async def login_user(
     session: AsyncSession,
 ):
     result = await session.execute(
-        select(User).where(User.email == data.email)
+        select(User).where(
+            User.email == data.email
+        )
     )
 
     user = result.scalar_one_or_none()
 
     if not user:
-        raise ValueError("Invalid email or password")
+        raise ValueError(
+            "Invalid email or password"
+        )
 
-    if not verify_password(data.password, user.password_hash):
-        raise ValueError("Invalid email or password")
+    # Verify password before sending a new
+    # verification email.
+    if not verify_password(
+        data.password,
+        user.password_hash,
+    ):
+        raise ValueError(
+            "Invalid email or password"
+        )
+
+    if user.email_verified_at is None:
+
+        verification_token = (
+            await create_verification_token(
+                user_id=user.id,
+                session=session,
+            )
+        )
+
+        await session.commit()
+
+        raise EmailVerificationRequired(
+            token=verification_token.token,
+            user_email=user.email,
+            user_name=user.name,
+        )
 
     access_token = create_access_token(
         {
             "sub": str(user.id),
-            "workspace_id": str(user.workspace_id),
+            "workspace_id": str(
+                user.workspace_id
+            ),
         }
     )
 
     refresh_token = create_refresh_token(
         {
             "sub": str(user.id),
-            "workspace_id": str(user.workspace_id),
+            "workspace_id": str(
+                user.workspace_id
+            ),
         }
     )
 

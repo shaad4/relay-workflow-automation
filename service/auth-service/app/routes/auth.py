@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
@@ -12,6 +13,7 @@ from app.schemas.auth import (
 )
 from app.services.auth_service import login_user, refresh_access_token, register_user
 from app.services.email_verification_service import verify_email_token
+from app.core.exceptions import EmailVerificationRequired
 from app.services.email_service import send_verification_email
 from app.core.dependencies import get_current_user
 from app.models import User
@@ -44,7 +46,7 @@ async def register(
         send_verification_email,
         user.email,
         user.name,
-        f"http://localhost:8000/auth/verify-email?token={verification_token.token}",
+        verification_token.token,
         VERIFICATION_TOKEN_EXPIRE_MINUTES,
     )
 
@@ -54,15 +56,39 @@ async def register(
 @router.post("/login", response_model=LoginResponse)
 async def login(
     data: LoginRequest,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db),
 ):
     try:
-        access_token, refresh_token = await login_user(data, session)
+        access_token, refresh_token = await login_user(
+            data,
+            session,
+        )
+
+    except EmailVerificationRequired as exc:
+
+        background_tasks.add_task(
+            send_verification_email,
+            exc.user_email,
+            exc.user_name,
+            exc.token,
+            VERIFICATION_TOKEN_EXPIRE_MINUTES,
+        )
+
+        print("Background task added")
+
+        return JSONResponse(
+            status_code=401,
+            content={"detail": str(exc)},
+            background=background_tasks,
+        )
+
     except ValueError as exc:
         raise HTTPException(
             status_code=401,
             detail=str(exc),
         )
+
 
     return LoginResponse(
         access_token=access_token,
