@@ -34,10 +34,10 @@ class RefreshTokenResponse(BaseModel):
     access_token: str
     token_type: str
 
-class ForgetPasswordRequest(BaseModel):
+class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
-class ForgetPasswordResponse(BaseModel):
+class ForgotPasswordResponse(BaseModel):
     message: str
 
 class ResetPasswordRequest(BaseModel):

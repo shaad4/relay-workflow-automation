@@ -23,7 +23,7 @@ def generate_password_reset_token() -> str:
 async def create_password_reset_token(
     email: str,
     session: AsyncSession,
-) -> PasswordResetToken | None:
+) -> tuple[PasswordResetToken, User] | None:
 
     result = await session.execute(
         select(User).where(User.email == email)
@@ -63,7 +63,7 @@ async def create_password_reset_token(
     await session.commit()
     await session.refresh(token)
 
-    return token 
+    return token, user
 
 
 

@@ -83,3 +83,69 @@ def send_verification_email(
     except Exception as exc:
         print(f"Error sending verification email to {email}: {exc}")
         raise
+
+
+def send_password_reset_email(
+    email: str,
+    name: str,
+    token: str,
+    expiration_minutes: int,
+) -> None:
+
+    reset_url = (
+        f"{FRONTEND_URL}/reset-password?token={token}"
+    )
+
+    template_path = (
+        TEMPLATE_DIR / "password_reset.html"
+    )
+
+    template = Template(
+        template_path.read_text(encoding="utf-8")
+    )
+
+    html_content = template.render(
+        name=name,
+        reset_url=reset_url,
+        expiration_minutes=expiration_minutes,
+    )
+
+    message = EmailMessage()
+
+    message["Subject"] = "Reset your Relay password"
+    message["From"] = (
+        f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+    )
+    message["To"] = email
+
+    message.set_content(
+        "Use the password reset link to reset "
+        "your Relay account password."
+    )
+
+    message.add_alternative(
+        html_content,
+        subtype="html",
+    )
+
+    try:
+        with smtplib.SMTP(
+            SMTP_HOST,
+            SMTP_PORT,
+        ) as smtp:
+
+            smtp.starttls()
+
+            smtp.login(
+                SMTP_USERNAME,
+                SMTP_PASSWORD,
+            )
+
+            smtp.send_message(message)
+
+    except Exception as exc:
+        print(
+            f"Error sending password reset email "
+            f"to {email}: {exc}"
+        )
+        raise

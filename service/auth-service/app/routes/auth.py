@@ -10,11 +10,14 @@ from app.schemas.auth import (
     RefreshTokenResponse,
     RegisterRequest,
     RegisterResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
 )
 from app.services.auth_service import login_user, refresh_access_token, register_user
 from app.services.email_verification_service import verify_email_token
+from app.services.password_reset_service import PASSWORD_RESET_TOKEN_EXPIRE_MINUTES, create_password_reset_token
 from app.core.exceptions import EmailVerificationRequired
-from app.services.email_service import send_verification_email
+from app.services.email_service import send_verification_email, send_password_reset_email
 from app.core.dependencies import get_current_user
 from app.models import User
 from app.services.email_verification_service import (
@@ -143,3 +146,31 @@ async def verify_email(
     return {
         "message": "Email verified successfully",
     }
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+async def forgot_password(
+    data: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_db)
+):
+    result = await create_password_reset_token(
+        data.email,
+        session,
+    )
+
+    if result is not None:
+        token, user = result
+
+        background_tasks.add_task(
+            send_password_reset_email,
+            user.email,
+            user.name,
+            token.token,
+            PASSWORD_RESET_TOKEN_EXPIRE_MINUTES,
+        )
+
+
+    return ForgotPasswordResponse(
+        message="If an account with that email exists, a password reset link has been sent."
+    )
