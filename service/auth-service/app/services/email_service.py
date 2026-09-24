@@ -33,7 +33,7 @@ def send_verification_email(
 ) -> None:
 
     verification_url = (
-        f"{BACKEND_URL}/auth/verify-email?token={token}"
+        f"{FRONTEND_URL}/verify-email?token={token}"
     )
 
     template_path = TEMPLATE_DIR / "email_verification.html"
