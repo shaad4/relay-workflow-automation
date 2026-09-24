@@ -38,6 +38,16 @@ export async function getCurrentUser(token) {
   });
 }
 
+export async function verifyEmail(token, options = {}) {
+  return apiRequest(
+    `/auth/verify-email?token=${encodeURIComponent(token)}`,
+    {
+      method: "GET",
+      ...options,
+    }
+  );
+}
+
 export async function resendVerification(email) {
   return apiRequest("/auth/resend-verification", {
     method: "POST",

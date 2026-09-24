@@ -15,11 +15,19 @@ export async function apiRequest(
     }
   );
 
-  const data = await response.json();
+  let data = {};
+  const text = await response.text();
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { detail: text };
+    }
+  }
 
   if (!response.ok) {
     throw new Error(
-      data.detail || "Something went wrong"
+      data.detail || data.message || "Something went wrong"
     );
   }
 
