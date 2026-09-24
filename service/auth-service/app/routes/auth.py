@@ -24,7 +24,13 @@ async def register(
     data: RegisterRequest,
     session: AsyncSession = Depends(get_db)
 ):
-    user = await register_user(data, session)
+    try:
+        user = await register_user(data, session)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        )
     return user
 
 
