@@ -12,10 +12,12 @@ from app.schemas.auth import (
     RegisterResponse,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
 )
 from app.services.auth_service import login_user, refresh_access_token, register_user
 from app.services.email_verification_service import verify_email_token
-from app.services.password_reset_service import PASSWORD_RESET_TOKEN_EXPIRE_MINUTES, create_password_reset_token
+from app.services.password_reset_service import PASSWORD_RESET_TOKEN_EXPIRE_MINUTES, create_password_reset_token, reset_password
 from app.core.exceptions import EmailVerificationRequired
 from app.services.email_service import send_verification_email, send_password_reset_email
 from app.core.dependencies import get_current_user
@@ -173,4 +175,26 @@ async def forgot_password(
 
     return ForgotPasswordResponse(
         message="If an account with that email exists, a password reset link has been sent."
+    )
+
+
+@router.post("/reset-password", response_model=ResetPasswordResponse)
+async def reset_password_route(
+    data: ResetPasswordRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        await reset_password(
+            token=data.token,
+            new_password=data.new_password,
+            session=session,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    return ResetPasswordResponse(
+        message="Password reset successfully",
     )
