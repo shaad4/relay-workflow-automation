@@ -6,6 +6,7 @@ from app.core.security import hash_password, verify_password
 from app.models import User, Workspace
 from app.schemas.auth import LoginRequest, RegisterRequest
 from app.core.jwt import create_access_token, create_refresh_token, decode_token
+from app.services.email_verification_service import create_verification_token
 
 async def register_user(
     data: RegisterRequest,
@@ -37,6 +38,13 @@ async def register_user(
     )
 
     session.add(user)
+
+    await session.flush()
+
+    await create_verification_token(
+        user_id=user.id,
+        session=session
+    )
 
     await session.commit()
     await session.refresh(user)

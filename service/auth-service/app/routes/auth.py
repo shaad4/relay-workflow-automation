@@ -11,6 +11,7 @@ from app.schemas.auth import (
     RegisterResponse,
 )
 from app.services.auth_service import login_user, refresh_access_token, register_user
+from app.services.email_verification_service import verify_email_token
 from app.core.dependencies import get_current_user
 from app.models import User
 
@@ -77,3 +78,28 @@ async def get_me(
     current_user: User = Depends(get_current_user),
 ):
     return current_user
+
+@router.post("/logout")
+async def logout(
+    current_user: User = Depends(get_current_user),
+):
+    return {
+        "message": "Logged out successfully"
+    }
+
+@router.get("/verify-email")
+async def verify_email(
+    token: str,
+    session: AsyncSession = Depends(get_db)
+):
+    try:
+        await verify_email_token(token, session)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    return {
+        "message": "Email verified successfully",
+    }
