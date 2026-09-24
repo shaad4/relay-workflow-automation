@@ -11,6 +11,8 @@ from app.schemas.auth import (
     RegisterResponse,
 )
 from app.services.auth_service import login_user, refresh_access_token, register_user
+from app.core.dependencies import get_current_user
+from app.models import User
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -69,3 +71,9 @@ async def refresh_token(
         access_token=access_token,
         token_type="bearer",
     )
+
+@router.get("/me", response_model=RegisterResponse)
+async def get_me(
+    current_user: User = Depends(get_current_user),
+):
+    return current_user
