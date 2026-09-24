@@ -1,0 +1,15 @@
+services:
+  auth-postgres:
+    image: postgres:16
+    container_name: relay-auth-postgres
+    environment:
+      POSTGRES_DB: relay_auth
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: relay
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  auth_postgres_data:

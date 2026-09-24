@@ -1,3 +1,4 @@
+import uuid
 from pydantic import BaseModel, EmailStr, Field
 
 class RegisterRequest(BaseModel):
@@ -8,7 +9,9 @@ class RegisterRequest(BaseModel):
 
 
 class RegisterResponse(BaseModel):
-    id: str
+    id: uuid.UUID
     name: str
     email: EmailStr
-    workspace_id: str
+    workspace_id: uuid.UUID
+
+    model_config = {"from_attributes":True}
