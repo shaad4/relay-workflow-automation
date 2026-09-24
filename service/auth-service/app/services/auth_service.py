@@ -1,10 +1,10 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.models import User, Workspace
-from app.schemas.auth import RegisterRequest
-
+from app.schemas.auth import LoginRequest, RegisterRequest
+from app.core.jwt import create_access_token, create_refresh_token
 
 async def register_user(
     data: RegisterRequest,
@@ -41,3 +41,39 @@ async def register_user(
     await session.refresh(user)
 
     return user
+
+
+async def login_user(
+    data: LoginRequest,
+    session: AsyncSession,
+):
+    result = await session.execute(
+        select(User).where(User.email == data.email)
+    )
+
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise ValueError("Invalid email or password")
+
+    if not verify_password(data.password, user.password_hash):
+        raise ValueError("Invalid email or password")
+
+    access_token = create_access_token(
+        {
+            "sub": str(user.id),
+            "workspace_id": str(user.workspace_id),
+        }
+    )
+
+    refresh_token = create_refresh_token(
+        {
+            "sub": str(user.id),
+            "workspace_id": str(user.workspace_id),
+        }
+    )
+
+    return access_token, refresh_token
+
+    
+    

@@ -15,3 +15,14 @@ class RegisterResponse(BaseModel):
     workspace_id: uuid.UUID
 
     model_config = {"from_attributes":True}
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class LoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
+
