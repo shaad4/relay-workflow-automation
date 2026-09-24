@@ -1,10 +1,11 @@
+import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password
 from app.models import User, Workspace
 from app.schemas.auth import LoginRequest, RegisterRequest
-from app.core.jwt import create_access_token, create_refresh_token
+from app.core.jwt import create_access_token, create_refresh_token, decode_token
 
 async def register_user(
     data: RegisterRequest,
@@ -75,5 +76,27 @@ async def login_user(
 
     return access_token, refresh_token
 
+
+async def refresh_access_token(
+        refresh_token: str,
+) -> str:
+    
+    try:
+        payload = decode_token(refresh_token)
+    except jwt.InvalidTokenError:
+        raise ValueError("Invalid or expired refresh token")
+
+    if payload.get("type") != "refresh":
+        raise ValueError("Invalid refresh token")
+
+
+    access_token = create_access_token(
+        {
+            "sub": payload["sub"],
+            "workspace_id": payload["workspace_id"],
+        }
+    )
+
+    return access_token
     
     

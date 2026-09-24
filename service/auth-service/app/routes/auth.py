@@ -1,14 +1,16 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
     RegisterRequest,
     RegisterResponse,
 )
-from app.services.auth_service import login_user, register_user
+from app.services.auth_service import login_user, refresh_access_token, register_user
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -36,5 +38,22 @@ async def login(
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
+        token_type="bearer",
+    )
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh_token(
+    data: RefreshTokenRequest
+):
+    try:
+        access_token = await refresh_access_token(data.refresh_token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail=str(exc),
+        )
+
+    return RefreshTokenResponse(
+        access_token=access_token,
         token_type="bearer",
     )

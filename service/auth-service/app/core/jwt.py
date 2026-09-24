@@ -49,3 +49,10 @@ def create_refresh_token(data: dict) -> str:
         expires_minutes=REFRESH_TOKEN_EXPIRE_DAYS * 24,
         token_type="refresh",
     )
+
+def decode_token(token: str) -> dict:
+    return jwt.decode(
+        token,
+        JWT_SECRET_KEY,
+        algorithms=[JWT_ALGORITHM]
+    )
