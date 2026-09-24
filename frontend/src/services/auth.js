@@ -38,6 +38,15 @@ export async function getCurrentUser(token) {
   });
 }
 
+export async function resendVerification(email) {
+  return apiRequest("/auth/resend-verification", {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+    }),
+  });
+}
+
 export async function forgotPassword(email) {
   return apiRequest("/auth/forgot-password", {
     method: "POST",

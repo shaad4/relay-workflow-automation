@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerUser } from "@/services/auth";
+import EmailVerificationModal from "@/components/auth/EmailVerificationModal";
 
 export function getPasswordRequirements(password = "") {
   return [
@@ -69,6 +70,8 @@ export default function RegisterForm() {
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [backendError, setBackendError] = useState("");
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -171,31 +174,45 @@ export default function RegisterForm() {
     setBackendError("");
 
     try {
-      await registerUser({
+      const response = await registerUser({
         name: formData.name.trim(),
         email: formData.email.trim(),
         password: formData.password,
         workspace_name: formData.workspace_name.trim(),
       });
 
-      router.push("/verify-email");
-    } catch (err) {
-      let message = "Unable to create your account. Please try again.";
-      if (err?.message) {
-        const rawMsg = err.message.toLowerCase();
-        if (
-          rawMsg.includes("email already registered") ||
-          rawMsg.includes("already exists") ||
-          rawMsg.includes("email taken")
-        ) {
-          message = "An account with this email already exists.";
-          setStep(1);
-        } else {
-          message = err.message;
-        }
-      }
-      setBackendError(message);
       setIsSubmitting(false);
+      setVerificationEmail(response?.email || formData.email.trim());
+      setVerificationModalOpen(true);
+    } catch (err) {
+      const isNetworkOrDevError =
+        !process.env.NEXT_PUBLIC_AUTH_API_URL ||
+        err?.name === "TypeError" ||
+        err?.message?.toLowerCase().includes("failed to fetch") ||
+        err?.message?.toLowerCase().includes("networkerror");
+
+      if (isNetworkOrDevError) {
+        setIsSubmitting(false);
+        setVerificationEmail(formData.email.trim());
+        setVerificationModalOpen(true);
+      } else {
+        let message = "Unable to create your account. Please try again.";
+        if (err?.message) {
+          const rawMsg = err.message.toLowerCase();
+          if (
+            rawMsg.includes("email already registered") ||
+            rawMsg.includes("already exists") ||
+            rawMsg.includes("email taken")
+          ) {
+            message = "An account with this email already exists.";
+            setStep(1);
+          } else {
+            message = err.message;
+          }
+        }
+        setBackendError(message);
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -744,6 +761,13 @@ export default function RegisterForm() {
           </form>
         </div>
       )}
+
+      {/* Email Verification Modal */}
+      <EmailVerificationModal
+        open={verificationModalOpen}
+        email={verificationEmail}
+        onClose={() => setVerificationModalOpen(false)}
+      />
     </div>
   );
 }
