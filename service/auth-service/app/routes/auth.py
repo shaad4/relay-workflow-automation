@@ -39,7 +39,13 @@ async def login(
     data: LoginRequest,
     session: AsyncSession = Depends(get_db),
 ):
-    access_token, refresh_token = await login_user(data, session)
+    try:
+        access_token, refresh_token = await login_user(data, session)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail=str(exc),
+        )
 
     return LoginResponse(
         access_token=access_token,
