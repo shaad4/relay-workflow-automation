@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
@@ -12,8 +12,12 @@ from app.schemas.auth import (
 )
 from app.services.auth_service import login_user, refresh_access_token, register_user
 from app.services.email_verification_service import verify_email_token
+from app.services.email_service import send_verification_email
 from app.core.dependencies import get_current_user
 from app.models import User
+from app.services.email_verification_service import (
+    VERIFICATION_TOKEN_EXPIRE_MINUTES,
+)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -25,15 +29,25 @@ async def get_db():
 @router.post("/register", response_model=RegisterResponse)
 async def register(
     data: RegisterRequest,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db)
 ):
     try:
-        user = await register_user(data, session)
+        user, verification_token = await register_user(data, session)
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
             detail=str(exc),
         )
+
+    background_tasks.add_task(
+        send_verification_email,
+        user.email,
+        user.name,
+        f"http://localhost:8000/auth/verify-email?token={verification_token.token}",
+        VERIFICATION_TOKEN_EXPIRE_MINUTES,
+    )
+
     return user
 
 

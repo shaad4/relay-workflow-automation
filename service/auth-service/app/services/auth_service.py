@@ -41,7 +41,7 @@ async def register_user(
 
     await session.flush()
 
-    await create_verification_token(
+    verification_token = await create_verification_token(
         user_id=user.id,
         session=session
     )
@@ -49,7 +49,7 @@ async def register_user(
     await session.commit()
     await session.refresh(user)
 
-    return user
+    return user, verification_token
 
 
 async def login_user(

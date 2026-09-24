@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Verify your Relay account</title>
+</head>
+
+<body style="
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+    font-family: Arial, Helvetica, sans-serif;
+">
+
+    <table
+        width="100%"
+        cellpadding="0"
+        cellspacing="0"
+        style="padding: 40px 20px;"
+    >
+        <tr>
+            <td align="center">
+
+                <table
+                    width="100%"
+                    cellpadding="0"
+                    cellspacing="0"
+                    style="
+                        max-width: 560px;
+                        background-color: #ffffff;
+                        border: 1px solid #e5e5e5;
+                        border-radius: 8px;
+                    "
+                >
+                    <tr>
+                        <td style="padding: 40px;">
+
+                            <h1 style="
+                                margin: 0 0 24px;
+                                color: #111111;
+                                font-size: 24px;
+                            ">
+                                Verify your Relay account
+                            </h1>
+
+                            <p style="
+                                margin: 0 0 16px;
+                                color: #444444;
+                                font-size: 15px;
+                                line-height: 1.6;
+                            ">
+                                Hi {{ name }},
+                            </p>
+
+                            <p style="
+                                margin: 0 0 24px;
+                                color: #444444;
+                                font-size: 15px;
+                                line-height: 1.6;
+                            ">
+                                Thanks for creating your Relay account.
+                                Please verify your email address to continue.
+                            </p>
+
+                            <table
+                                cellpadding="0"
+                                cellspacing="0"
+                                style="margin-bottom: 24px;"
+                            >
+                                <tr>
+                                    <td
+                                        style="
+                                            background-color: #4F46E5;
+                                            border-radius: 6px;
+                                        "
+                                    >
+                                        <a
+                                            href="{{ verification_url }}"
+                                            style="
+                                                display: inline-block;
+                                                padding: 12px 20px;
+                                                color: #ffffff;
+                                                text-decoration: none;
+                                                font-size: 14px;
+                                                font-weight: bold;
+                                            "
+                                        >
+                                            Verify Email
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="
+                                margin: 0 0 12px;
+                                color: #666666;
+                                font-size: 13px;
+                                line-height: 1.5;
+                            ">
+                                This verification link will expire in
+                                {{ expiration_minutes }} minutes.
+                            </p>
+
+                            <p style="
+                                margin: 0 0 12px;
+                                color: #666666;
+                                font-size: 13px;
+                                line-height: 1.5;
+                            ">
+                                If the button doesn't work, copy and paste
+                                this URL into your browser:
+                            </p>
+
+                            <p style="
+                                margin: 0;
+                                color: #666666;
+                                font-size: 12px;
+                                line-height: 1.5;
+                                word-break: break-all;
+                            ">
+                                {{ verification_url }}
+                            </p>
+
+                        </td>
+                    </tr>
+                </table>
+
+                <p style="
+                    margin: 20px 0 0;
+                    color: #999999;
+                    font-size: 12px;
+                ">
+                    © Relay
+                </p>
+
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>
