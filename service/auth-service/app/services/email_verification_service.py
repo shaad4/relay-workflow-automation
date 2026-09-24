@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import EmailVerificationToken, User
@@ -29,18 +29,15 @@ async def create_verification_token(
     now = datetime.now(timezone.utc)
 
     # Expire all currently active tokens for this user.
-    result = await session.execute(
-        select(EmailVerificationToken).where(
+    await session.execute(
+        update(EmailVerificationToken)
+        .where(
             EmailVerificationToken.user_id == user_id,
             EmailVerificationToken.used_at.is_(None),
             EmailVerificationToken.expires_at > now,
         )
+        .values(expires_at=now)
     )
-
-    active_tokens = result.scalars().all()
-
-    for old_token in active_tokens:
-        old_token.expires_at = now
 
     # Create the new token.
     token = generate_verification_token()
