@@ -58,6 +58,32 @@ async def create_verification_token(
     return verification_token
 
 
+async def resend_verification_email(
+    email: str,
+    session: AsyncSession,
+):
+    result = await session.execute(
+        select(User).where(User.email == email)
+    )
+
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        return None
+
+    if user.email_verified_at is not None:
+        return None
+
+    verification_token = await create_verification_token(
+        user.id,
+        session,
+    )
+
+    await session.commit()
+
+    return verification_token, user
+
+
 async def verify_email_token(
     token: str,
     session: AsyncSession,
@@ -101,3 +127,4 @@ async def verify_email_token(
     verification_token.used_at = now
 
     await session.commit()
+    

@@ -14,17 +14,21 @@ from app.schemas.auth import (
     ForgotPasswordResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
+    ResendVerificationRequest,
+    ResendVerificationResponse,
 )
 from app.services.auth_service import login_user, refresh_access_token, register_user
-from app.services.email_verification_service import verify_email_token
+from app.services.email_verification_service import (
+    verify_email_token,
+    resend_verification_email,
+    VERIFICATION_TOKEN_EXPIRE_MINUTES,
+)
 from app.services.password_reset_service import PASSWORD_RESET_TOKEN_EXPIRE_MINUTES, create_password_reset_token, reset_password
 from app.core.exceptions import EmailVerificationRequired
 from app.services.email_service import send_verification_email, send_password_reset_email
 from app.core.dependencies import get_current_user
 from app.models import User
-from app.services.email_verification_service import (
-    VERIFICATION_TOKEN_EXPIRE_MINUTES,
-)
+
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -148,6 +152,39 @@ async def verify_email(
     return {
         "message": "Email verified successfully",
     }
+
+
+@router.post(
+    "/resend-verification",
+    response_model=ResendVerificationResponse,
+)
+async def resend_verification(
+    data: ResendVerificationRequest,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_db),
+):
+    result = await resend_verification_email(
+        data.email,
+        session,
+    )
+
+    if result is not None:
+        verification_token, user = result
+
+        background_tasks.add_task(
+            send_verification_email,
+            user.email,
+            user.name,
+            verification_token.token,
+            VERIFICATION_TOKEN_EXPIRE_MINUTES,
+        )
+
+    return ResendVerificationResponse(
+        message=(
+            "If an account with that email exists, "
+            "a verification email has been sent."
+        )
+    )
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
