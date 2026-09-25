@@ -134,3 +134,23 @@ class ResendVerificationRequest(BaseModel):
 
 class ResendVerificationResponse(BaseModel):
     message: str
+
+class GoogleSignupCompleteRequest(BaseModel):
+    signup_session_id: uuid.UUID
+    workspace_name: str
+
+
+class GoogleSignupCompleteResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class GoogleLoginExchangeRequest(BaseModel):
+    code: uuid.UUID
+
+
+class GoogleLoginExchangeResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"

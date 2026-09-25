@@ -85,3 +85,12 @@ export async function completeGoogleSignup(signupSessionId, workspaceName) {
     }),
   });
 }
+
+export async function exchangeGoogleLoginCode(code) {
+  return apiRequest("/auth/google/exchange", {
+    method: "POST",
+    body: JSON.stringify({
+      code,
+    }),
+  });
+}

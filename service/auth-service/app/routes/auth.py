@@ -17,6 +17,10 @@ from app.schemas.auth import (
     ResetPasswordResponse,
     ResendVerificationRequest,
     ResendVerificationResponse,
+    GoogleSignupCompleteRequest,
+    GoogleSignupCompleteResponse,
+    GoogleLoginExchangeRequest,
+    GoogleLoginExchangeResponse,
 )
 from app.services.auth_service import login_user, refresh_access_token, register_user
 from app.services.email_verification_service import (
@@ -38,7 +42,8 @@ from app.services.google_oauth import (
     get_google_userinfo,
     find_google_user,
 )
-from app.services.google_signup import create_google_signup_session
+from app.services.google_signup import create_google_signup_session, complete_google_signup
+from app.services.google_login import create_google_login_session, consume_google_login_session
 
 from dotenv import load_dotenv
 
@@ -303,10 +308,25 @@ async def google_callback(
     )
 
     if user:
-        return {
-            "message": "Existing Relay user found",
-            "user_id": str(user.id),
-        }
+        login_session = await create_google_login_session(
+            user_id=user.id,
+            session=session,
+        )
+
+        frontend_url = os.getenv("FRONTEND_URL")
+
+        if not frontend_url:
+            raise RuntimeError(
+                "FRONTEND_URL is not configured"
+            )
+
+        return RedirectResponse(
+            url=(
+                f"{frontend_url}"
+                f"/auth/google/callback"
+                f"?code={login_session.id}"
+            )
+        )
 
     signup_session = await create_google_signup_session(
         google_id=google_id,
@@ -328,4 +348,62 @@ async def google_callback(
             f"/workspace-setup"
             f"?session={signup_session.id}"
         )
+    )
+
+@router.post(
+    "/google/exchange",
+    response_model=GoogleLoginExchangeResponse,
+)
+async def exchange_google_login_code(
+    data: GoogleLoginExchangeRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        access_token, refresh_token = (
+            await consume_google_login_session(
+                login_session_id=data.code,
+                session=session,
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    return GoogleLoginExchangeResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+    )
+
+
+@router.post(
+    "/google/complete",
+    response_model=GoogleSignupCompleteResponse,
+)
+async def complete_google_signup_route(
+    data: GoogleSignupCompleteRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        user, access_token, refresh_token = (
+            await complete_google_signup(
+                signup_session_id=data.signup_session_id,
+                workspace_name=data.workspace_name,
+                session=session,
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    return GoogleSignupCompleteResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
     )
