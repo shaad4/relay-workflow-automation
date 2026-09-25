@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+import os
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Cookie, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +30,19 @@ from app.services.email_service import send_verification_email, send_password_re
 from app.core.dependencies import get_current_user
 from app.models import User
 
+from fastapi.responses import RedirectResponse
+
+from app.services.google_oauth import (
+    create_google_authorization_url,
+    exchange_google_code,
+    get_google_userinfo,
+    find_google_user,
+)
+from app.services.google_signup import create_google_signup_session
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -234,4 +248,84 @@ async def reset_password_route(
 
     return ResetPasswordResponse(
         message="Password reset successfully",
+    )
+
+@router.get("/google")
+async def google_login():
+    authorization_url, state = create_google_authorization_url()
+
+    response = RedirectResponse(url=authorization_url)
+
+    response.set_cookie(
+        key="google_oauth_state",
+        value=state,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=600,
+        path="/auth/google",
+    )
+
+    return response
+
+@router.get("/google/callback")
+async def google_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    google_oauth_state: str | None = Cookie(default=None),
+    session: AsyncSession = Depends(get_db),
+):
+    if not google_oauth_state:
+        raise HTTPException(
+            status_code=400,
+            detail="Google OAuth state is missing",
+        )
+
+    if state != google_oauth_state:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Google OAuth state",
+        )
+
+    google_tokens = await exchange_google_code(code)
+
+    google_user = await get_google_userinfo(
+        google_tokens["access_token"]
+    )
+
+    google_id = google_user["sub"]
+    email = google_user["email"]
+
+    user = await find_google_user(
+        google_id=google_id,
+        email=email,
+        session=session,
+    )
+
+    if user:
+        return {
+            "message": "Existing Relay user found",
+            "user_id": str(user.id),
+        }
+
+    signup_session = await create_google_signup_session(
+        google_id=google_id,
+        email=email,
+        name=google_user.get("name") or "",
+        session=session,
+    )
+
+    frontend_url = os.getenv("FRONTEND_URL")
+
+    if not frontend_url:
+        raise RuntimeError(
+            "FRONTEND_URL is not configured"
+        )
+
+    return RedirectResponse(
+        url=(
+            f"{frontend_url}"
+            f"/workspace-setup"
+            f"?session={signup_session.id}"
+        )
     )

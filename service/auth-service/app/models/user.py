@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, String, Text, ForeignKey
+from sqlalchemy import DateTime, String, Text, ForeignKey, Column
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
@@ -34,6 +34,8 @@ class User(Base):
         Text,
         nullable=False,
     )
+
+    google_id = Column(String(255), unique=True, nullable=True, index=True)
 
     email_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
