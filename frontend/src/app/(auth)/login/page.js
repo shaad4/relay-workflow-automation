@@ -1,3 +1,4 @@
+import PublicRoute from "@/components/auth/PublicRoute";
 import AuthNavbar from "@/components/layout/AuthNavbar";
 import LoginForm from "@/components/auth/LoginForm";
 
@@ -14,7 +15,9 @@ export default function LoginPage() {
 
       {/* Centered Main Content Area */}
       <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 md:p-10 pt-28 md:pt-32">
-        <LoginForm />
+        <PublicRoute>
+          <LoginForm />
+        </PublicRoute>
       </main>
 
       {/* Footer */}

@@ -10,18 +10,18 @@ export default function AuthNavbar() {
         <Image
           src="/brand/relay/relay-dark.png"
           alt="Relay Logo"
-          width={320}
-          height={96}
+          width={400}
+          height={120}
           priority
-          className="h-14 md:h-16 w-auto dark:hidden inline-block object-contain"
+          className="h-20 md:h-24 w-auto dark:hidden inline-block object-contain"
         />
         <Image
           src="/brand/relay/relay-light.png"
           alt="Relay Logo"
-          width={320}
-          height={96}
+          width={400}
+          height={120}
           priority
-          className="h-14 md:h-16 w-auto hidden dark:inline-block object-contain"
+          className="h-20 md:h-24 w-auto hidden dark:inline-block object-contain"
         />
       </Link>
       <div>

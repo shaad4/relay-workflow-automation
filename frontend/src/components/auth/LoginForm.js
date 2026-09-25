@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { loginUser } from "@/services/auth";
+import { useAuth } from "@/context/AuthContext";
 import EmailVerificationModal from "@/components/auth/EmailVerificationModal";
 
 export function isEmailValid(email = "") {
@@ -12,6 +13,7 @@ export function isEmailValid(email = "") {
 
 export default function LoginForm() {
   const router = useRouter();
+  const { login } = useAuth();
 
   const [formData, setFormData] = useState({
     email: "",
@@ -86,17 +88,10 @@ export default function LoginForm() {
         password: formData.password,
       });
 
-      // Isolated token handling if tokens exist in response
-      if (response?.access_token) {
-        try {
-          localStorage.setItem("access_token", response.access_token);
-          if (response.refresh_token) {
-            localStorage.setItem("refresh_token", response.refresh_token);
-          }
-        } catch {
-          // Fallback if localStorage is restricted
-        }
-      }
+      await login(
+        response.access_token,
+        response.refresh_token
+      );
 
       setIsSubmitting(false);
       router.push("/dashboard");

@@ -1,3 +1,4 @@
+import PublicRoute from "@/components/auth/PublicRoute";
 import AuthNavbar from "@/components/layout/AuthNavbar";
 import RegisterForm from "@/components/auth/RegisterForm";
 
@@ -14,7 +15,9 @@ export default function RegisterPage() {
 
       {/* Main Content Card Container */}
       <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 md:p-10 pt-28 md:pt-32">
-        <RegisterForm />
+        <PublicRoute>
+          <RegisterForm />
+        </PublicRoute>
       </main>
 
       {/* Footer */}
