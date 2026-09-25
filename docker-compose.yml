@@ -1,15 +1,49 @@
 services:
+
   auth-postgres:
     image: postgres:16
     container_name: relay-auth-postgres
+
     environment:
       POSTGRES_DB: relay_auth
       POSTGRES_USER: relay
       POSTGRES_PASSWORD: relay
+
     ports:
       - "5432:5432"
+
     volumes:
       - auth_postgres_data:/var/lib/postgresql/data
+
+
+  auth-service:
+    build:
+      context: ./service/auth-service
+
+    container_name: relay-auth-service
+
+    ports:
+      - "8000:8000"
+
+    env_file:
+      - ./service/auth-service/.env
+
+    depends_on:
+      - auth-postgres
+
+
+  api-gateway:
+    build:
+      context: ./service/api-gateway
+
+    container_name: relay-api-gateway
+
+    ports:
+      - "8001:8000"
+
+    depends_on:
+      - auth-service
+
 
 volumes:
   auth_postgres_data:
