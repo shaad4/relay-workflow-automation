@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import SidebarNavItem from "./SidebarNavItem";
 import ProfileMenu from "./ProfileMenu";
 
@@ -96,6 +97,8 @@ export default function DashboardSidebar({
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
+  const { theme } = useTheme();
+
   const sidebarContent = (
     <div className="flex flex-col h-full bg-[var(--surface)] border-r border-[var(--border-subtle)] transition-all duration-150 ease-out select-none overflow-hidden">
       {/* Brand Header */}
@@ -103,22 +106,30 @@ export default function DashboardSidebar({
         {!isCollapsed ? (
           <>
             <Link href="/dashboard" className="flex items-center gap-3 overflow-hidden">
-              <Image
-                src="/brand/relay/relay-dark.png"
-                alt="Relay Logo"
-                width={160}
-                height={48}
-                priority
-                className="w-auto h-9 dark:hidden object-contain"
-              />
-              <Image
-                src="/brand/relay/relay-light.png"
-                alt="Relay Logo"
-                width={160}
-                height={48}
-                priority
-                className="w-auto h-9 hidden dark:block object-contain"
-              />
+              {(theme === "light" || theme === "system") && (
+                <Image
+                  src="/brand/relay/relay-dark.png"
+                  alt="Relay Logo"
+                  width={160}
+                  height={48}
+                  priority
+                  className={`w-auto h-9 object-contain ${
+                    theme === "system" ? "dark:hidden" : "block"
+                  }`}
+                />
+              )}
+              {(theme === "dark" || theme === "system") && (
+                <Image
+                  src="/brand/relay/relay-light.png"
+                  alt="Relay Logo"
+                  width={160}
+                  height={48}
+                  priority
+                  className={`w-auto h-9 object-contain ${
+                    theme === "system" ? "hidden dark:block" : "block"
+                  }`}
+                />
+              )}
             </Link>
 
             {/* Desktop Sidebar Collapse Toggle */}
