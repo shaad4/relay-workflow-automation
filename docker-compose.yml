@@ -41,6 +41,9 @@ services:
     ports:
       - "8001:8000"
 
+    env_file:
+      - ./service/api-gateway/.env
+
     depends_on:
       - auth-service
 

@@ -1,13 +1,35 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import Response
-import httpx
+import os
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.routes.auth import router as auth_router
+from app.routes.public_auth import router as public_auth_router
+
+load_dotenv()
 
 app = FastAPI(
     title="Relay API Gateway",
     version="1.0.0",
 )
 
-AUTH_SERVICE_URL = "http://auth-service:8000"
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+allowed_origins = [frontend_url]
+if "localhost" in frontend_url:
+    allowed_origins.append(frontend_url.replace("localhost", "127.0.0.1"))
+elif "127.0.0.1" in frontend_url:
+    allowed_origins.append(frontend_url.replace("127.0.0.1", "localhost"))
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth_router)
+app.include_router(public_auth_router)
 
 
 @app.get("/health")
@@ -18,30 +40,3 @@ async def health():
     }
 
 
-@app.api_route(
-    "/auth/{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-)
-async def auth_proxy(request: Request, path: str):
-    url = f"{AUTH_SERVICE_URL}/auth/{path}"
-
-    body = await request.body()
-
-    async with httpx.AsyncClient() as client:
-        response = await client.request(
-            method=request.method,
-            url=url,
-            content=body,
-            headers={
-                key: value
-                for key, value in request.headers.items()
-                if key.lower() != "host"
-            },
-            params=request.query_params,
-        )
-
-    return Response(
-        content=response.content,
-        status_code=response.status_code,
-        headers=dict(response.headers),
-    )
