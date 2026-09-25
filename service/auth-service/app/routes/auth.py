@@ -275,8 +275,9 @@ async def google_login():
 
 @router.get("/google/callback")
 async def google_callback(
-    code: str = Query(...),
     state: str = Query(...),
+    code: str | None = Query(default=None),
+    error: str | None = Query(default=None),
     google_oauth_state: str | None = Cookie(default=None),
     session: AsyncSession = Depends(get_db),
 ):
@@ -291,6 +292,25 @@ async def google_callback(
             status_code=400,
             detail="Invalid Google OAuth state",
         )
+
+    if error:
+        frontend_url = os.getenv("FRONTEND_URL")
+
+        if not frontend_url:
+            raise RuntimeError(
+                "FRONTEND_URL is not configured"
+            )
+
+        return RedirectResponse(
+            url=f"{frontend_url}/login"
+        )
+
+    if not code:
+        raise HTTPException(
+            status_code=400,
+            detail="Google authorization code is missing",
+        )
+
 
     google_tokens = await exchange_google_code(code)
 
