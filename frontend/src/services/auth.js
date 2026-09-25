@@ -75,3 +75,13 @@ export async function resetPassword(token, newPassword) {
     }),
   });
 }
+
+export async function completeGoogleSignup(signupSessionId, workspaceName) {
+  return apiRequest("/auth/google/complete", {
+    method: "POST",
+    body: JSON.stringify({
+      signup_session_id: signupSessionId,
+      workspace_name: workspaceName,
+    }),
+  });
+}
