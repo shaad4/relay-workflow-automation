@@ -1,12 +1,13 @@
 import os
 import secrets
 from urllib.parse import urlencode
+
+import httpx
+from dotenv import load_dotenv
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
-import httpx
-from dotenv import load_dotenv
 
 load_dotenv()
 

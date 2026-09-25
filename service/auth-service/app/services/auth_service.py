@@ -2,12 +2,13 @@ import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import EmailVerificationRequired
+from app.core.jwt import create_access_token, create_refresh_token, decode_token
 from app.core.security import hash_password, verify_password
 from app.models import User, Workspace
 from app.schemas.auth import LoginRequest, RegisterRequest
-from app.core.jwt import create_access_token, create_refresh_token, decode_token
 from app.services.email_verification_service import create_verification_token
-from app.core.exceptions import EmailVerificationRequired
+
 
 async def register_user(
     data: RegisterRequest,

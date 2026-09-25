@@ -1,15 +1,12 @@
-import os
 import asyncio
+import os
 from logging.config import fileConfig
-from dotenv import load_dotenv
-
-from sqlalchemy.ext.asyncio import async_engine_from_config
-from sqlalchemy import pool
 
 from alembic import context
-
 from app.db.base import Base
-from app.models import User, Workspace, PasswordResetToken
+from dotenv import load_dotenv
+from sqlalchemy import pool
+from sqlalchemy.ext.asyncio import async_engine_from_config
 
 load_dotenv()
 

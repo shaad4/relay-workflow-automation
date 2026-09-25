@@ -8,7 +8,6 @@ from app.core.jwt import create_access_token, create_refresh_token
 from app.models import User
 from app.models.google_login_session import GoogleLoginSession
 
-
 GOOGLE_LOGIN_SESSION_EXPIRE_MINUTES = 5
 
 

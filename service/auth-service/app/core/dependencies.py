@@ -1,17 +1,14 @@
-import jwt
 from uuid import UUID
+
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
-from app.core.jwt import decode_token
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.jwt import decode_token
 from app.db.database import AsyncSessionLocal
 from app.models import User
-
-
 
 bearer_scheme = HTTPBearer(auto_error=False)
 

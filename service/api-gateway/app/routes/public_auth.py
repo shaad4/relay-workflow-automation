@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 
-from app.core.proxy import proxy_request, AUTH_SERVICE_URL
+from app.core.proxy import AUTH_SERVICE_URL, proxy_request
 
 router = APIRouter(prefix="/auth")
 

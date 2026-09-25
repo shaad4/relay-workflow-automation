@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
+
 class EmailVerificationToken(Base):
     __tablename__ = "email_verification_tokens"
 

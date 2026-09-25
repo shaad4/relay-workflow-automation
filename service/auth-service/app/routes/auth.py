@@ -1,51 +1,61 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Cookie, Query
-from fastapi.responses import JSONResponse
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.dependencies import get_current_user
+from app.core.exceptions import EmailVerificationRequired
 from app.db.database import AsyncSessionLocal
+from app.models import User
 from app.schemas.auth import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    GoogleLoginExchangeRequest,
+    GoogleLoginExchangeResponse,
+    GoogleSignupCompleteRequest,
+    GoogleSignupCompleteResponse,
     LoginRequest,
     LoginResponse,
     RefreshTokenRequest,
     RefreshTokenResponse,
     RegisterRequest,
     RegisterResponse,
-    ForgotPasswordRequest,
-    ForgotPasswordResponse,
-    ResetPasswordRequest,
-    ResetPasswordResponse,
     ResendVerificationRequest,
     ResendVerificationResponse,
-    GoogleSignupCompleteRequest,
-    GoogleSignupCompleteResponse,
-    GoogleLoginExchangeRequest,
-    GoogleLoginExchangeResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
 )
 from app.services.auth_service import login_user, refresh_access_token, register_user
-from app.services.email_verification_service import (
-    verify_email_token,
-    resend_verification_email,
-    VERIFICATION_TOKEN_EXPIRE_MINUTES,
+from app.services.email_service import (
+    send_password_reset_email,
+    send_verification_email,
 )
-from app.services.password_reset_service import PASSWORD_RESET_TOKEN_EXPIRE_MINUTES, create_password_reset_token, reset_password
-from app.core.exceptions import EmailVerificationRequired
-from app.services.email_service import send_verification_email, send_password_reset_email
-from app.core.dependencies import get_current_user
-from app.models import User
-
-from fastapi.responses import RedirectResponse
-
+from app.services.email_verification_service import (
+    VERIFICATION_TOKEN_EXPIRE_MINUTES,
+    resend_verification_email,
+    verify_email_token,
+)
+from app.services.google_login import (
+    consume_google_login_session,
+    create_google_login_session,
+)
 from app.services.google_oauth import (
     create_google_authorization_url,
     exchange_google_code,
-    get_google_userinfo,
     find_google_user,
+    get_google_userinfo,
 )
-from app.services.google_signup import create_google_signup_session, complete_google_signup
-from app.services.google_login import create_google_login_session, consume_google_login_session
-
-from dotenv import load_dotenv
+from app.services.google_signup import (
+    complete_google_signup,
+    create_google_signup_session,
+)
+from app.services.password_reset_service import (
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES,
+    create_password_reset_token,
+    reset_password,
+)
 
 load_dotenv()
 

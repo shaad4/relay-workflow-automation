@@ -2,7 +2,6 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +9,6 @@ from app.core.jwt import create_access_token, create_refresh_token
 from app.core.security import hash_password
 from app.models import User, Workspace
 from app.models.google_signup_session import GoogleSignupSession
-
 
 GOOGLE_SIGNUP_SESSION_EXPIRE_MINUTES = 10
 

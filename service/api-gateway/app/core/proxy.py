@@ -1,13 +1,13 @@
 import os
-from typing import Set
+
+import httpx
 from fastapi import Request
 from fastapi.responses import Response
-import httpx
 
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8000")
 
 # RFC 7230 hop-by-hop headers
-HOP_BY_HOP_HEADERS: Set[str] = {
+HOP_BY_HOP_HEADERS: set[str] = {
     "connection",
     "keep-alive",
     "proxy-authenticate",
@@ -19,13 +19,13 @@ HOP_BY_HOP_HEADERS: Set[str] = {
 }
 
 # Headers that should not be forwarded from client to downstream
-REQUEST_EXCLUDED_HEADERS: Set[str] = HOP_BY_HOP_HEADERS | {
+REQUEST_EXCLUDED_HEADERS: set[str] = HOP_BY_HOP_HEADERS | {
     "host",
     "content-length",
 }
 
 # Headers that should not be forwarded from downstream to client
-RESPONSE_EXCLUDED_HEADERS: Set[str] = HOP_BY_HOP_HEADERS | {
+RESPONSE_EXCLUDED_HEADERS: set[str] = HOP_BY_HOP_HEADERS | {
     "content-length",
     "content-encoding",
     "server",

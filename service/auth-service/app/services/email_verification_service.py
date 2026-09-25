@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import EmailVerificationToken, User
 
-
 load_dotenv()
 
 

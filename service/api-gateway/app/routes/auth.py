@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, Request
 import httpx
+from fastapi import APIRouter, Depends, Request
 
+from app.core.proxy import AUTH_SERVICE_URL, build_proxy_response
 from app.dependencies import get_current_identity
-from app.core.proxy import build_proxy_response, AUTH_SERVICE_URL
 
 router = APIRouter(prefix="/auth")
 

@@ -6,7 +6,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from jinja2 import Template
 
-
 load_dotenv()
 
 
