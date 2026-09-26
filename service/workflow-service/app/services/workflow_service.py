@@ -567,3 +567,44 @@ async def create_workflow_edge(
         raise
 
     return edge
+
+
+async def list_workflow_edges(
+    workflow_id: UUID,
+    version_number: int,
+    workspace_id: str,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    version_result = await session.execute(
+        select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == workflow_id,
+            WorkflowVersion.version == version_number,
+        )
+    )
+
+    version = version_result.scalar_one_or_none()
+
+    if version is None:
+        return None
+
+    edge_result = await session.execute(
+        select(WorkflowEdge)
+        .where(
+            WorkflowEdge.workflow_version_id == version.id,
+        )
+        .order_by(WorkflowEdge.created_at)
+    )
+
+    return edge_result.scalars().all()

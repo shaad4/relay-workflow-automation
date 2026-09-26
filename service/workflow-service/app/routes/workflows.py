@@ -23,6 +23,7 @@ from app.services.workflow_service import (
     update_workflow_node,
     delete_workflow_node,
     create_workflow_edge,
+    list_workflow_edges,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -359,3 +360,29 @@ async def create_workflow_edge_route(
         )
 
     return edge
+
+
+@router.get(
+    "/{workflow_id}/versions/{version_number}/edges/",
+    response_model=list[WorkflowEdgeResponse],
+)
+async def list_workflow_edges_route(
+    workflow_id: UUID,
+    version_number: int,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    edges = await list_workflow_edges(
+        workflow_id=workflow_id,
+        version_number=version_number,
+        workspace_id=identity["workspace_id"],
+        session=session,
+    )
+
+    if edges is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow or version not found",
+        )
+
+    return edges

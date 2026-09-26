@@ -122,6 +122,19 @@ async def create_workflow_edge(
         f"{workflow_id}/versions/{version_number}/edges",
     )
 
+@router.get(
+    "/{workflow_id}/versions/{version_number}/edges/"
+)
+async def list_workflow_edges(
+    request: Request,
+    workflow_id: str,
+    version_number: int,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/versions/{version_number}/edges",
+    )
+
 
 
 
