@@ -95,6 +95,21 @@ async def update_workflow_node(
     )
 
 
+@router.delete(
+    "/{workflow_id}/versions/{version_number}/nodes/{node_id}/"
+)
+async def delete_workflow_node(
+    request: Request,
+    workflow_id: str,
+    version_number: int,
+    node_id: str,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/versions/{version_number}/nodes/{node_id}",
+    )
+
+
 async def proxy_workflow_request(
     request: Request,
     path: str,

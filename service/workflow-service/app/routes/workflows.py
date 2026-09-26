@@ -20,6 +20,7 @@ from app.services.workflow_service import (
     create_workflow_node,
     list_workflow_nodes,
     update_workflow_node,
+    delete_workflow_node,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -290,3 +291,35 @@ async def update_workflow_node_route(
         )
 
     return node
+
+
+@router.delete(
+    "/{workflow_id}/versions/{version_number}/nodes/{node_id}/",
+    status_code=204,
+)
+async def delete_workflow_node_route(
+    workflow_id: UUID,
+    version_number: int,
+    node_id: str,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        deleted = await delete_workflow_node(
+            workflow_id=workflow_id,
+            version_number=version_number,
+            node_id=node_id,
+            workspace_id=identity["workspace_id"],
+            session=session,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    if deleted is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow, version, or node not found",
+        )

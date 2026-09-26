@@ -434,3 +434,59 @@ async def update_workflow_node(
         raise
 
     return node
+
+async def delete_workflow_node(
+    workflow_id: UUID,
+    version_number: int,
+    node_id: str,
+    workspace_id: str,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    version_result = await session.execute(
+        select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == workflow_id,
+            WorkflowVersion.version == version_number,
+        )
+    )
+
+    version = version_result.scalar_one_or_none()
+
+    if version is None:
+        return None
+
+    if version.status != "draft":
+        raise ValueError("Only draft versions can be modified")
+
+    node_result = await session.execute(
+        select(WorkflowNode).where(
+            WorkflowNode.workflow_version_id == version.id,
+            WorkflowNode.node_id == node_id,
+        )
+    )
+
+    node = node_result.scalar_one_or_none()
+
+    if node is None:
+        return None
+
+    await session.delete(node)
+
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+    return True
