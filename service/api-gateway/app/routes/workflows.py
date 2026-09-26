@@ -11,6 +11,10 @@ WORKFLOW_SERVICE_URL = "http://workflow-service:8000"
 async def workflows(request: Request):
     return await proxy_workflow_request(request, "")
 
+@router.get("/{workflow_id}/")
+async def get_workflow(request: Request, workflow_id: str):
+    return await proxy_workflow_request(request, workflow_id)
+
 
 async def proxy_workflow_request(
     request: Request,
@@ -18,10 +22,15 @@ async def proxy_workflow_request(
 ):
     body = await request.body()
 
-    url = f"{WORKFLOW_SERVICE_URL}/workflows/"
+    url = f"{WORKFLOW_SERVICE_URL}/workflows"
 
     if path:
-        url = f"{url}/{path}"
+        url = f"{url}/{path}/"
+    else:
+        url = f"{url}/"
+
+    print("PROXY METHOD:", request.method)
+    print("PROXY URL:", url)
 
     async with httpx.AsyncClient() as client:
         response = await client.request(

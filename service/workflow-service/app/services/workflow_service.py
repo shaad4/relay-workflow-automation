@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Workflow
-from app.schemas.workflow import WorkflowCreate
+from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 
 
 async def create_workflow(
@@ -50,3 +50,37 @@ async def get_workflow(
     )
 
     return result.scalar_one_or_none()
+
+
+async def update_workflow(
+    workflow_id: UUID,
+    workspace_id: str,
+    data: WorkflowUpdate,
+    session: AsyncSession,
+) -> Workflow | None:
+    result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    if data.name is not None:
+        workflow.name = data.name
+
+    if data.description is not None:
+        workflow.description = data.description
+
+    try:
+        await session.commit()
+        await session.refresh(workflow)
+    except Exception:
+        await session.rollback()
+        raise
+
+    return workflow
