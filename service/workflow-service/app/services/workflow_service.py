@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Workflow, WorkflowVersion, WorkflowEdge, WorkflowNode
 from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
-from app.schemas.workflow_edge import WorkflowEdgeCreate
+from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
 
 async def create_workflow(
     data: WorkflowCreate,
@@ -608,3 +608,87 @@ async def list_workflow_edges(
     )
 
     return edge_result.scalars().all()
+
+
+async def update_workflow_edge(
+    workflow_id: UUID,
+    version_number: int,
+    edge_id: UUID,
+    workspace_id: str,
+    data: WorkflowEdgeUpdate,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    version_result = await session.execute(
+        select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == workflow_id,
+            WorkflowVersion.version == version_number,
+        )
+    )
+
+    version = version_result.scalar_one_or_none()
+
+    if version is None:
+        return None
+
+    if version.status != "draft":
+        raise ValueError("Only draft versions can be modified")
+
+    edge_result = await session.execute(
+        select(WorkflowEdge).where(
+            WorkflowEdge.id == edge_id,
+            WorkflowEdge.workflow_version_id == version.id,
+        )
+    )
+
+    edge = edge_result.scalar_one_or_none()
+
+    if edge is None:
+        return None
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    if "source_node_id" in update_data:
+        source_result = await session.execute(
+            select(WorkflowNode).where(
+                WorkflowNode.workflow_version_id == version.id,
+                WorkflowNode.node_id == update_data["source_node_id"],
+            )
+        )
+
+        if source_result.scalar_one_or_none() is None:
+            raise ValueError("Source node not found")
+
+    if "target_node_id" in update_data:
+        target_result = await session.execute(
+            select(WorkflowNode).where(
+                WorkflowNode.workflow_version_id == version.id,
+                WorkflowNode.node_id == update_data["target_node_id"],
+            )
+        )
+
+        if target_result.scalar_one_or_none() is None:
+            raise ValueError("Target node not found")
+
+    for field, value in update_data.items():
+        setattr(edge, field, value)
+
+    try:
+        await session.commit()
+        await session.refresh(edge)
+    except Exception:
+        await session.rollback()
+        raise
+
+    return edge

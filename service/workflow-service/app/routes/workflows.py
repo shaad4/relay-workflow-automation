@@ -8,7 +8,7 @@ from app.dependencies import get_current_identity
 from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeResponse, WorkflowNodeUpdate
 from app.schemas.workflow_version import WorkflowVersionResponse
-from app.schemas.workflow_edge import WorkflowEdgeResponse, WorkflowEdgeCreate
+from app.schemas.workflow_edge import WorkflowEdgeResponse, WorkflowEdgeCreate, WorkflowEdgeUpdate
 from app.services.workflow_service import (
     create_workflow,
     list_workflows,
@@ -24,6 +24,7 @@ from app.services.workflow_service import (
     delete_workflow_node,
     create_workflow_edge,
     list_workflow_edges,
+    update_workflow_edge,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -386,3 +387,39 @@ async def list_workflow_edges_route(
         )
 
     return edges
+
+
+@router.patch(
+    "/{workflow_id}/versions/{version_number}/edges/{edge_id}/",
+    response_model=WorkflowEdgeResponse,
+)
+async def update_workflow_edge_route(
+    workflow_id: UUID,
+    version_number: int,
+    edge_id: UUID,
+    data: WorkflowEdgeUpdate,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        edge = await update_workflow_edge(
+            workflow_id=workflow_id,
+            version_number=version_number,
+            edge_id=edge_id,
+            workspace_id=identity["workspace_id"],
+            data=data,
+            session=session,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    if edge is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow, version, or edge not found",
+        )
+
+    return edge

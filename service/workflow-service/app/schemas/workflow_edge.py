@@ -19,3 +19,20 @@ class WorkflowEdgeResponse(BaseModel):
     target_node_id: str
     condition: str | None
     created_at: datetime
+
+
+class WorkflowEdgeUpdate(BaseModel):
+    source_node_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+    target_node_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+    condition: str | None = Field(
+        default=None,
+        max_length=255,
+    )

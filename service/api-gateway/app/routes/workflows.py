@@ -122,6 +122,7 @@ async def create_workflow_edge(
         f"{workflow_id}/versions/{version_number}/edges",
     )
 
+
 @router.get(
     "/{workflow_id}/versions/{version_number}/edges/"
 )
@@ -135,6 +136,20 @@ async def list_workflow_edges(
         f"{workflow_id}/versions/{version_number}/edges",
     )
 
+
+@router.patch(
+    "/{workflow_id}/versions/{version_number}/edges/{edge_id}/"
+)
+async def update_workflow_edge(
+    request: Request,
+    workflow_id: str,
+    version_number: int,
+    edge_id: str,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/versions/{version_number}/edges/{edge_id}",
+    )
 
 
 
