@@ -55,9 +55,29 @@ services:
     ports:
       - "8002:8000"
 
+    env_file:
+      - ./service/workflow-service/.env
+
     depends_on:
       - auth-service
+      - workflow-postgres
+
+  workflow-postgres:
+    image: postgres:16
+    container_name: relay-workflow-postgres
+
+    environment:
+      POSTGRES_DB: relay_workflow
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: relay
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - workflow_postgres_data:/var/lib/postgresql/data
 
 
 volumes:
   auth_postgres_data:
+  workflow_postgres_data:
