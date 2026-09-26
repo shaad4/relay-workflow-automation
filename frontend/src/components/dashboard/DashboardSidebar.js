@@ -85,7 +85,7 @@ export default function DashboardSidebar({
 
   const mainNavItems = [
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
-    { label: "Workflows", href: "/dashboard/workflows", icon: WorkflowsIcon },
+    { label: "Workflows", href: "/workflows", icon: WorkflowsIcon },
     { label: "Executions", href: "/dashboard/executions", icon: ExecutionsIcon },
   ];
 
