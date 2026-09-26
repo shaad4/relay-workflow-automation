@@ -151,3 +151,32 @@ async def list_workflow_versions(
     )
 
     return list(result.scalars().all())
+
+async def get_workflow_version(
+    workflow_id: UUID,
+    version_number: int,
+    workspace_id: str,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None, None
+
+    result = await session.execute(
+        select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == workflow_id,
+            WorkflowVersion.version == version_number,
+        )
+    )
+
+    version = result.scalar_one_or_none()
+
+    return workflow, version

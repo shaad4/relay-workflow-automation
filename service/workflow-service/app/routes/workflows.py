@@ -14,6 +14,7 @@ from app.services.workflow_service import (
     update_workflow,
     delete_workflow,
     list_workflow_versions,
+    get_workflow_version,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -134,3 +135,34 @@ async def list_workflow_versions_route(
         )
 
     return versions
+
+@router.get(
+    "/{workflow_id}/versions/{version_number}/",
+    response_model=WorkflowVersionResponse,
+)
+async def get_workflow_version_route(
+    workflow_id: UUID,
+    version_number: int,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    workflow, version = await get_workflow_version(
+        workflow_id=workflow_id,
+        version_number=version_number,
+        workspace_id=identity["workspace_id"],
+        session=session,
+    )
+
+    if workflow is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow not found",
+        )
+
+    if version is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow version not found",
+        )
+
+    return version

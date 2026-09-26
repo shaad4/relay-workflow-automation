@@ -33,6 +33,18 @@ async def list_workflow_versions(
         f"{workflow_id}/versions",
     )
 
+@router.get("/{workflow_id}/versions/{version_number}")
+async def get_workflow_version(
+    request: Request,
+    workflow_id: str,
+    version_number: int,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/versions/{version_number}",
+    )
+
+
 
 async def proxy_workflow_request(
     request: Request,
