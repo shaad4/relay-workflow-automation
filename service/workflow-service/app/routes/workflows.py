@@ -25,6 +25,7 @@ from app.services.workflow_service import (
     create_workflow_edge,
     list_workflow_edges,
     update_workflow_edge,
+    delete_workflow_edge,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -423,3 +424,36 @@ async def update_workflow_edge_route(
         )
 
     return edge
+
+
+
+@router.delete(
+    "/{workflow_id}/versions/{version_number}/edges/{edge_id}/",
+    status_code=204,
+)
+async def delete_workflow_edge_route(
+    workflow_id: UUID,
+    version_number: int,
+    edge_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        deleted = await delete_workflow_edge(
+            workflow_id=workflow_id,
+            version_number=version_number,
+            edge_id=edge_id,
+            workspace_id=identity["workspace_id"],
+            session=session,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    if deleted is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow, version, or edge not found",
+        )
