@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Workflow, WorkflowVersion, WorkflowEdge, WorkflowNode
 from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
-
+from app.schemas.workflow_edge import WorkflowEdgeCreate
 
 async def create_workflow(
     data: WorkflowCreate,
@@ -490,3 +490,80 @@ async def delete_workflow_node(
         raise
 
     return True
+
+
+async def create_workflow_edge(
+    workflow_id: UUID,
+    version_number: int,
+    workspace_id: str,
+    data: WorkflowEdgeCreate,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    version_result = await session.execute(
+        select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == workflow_id,
+            WorkflowVersion.version == version_number,
+        )
+    )
+
+    version = version_result.scalar_one_or_none()
+
+    if version is None:
+        return None
+
+    if version.status != "draft":
+        raise ValueError("Only draft versions can be modified")
+
+    source_node_result = await session.execute(
+        select(WorkflowNode).where(
+            WorkflowNode.workflow_version_id == version.id,
+            WorkflowNode.node_id == data.source_node_id,
+        )
+    )
+
+    source_node = source_node_result.scalar_one_or_none()
+
+    if source_node is None:
+        raise ValueError("Source node not found")
+
+    target_node_result = await session.execute(
+        select(WorkflowNode).where(
+            WorkflowNode.workflow_version_id == version.id,
+            WorkflowNode.node_id == data.target_node_id,
+        )
+    )
+
+    target_node = target_node_result.scalar_one_or_none()
+
+    if target_node is None:
+        raise ValueError("Target node not found")
+
+    edge = WorkflowEdge(
+        workflow_version_id=version.id,
+        source_node_id=data.source_node_id,
+        target_node_id=data.target_node_id,
+        condition=data.condition,
+    )
+
+    session.add(edge)
+
+    try:
+        await session.commit()
+        await session.refresh(edge)
+    except Exception:
+        await session.rollback()
+        raise
+
+    return edge

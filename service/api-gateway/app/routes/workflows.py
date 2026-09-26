@@ -109,6 +109,21 @@ async def delete_workflow_node(
         f"{workflow_id}/versions/{version_number}/nodes/{node_id}",
     )
 
+@router.post(
+    "/{workflow_id}/versions/{version_number}/edges/"
+)
+async def create_workflow_edge(
+    request: Request,
+    workflow_id: str,
+    version_number: int,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/versions/{version_number}/edges",
+    )
+
+
+
 
 async def proxy_workflow_request(
     request: Request,
