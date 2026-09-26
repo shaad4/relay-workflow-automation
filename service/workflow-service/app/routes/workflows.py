@@ -15,6 +15,7 @@ from app.services.workflow_service import (
     delete_workflow,
     list_workflow_versions,
     get_workflow_version,
+    create_draft_version,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -163,6 +164,30 @@ async def get_workflow_version_route(
         raise HTTPException(
             status_code=404,
             detail="Workflow version not found",
+        )
+
+    return version
+
+@router.post(
+    "/{workflow_id}/draft/",
+    response_model=WorkflowVersionResponse,
+    status_code=201,
+)
+async def create_draft_version_route(
+    workflow_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    version = await create_draft_version(
+        workflow_id=workflow_id,
+        workspace_id=identity["workspace_id"],
+        session=session,
+    )
+
+    if version is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow not found",
         )
 
     return version

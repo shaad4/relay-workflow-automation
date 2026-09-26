@@ -2,7 +2,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Workflow, WorkflowVersion
+from app.models import Workflow, WorkflowVersion, WorkflowEdge, WorkflowNode
 from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 
 
@@ -180,3 +180,97 @@ async def get_workflow_version(
     version = result.scalar_one_or_none()
 
     return workflow, version
+
+
+async def create_draft_version(
+    workflow_id: UUID,
+    workspace_id: str,
+    session: AsyncSession,
+):
+    # Verify the workflow belongs to the current workspace.
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    # Get the latest version.
+    version_result = await session.execute(
+        select(WorkflowVersion)
+        .where(WorkflowVersion.workflow_id == workflow_id)
+        .order_by(WorkflowVersion.version.desc())
+    )
+
+    latest_version = version_result.scalars().first()
+
+    if latest_version is None:
+        return None
+
+    # Create the next version as a draft.
+    new_version = WorkflowVersion(
+        workflow_id=workflow_id,
+        version=latest_version.version + 1,
+        status="draft",
+        description=latest_version.description,
+    )
+
+    session.add(new_version)
+
+    try:
+        await session.flush()
+
+        # Copy nodes from the latest version.
+        node_result = await session.execute(
+            select(WorkflowNode).where(
+                WorkflowNode.workflow_version_id == latest_version.id,
+            )
+        )
+
+        source_nodes = node_result.scalars().all()
+
+        for node in source_nodes:
+            session.add(
+                WorkflowNode(
+                    workflow_version_id=new_version.id,
+                    node_id=node.node_id,
+                    node_type=node.node_type,
+                    label=node.label,
+                    position_x=node.position_x,
+                    position_y=node.position_y,
+                    configuration=node.configuration,
+                )
+            )
+
+        # Copy edges from the latest version.
+        edge_result = await session.execute(
+            select(WorkflowEdge).where(
+                WorkflowEdge.workflow_version_id == latest_version.id,
+            )
+        )
+
+        source_edges = edge_result.scalars().all()
+
+        for edge in source_edges:
+            session.add(
+                WorkflowEdge(
+                    workflow_version_id=new_version.id,
+                    source_node_id=edge.source_node_id,
+                    target_node_id=edge.target_node_id,
+                    condition=edge.condition,
+                )
+            )
+
+        await session.commit()
+        await session.refresh(new_version)
+
+    except Exception:
+        await session.rollback()
+        raise
+
+    return new_version

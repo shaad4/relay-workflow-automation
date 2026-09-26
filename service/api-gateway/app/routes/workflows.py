@@ -44,6 +44,16 @@ async def get_workflow_version(
         f"{workflow_id}/versions/{version_number}",
     )
 
+@router.post("/{workflow_id}/draft/")
+async def create_workflow_draft(
+    request: Request,
+    workflow_id: str,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/draft",
+    )
+
 
 
 async def proxy_workflow_request(
