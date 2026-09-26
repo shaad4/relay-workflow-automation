@@ -46,5 +46,18 @@ services:
       - auth-service
 
 
+  workflow-service:
+    build:
+      context: ./service/workflow-service
+
+    container_name: relay-workflow-service
+
+    ports:
+      - "8002:8000"
+
+    depends_on:
+      - auth-service
+
+
 volumes:
   auth_postgres_data:
