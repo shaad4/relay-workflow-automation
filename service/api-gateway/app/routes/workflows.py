@@ -15,6 +15,14 @@ async def workflows(request: Request):
 async def get_workflow(request: Request, workflow_id: str):
     return await proxy_workflow_request(request, workflow_id)
 
+@router.patch("/{workflow_id}/")
+async def update_workflow(request: Request, workflow_id: str):
+    return await proxy_workflow_request(request, workflow_id)
+
+@router.delete("/{workflow_id}/")
+async def delete_workflow(request: Request, workflow_id: str):
+    return await proxy_workflow_request(request, workflow_id)
+
 
 async def proxy_workflow_request(
     request: Request,

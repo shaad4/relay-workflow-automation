@@ -84,3 +84,30 @@ async def update_workflow(
         raise
 
     return workflow
+
+
+async def delete_workflow(
+    workflow_id: UUID,
+    workspace_id: str,
+    session: AsyncSession,
+) -> bool:
+    result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = result.scalar_one_or_none()
+
+    if workflow is None:
+        return False
+
+    try:
+        await session.delete(workflow)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+    return True

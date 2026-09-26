@@ -11,6 +11,7 @@ from app.services.workflow_service import (
     list_workflows,
     get_workflow,
     update_workflow,
+    delete_workflow
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -63,3 +64,47 @@ async def get_workflow_route(
         )
 
     return workflow
+
+
+@router.patch("/{workflow_id}/", response_model=WorkflowResponse)
+async def update_workflow_route(
+    workflow_id: UUID,
+    data: WorkflowUpdate,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    workflow = await update_workflow(
+        workflow_id=workflow_id,
+        workspace_id=identity["workspace_id"],
+        data=data,
+        session=session,
+    )
+
+    if workflow is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow not found",
+        )
+
+    return workflow
+
+
+@router.delete("/{workflow_id}/", status_code=204)
+async def delete_workflow_route(
+    workflow_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    deleted = await delete_workflow(
+        workflow_id=workflow_id,
+        workspace_id=identity["workspace_id"],
+        session=session,
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow not found",
+        )
+
+    return None
