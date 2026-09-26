@@ -80,6 +80,19 @@ async def list_workflow_nodes(
         f"{workflow_id}/versions/{version_number}/nodes",
     )
 
+@router.patch(
+    "/{workflow_id}/versions/{version_number}/nodes/{node_id}/"
+)
+async def update_workflow_node(
+    request: Request,
+    workflow_id: str,
+    version_number: int,
+    node_id: str,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/versions/{version_number}/nodes/{node_id}",
+    )
 
 
 async def proxy_workflow_request(
