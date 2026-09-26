@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
-from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate
+from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate, WorkflowValidationResponse
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeResponse, WorkflowNodeUpdate
 from app.schemas.workflow_version import WorkflowVersionResponse
 from app.schemas.workflow_edge import WorkflowEdgeResponse, WorkflowEdgeCreate, WorkflowEdgeUpdate
@@ -26,6 +26,7 @@ from app.services.workflow_service import (
     list_workflow_edges,
     update_workflow_edge,
     delete_workflow_edge,
+    validate_workflow,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -457,3 +458,28 @@ async def delete_workflow_edge_route(
             status_code=404,
             detail="Workflow, version, or edge not found",
         )
+
+@router.post(
+    "/{workflow_id}/versions/{version_number}/validate/",
+    response_model=WorkflowValidationResponse,
+)
+async def validate_workflow_route(
+    workflow_id: UUID,
+    version_number: int,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await validate_workflow(
+        workflow_id=workflow_id,
+        version_number=version_number,
+        workspace_id=identity["workspace_id"],
+        session=session,
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow or version not found",
+        )
+
+    return result

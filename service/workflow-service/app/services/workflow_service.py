@@ -749,3 +749,103 @@ async def delete_workflow_edge(
         raise
 
     return True
+
+
+async def validate_workflow(
+    workflow_id: UUID,
+    version_number: int,
+    workspace_id: str,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    version_result = await session.execute(
+        select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == workflow_id,
+            WorkflowVersion.version == version_number,
+        )
+    )
+
+    version = version_result.scalar_one_or_none()
+
+    if version is None:
+        return None
+
+    node_result = await session.execute(
+        select(WorkflowNode).where(
+            WorkflowNode.workflow_version_id == version.id,
+        )
+    )
+
+    nodes = node_result.scalars().all()
+
+    edge_result = await session.execute(
+        select(WorkflowEdge).where(
+            WorkflowEdge.workflow_version_id == version.id,
+        )
+    )
+
+    edges = edge_result.scalars().all()
+
+    errors = []
+    warnings = []
+
+    node_ids = {node.node_id for node in nodes}
+
+    # Check that the workflow has at least one node.
+    if not nodes:
+        errors.append(
+            {
+                "code": "NO_NODES",
+                "message": "Workflow must contain at least one node.",
+            }
+        )
+
+    # Check for duplicate node IDs.
+    if len(node_ids) != len(nodes):
+        errors.append(
+            {
+                "code": "DUPLICATE_NODE_ID",
+                "message": "Workflow contains duplicate node IDs.",
+            }
+        )
+
+    # Check that every edge references existing nodes.
+    for edge in edges:
+        if edge.source_node_id not in node_ids:
+            errors.append(
+                {
+                    "code": "INVALID_EDGE_SOURCE",
+                    "message": (
+                        f"Edge references missing source node "
+                        f"'{edge.source_node_id}'."
+                    ),
+                }
+            )
+
+        if edge.target_node_id not in node_ids:
+            errors.append(
+                {
+                    "code": "INVALID_EDGE_TARGET",
+                    "message": (
+                        f"Edge references missing target node "
+                        f"'{edge.target_node_id}'."
+                    ),
+                }
+            )
+
+    return {
+        "valid": not errors,
+        "errors": errors,
+        "warnings": warnings,
+    }

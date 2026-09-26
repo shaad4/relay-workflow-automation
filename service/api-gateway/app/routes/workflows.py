@@ -165,6 +165,18 @@ async def delete_workflow_edge(
         f"{workflow_id}/versions/{version_number}/edges/{edge_id}",
     )
 
+@router.post(
+    "/{workflow_id}/versions/{version_number}/validate/"
+)
+async def validate_workflow(
+    request: Request,
+    workflow_id: str,
+    version_number: int,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/versions/{version_number}/validate",
+    )
 
 
 async def proxy_workflow_request(

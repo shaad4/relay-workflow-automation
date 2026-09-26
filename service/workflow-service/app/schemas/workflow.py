@@ -25,3 +25,14 @@ class WorkflowUpdate(BaseModel):
         max_length=255,
     )
     description: str | None = None
+
+
+class WorkflowValidationIssue(BaseModel):
+    code: str
+    message: str
+
+
+class WorkflowValidationResponse(BaseModel):
+    valid: bool
+    errors: list[WorkflowValidationIssue]
+    warnings: list[WorkflowValidationIssue]
