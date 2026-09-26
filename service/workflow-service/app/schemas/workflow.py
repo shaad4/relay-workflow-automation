@@ -36,3 +36,12 @@ class WorkflowValidationResponse(BaseModel):
     valid: bool
     errors: list[WorkflowValidationIssue]
     warnings: list[WorkflowValidationIssue]
+
+
+class WorkflowPublishResponse(BaseModel):
+    id: UUID
+    workflow_id: UUID
+    version: int
+    status: str
+
+    

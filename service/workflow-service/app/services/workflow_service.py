@@ -1,4 +1,6 @@
 from uuid import UUID
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -848,4 +850,70 @@ async def validate_workflow(
         "valid": not errors,
         "errors": errors,
         "warnings": warnings,
+    }
+
+
+async def publish_workflow(
+    workflow_id: UUID,
+    version_number: int,
+    workspace_id: str,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    version_result = await session.execute(
+        select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == workflow_id,
+            WorkflowVersion.version == version_number,
+        )
+    )
+
+    version = version_result.scalar_one_or_none()
+
+    if version is None:
+        return None
+
+    if version.status != "draft":
+        raise ValueError("Only draft versions can be published")
+
+    validation_result = await validate_workflow(
+        workflow_id=workflow_id,
+        version_number=version_number,
+        workspace_id=workspace_id,
+        session=session,
+    )
+
+    if validation_result is None:
+        return None
+
+    if not validation_result["valid"]:
+        raise ValueError("Workflow validation failed")
+
+    version.status = "published"
+
+    workflow.status = "published"
+    workflow.published_version_id = version.id
+
+    try:
+        await session.commit()
+        await session.refresh(version)
+    except Exception:
+        await session.rollback()
+        raise
+
+    return {
+        "id": version.id,
+        "workflow_id": workflow_id,
+        "version": version.version,
+        "status": version.status,
     }

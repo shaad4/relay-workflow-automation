@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
-from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate, WorkflowValidationResponse
+from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate, WorkflowValidationResponse, WorkflowPublishResponse
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeResponse, WorkflowNodeUpdate
 from app.schemas.workflow_version import WorkflowVersionResponse
 from app.schemas.workflow_edge import WorkflowEdgeResponse, WorkflowEdgeCreate, WorkflowEdgeUpdate
@@ -27,6 +27,7 @@ from app.services.workflow_service import (
     update_workflow_edge,
     delete_workflow_edge,
     validate_workflow,
+    publish_workflow,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -475,6 +476,38 @@ async def validate_workflow_route(
         workspace_id=identity["workspace_id"],
         session=session,
     )
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow or version not found",
+        )
+
+    return result
+
+
+@router.post(
+    "/{workflow_id}/versions/{version_number}/publish/",
+    response_model=WorkflowPublishResponse,
+)
+async def publish_workflow_version_route(
+    workflow_id: UUID,
+    version_number: int,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await publish_workflow(
+            workflow_id=workflow_id,
+            version_number=version_number,
+            workspace_id=identity["workspace_id"],
+            session=session,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
 
     if result is None:
         raise HTTPException(

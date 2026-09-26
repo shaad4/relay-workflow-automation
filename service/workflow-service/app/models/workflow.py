@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import DateTime, String, Text, func, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,6 +37,11 @@ class Workflow(Base):
         String(20),
         nullable=False,
         default="draft",
+    )
+
+    published_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("workflow_versions.id"),
+        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
