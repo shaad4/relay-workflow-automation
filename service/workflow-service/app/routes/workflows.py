@@ -18,6 +18,7 @@ from app.services.workflow_service import (
     get_workflow_version,
     create_draft_version,
     create_workflow_node,
+    list_workflow_nodes,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -227,3 +228,29 @@ async def create_workflow_node_route(
         )
 
     return node
+
+
+@router.get(
+    "/{workflow_id}/versions/{version_number}/nodes/",
+    response_model=list[WorkflowNodeResponse],
+)
+async def list_workflow_nodes_route(
+    workflow_id: UUID,
+    version_number: int,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    nodes = await list_workflow_nodes(
+        workflow_id=workflow_id,
+        version_number=version_number,
+        workspace_id=identity["workspace_id"],
+        session=session,
+    )
+
+    if nodes is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow or version not found",
+        )
+
+    return nodes

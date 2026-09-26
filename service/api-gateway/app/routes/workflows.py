@@ -67,6 +67,19 @@ async def create_workflow_node(
         f"{workflow_id}/versions/{version_number}/nodes",
     )
 
+@router.get(
+    "/{workflow_id}/versions/{version_number}/nodes/"
+)
+async def list_workflow_nodes(
+    request: Request,
+    workflow_id: str,
+    version_number: int,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/versions/{version_number}/nodes",
+    )
+
 
 
 async def proxy_workflow_request(
