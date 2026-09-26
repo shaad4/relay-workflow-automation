@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.auth import router as auth_router
 from app.routes.public_auth import router as public_auth_router
+from app.routes.workflows import router as workflows_router
 
 load_dotenv()
 
@@ -31,6 +32,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(public_auth_router)
+app.include_router(workflows_router)
 
 
 @app.get("/health")
