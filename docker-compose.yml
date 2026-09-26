@@ -9,9 +9,6 @@ services:
       POSTGRES_USER: relay
       POSTGRES_PASSWORD: relay
 
-    ports:
-      - "5432:5432"
-
     volumes:
       - auth_postgres_data:/var/lib/postgresql/data
 
@@ -25,6 +22,7 @@ services:
     ports:
       - "8000:8000"
       - "50051:50051"
+
     env_file:
       - ./service/auth-service/.env
 
