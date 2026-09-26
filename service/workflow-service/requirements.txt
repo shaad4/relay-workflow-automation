@@ -4,4 +4,6 @@ sqlalchemy[asyncio]
 asyncpg
 alembic
 python-dotenv
-
+grpcio
+grpcio-tools
+protobuf
