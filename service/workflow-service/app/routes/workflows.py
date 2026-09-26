@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
 from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate
+from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeResponse
 from app.schemas.workflow_version import WorkflowVersionResponse
 from app.services.workflow_service import (
     create_workflow,
@@ -16,6 +17,7 @@ from app.services.workflow_service import (
     list_workflow_versions,
     get_workflow_version,
     create_draft_version,
+    create_workflow_node,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -191,3 +193,37 @@ async def create_draft_version_route(
         )
 
     return version
+
+@router.post(
+    "/{workflow_id}/versions/{version_number}/nodes/",
+    response_model=WorkflowNodeResponse,
+    status_code=201,
+)
+async def create_workflow_node_route(
+    workflow_id: UUID,
+    version_number: int,
+    data: WorkflowNodeCreate,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        node = await create_workflow_node(
+            workflow_id=workflow_id,
+            version_number=version_number,
+            workspace_id=identity["workspace_id"],
+            data=data,
+            session=session,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    if node is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow or version not found",
+        )
+
+    return node

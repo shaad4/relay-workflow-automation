@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Workflow, WorkflowVersion, WorkflowEdge, WorkflowNode
 from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
+from app.schemas.workflow_node import WorkflowNodeCreate
 
 
 async def create_workflow(
@@ -274,3 +275,59 @@ async def create_draft_version(
         raise
 
     return new_version
+
+
+async def create_workflow_node(
+    workflow_id: UUID,
+    version_number: int,
+    workspace_id: str,
+    data: WorkflowNodeCreate,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    version_result = await session.execute(
+        select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == workflow_id,
+            WorkflowVersion.version == version_number,
+        )
+    )
+
+    version = version_result.scalar_one_or_none()
+
+    if version is None:
+        return None
+
+    if version.status != "draft":
+        raise ValueError("Only draft versions can be modified")
+
+    node = WorkflowNode(
+        workflow_version_id=version.id,
+        node_id=data.node_id,
+        node_type=data.node_type,
+        label=data.label,
+        position_x=data.position_x,
+        position_y=data.position_y,
+        configuration=data.configuration,
+    )
+
+    session.add(node)
+
+    try:
+        await session.commit()
+        await session.refresh(node)
+    except Exception:
+        await session.rollback()
+        raise
+
+    return node
