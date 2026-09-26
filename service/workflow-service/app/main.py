@@ -3,7 +3,6 @@ from fastapi import Depends, FastAPI
 from app.dependencies import get_current_identity
 from app.routes.workflows import router as workflows_router
 
-
 app = FastAPI(title="Relay Workflow Service")
 
 app.include_router(workflows_router)

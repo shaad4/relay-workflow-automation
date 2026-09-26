@@ -2,7 +2,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Workflow
+from app.models import Workflow, WorkflowVersion
 from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 
 
@@ -19,8 +19,23 @@ async def create_workflow(
 
     session.add(workflow)
 
-    await session.commit()
-    await session.refresh(workflow)
+    try:
+        await session.flush()
+
+        version = WorkflowVersion(
+            workflow_id=workflow.id,
+            version=1,
+            status="draft",
+            description="Initial version"
+        )
+
+        session.add(version)
+
+        await session.commit()
+        await session.refresh(workflow)
+    except Exception:
+        await session.rollback()
+        raise
 
     return workflow
 
@@ -111,3 +126,28 @@ async def delete_workflow(
         raise
 
     return True
+
+async def list_workflow_versions(
+    workflow_id: UUID,
+    workspace_id: str,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    result = await session.execute(
+        select(WorkflowVersion)
+        .where(WorkflowVersion.workflow_id == workflow_id)
+        .order_by(WorkflowVersion.version.desc())
+    )
+
+    return list(result.scalars().all())

@@ -23,6 +23,16 @@ async def update_workflow(request: Request, workflow_id: str):
 async def delete_workflow(request: Request, workflow_id: str):
     return await proxy_workflow_request(request, workflow_id)
 
+@router.get("/{workflow_id}/versions/")
+async def list_workflow_versions(
+    request: Request,
+    workflow_id: str,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/versions",
+    )
+
 
 async def proxy_workflow_request(
     request: Request,
