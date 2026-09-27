@@ -177,9 +177,13 @@ function transformBackendEdge(e, nodeIdToRfId) {
     target: targetRfId,
     type: "smoothstep",
     animated: true,
-    style: { stroke: "var(--text-tertiary)", strokeWidth: 1.5 },
+    style: { stroke: "var(--workflow-edge, #52545c)", strokeWidth: 2 },
     data: { condition: e.condition ?? null },
     label: e.condition || "",
+    labelStyle: { fill: "var(--workflow-edge-label-text, #dedee4)", fontSize: 10, fontWeight: 600 },
+    labelBgStyle: { fill: "var(--workflow-edge-label-bg, #18191e)", fillOpacity: 0.96 },
+    labelBgPadding: [7, 4],
+    labelBgBorderRadius: 5,
   };
 
   const serverEdge = {
@@ -292,6 +296,7 @@ export default function WorkflowBuilder({
 
   // ── UI states ─────────────────────────────────────────────────────────────
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [getViewportCenter, setGetViewportCenter] = useState(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
@@ -366,12 +371,14 @@ export default function WorkflowBuilder({
     setSelectedNodeId(node ? node.id : null);
     setSelectedEdgeId(null);
     if (node) setIsInspectorOpen(true);
+    else setIsInspectorOpen(false);
   }, []);
 
   const handleEdgeSelect = useCallback((edge) => {
     setSelectedEdgeId(edge ? edge.id : null);
     setSelectedNodeId(null);
     if (edge) setIsInspectorOpen(true);
+    else setIsInspectorOpen(false);
   }, []);
 
   // ── Mark unsaved helper ───────────────────────────────────────────────────
@@ -472,13 +479,10 @@ export default function WorkflowBuilder({
   const handleQuickAdd = useCallback(
     (typeId) => {
       const def = getNodeDefinition(typeId);
-      const position = {
-        x: 250 + Math.random() * 60,
-        y: 150 + nodes.length * 80,
-      };
+      const position = getViewportCenter?.(248, 84) ?? { x: 0, y: 0 };
       handleDropNode(def, position);
     },
-    [handleDropNode, nodes.length]
+    [handleDropNode, getViewportCenter]
   );
 
   // ── Node: drag-stop (position update, local only) ─────────────────────────
@@ -575,7 +579,7 @@ export default function WorkflowBuilder({
         id: tempEdgeId,
         type: "smoothstep",
         animated: true,
-        style: { stroke: "var(--text-tertiary)", strokeWidth: 1.5 },
+        style: { stroke: "var(--workflow-edge, #52545c)", strokeWidth: 2 },
         data: { condition: null },
       };
       setEdges((eds) => addEdge(newEdge, eds));
@@ -1001,7 +1005,6 @@ export default function WorkflowBuilder({
           onSelectVersion(nextVersion);
         }}
         status={currentVersionStatus}
-        updatedAt={workflow?.updated_at}
         saveState={saveState}
         saveError={saveError}
         isReadOnly={isCanvasReadOnly}
@@ -1117,6 +1120,7 @@ export default function WorkflowBuilder({
             onNodeSelect={handleNodeSelect}
             onEdgeSelect={handleEdgeSelect}
             onDropNode={handleDropNode}
+            onQuickAddReady={setGetViewportCenter}
             onNodeDragStop={handleNodeDragStop}
             onNodeDragStart={handleNodeDragStart}
             isReadOnly={isCanvasReadOnly}

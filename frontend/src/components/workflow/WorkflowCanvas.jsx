@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
+  useReactFlow,
+  ReactFlowProvider,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -34,15 +36,72 @@ export default function WorkflowCanvas({
   onNodeSelect,
   onEdgeSelect,
   onDropNode,
+  onQuickAddReady,
   onNodeDragStop,
   onNodeDragStart,
   isReadOnly = false,
 }) {
+  return (
+    <ReactFlowProvider>
+      <WorkflowCanvasInner
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onEdgeUpdate={onEdgeUpdate}
+        onNodeSelect={onNodeSelect}
+        onEdgeSelect={onEdgeSelect}
+        onDropNode={onDropNode}
+        onQuickAddReady={onQuickAddReady}
+        onNodeDragStop={onNodeDragStop}
+        onNodeDragStart={onNodeDragStart}
+        isReadOnly={isReadOnly}
+      />
+    </ReactFlowProvider>
+  );
+}
+
+function WorkflowCanvasInner({
+  nodes,
+  edges,
+  onNodesChange,
+  onEdgesChange,
+  onConnect,
+  onEdgeUpdate,
+  onNodeSelect,
+  onEdgeSelect,
+  onDropNode,
+  onQuickAddReady,
+  onNodeDragStop,
+  onNodeDragStart,
+  isReadOnly,
+}) {
+  const { screenToFlowPosition } = useReactFlow();
+
+  useEffect(() => {
+    if (onQuickAddReady) {
+      onQuickAddReady(() => (width = 0, height = 0) => {
+        const bounds = document.querySelector(".workflow-flow")?.getBoundingClientRect();
+        if (!bounds) return { x: 0, y: 0 };
+        const center = screenToFlowPosition({
+          x: bounds.left + (bounds.width - width) / 2,
+          y: bounds.top + (bounds.height - height) / 2,
+        });
+        return { x: center.x - width / 2, y: center.y - height / 2 };
+      });
+    }
+  }, [onQuickAddReady, screenToFlowPosition]);
   const defaultEdgeOptions = useMemo(
     () => ({
       type: "smoothstep",
       animated: true,
-      style: { stroke: "var(--text-tertiary)", strokeWidth: 1.5 },
+      style: { stroke: "var(--workflow-edge, #52545c)", strokeWidth: 2 },
+      selectedStyle: { stroke: "var(--accent)", strokeWidth: 2.5 },
+      labelStyle: { fill: "var(--workflow-edge-label-text, #dedee4)", fontSize: 10, fontWeight: 600 },
+      labelBgStyle: { fill: "var(--workflow-edge-label-bg, #18191e)", fillOpacity: 0.96 },
+      labelBgPadding: [7, 4],
+      labelBgBorderRadius: 5,
     }),
     []
   );
@@ -62,28 +121,31 @@ export default function WorkflowCanvas({
 
       try {
         const nodeDef = JSON.parse(rawData);
-        // Use bounding rect to convert screen coords to canvas-relative coords.
-        // This is reliable at zoom=1. For zoomed/panned canvases, React Flow's
-        // internal onNodesChange will handle the actual RF-space position.
-        const bounds = event.currentTarget.getBoundingClientRect();
+        // React Flow performs the viewport and zoom transform so the node lands
+        // exactly at the drop pointer in flow coordinates.
+        const flowPoint = screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
         const position = {
-          x: Math.round(event.clientX - bounds.left - 90),
-          y: Math.round(event.clientY - bounds.top - 25),
+          x: Math.round(flowPoint.x - 124),
+          y: Math.round(flowPoint.y - 42),
         };
         if (onDropNode) onDropNode(nodeDef, position);
       } catch (err) {
         console.error("Error handling node drop:", err);
       }
     },
-    [isReadOnly, onDropNode]
+    [isReadOnly, onDropNode, screenToFlowPosition]
   );
 
   const getNodeColor = useCallback((node) => {
     const typeId = node.data?.typeId ?? "";
-    if (typeId.startsWith("trigger.")) return "#4F46E5";
-    if (typeId.startsWith("action.")) return "#0EA5E9";
-    if (typeId.startsWith("ai.")) return "#8B5CF6";
-    if (typeId.startsWith("logic.") || typeId.startsWith("human.")) return "#D29922";
+    if (typeId.startsWith("trigger.")) return "#f59e0b";
+    if (typeId.startsWith("action.")) return "#38bdf8";
+    if (typeId.startsWith("ai.")) return "#a78bfa";
+    if (typeId.startsWith("logic.")) return "#34d399";
+    if (typeId.startsWith("human.")) return "#fb7185";
     return "var(--border-strong)";
   }, []);
 
@@ -91,7 +153,7 @@ export default function WorkflowCanvas({
     <div
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="relative flex-1 w-full h-full bg-[var(--canvas)] select-none overflow-hidden"
+      className="workflow-canvas relative flex-1 w-full h-full select-none overflow-hidden"
     >
       <ReactFlow
         nodes={nodes}
@@ -107,6 +169,7 @@ export default function WorkflowCanvas({
         onNodeDragStart={onNodeDragStart}
         nodeTypes={nodeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
+        connectionLineStyle={{ stroke: "var(--accent)", strokeWidth: 2 }}
         nodesDraggable={!isReadOnly}
         nodesConnectable={!isReadOnly}
         elementsSelectable={true}
@@ -114,43 +177,43 @@ export default function WorkflowCanvas({
         fitViewOptions={{ padding: 0.3, maxZoom: 0.9 }}
         minZoom={0.1}
         maxZoom={2}
-        className="text-[var(--text-primary)]"
+        className="workflow-flow text-[var(--text-primary)]"
         deleteKeyCode={null}
       >
-        <Background variant="dots" gap={20} size={1.25} color="var(--canvas-grid)" />
+        <Background variant="dots" gap={22} size={1.1} color="var(--canvas-grid)" />
 
-        <Controls className="!bg-[var(--surface)] !border !border-[var(--border-subtle)] !rounded-lg !shadow-xs fill-[var(--text-secondary)] stroke-[var(--text-secondary)]" />
+      <Controls className="workflow-controls !bg-[var(--surface)] !border !border-[var(--border-default)] !rounded-xl !shadow-xl fill-[var(--text-secondary)] stroke-[var(--text-secondary)]" />
 
         <MiniMap
-          bgColor="var(--canvas)"
+          bgColor="var(--surface)"
           nodeColor={getNodeColor}
-          nodeStrokeColor="var(--border-subtle)"
+          nodeStrokeColor="var(--border-default)"
           nodeBorderRadius={4}
           nodeStrokeWidth={2}
-          maskColor="rgba(0,0,0,0.45)"
+          maskColor="rgba(111, 113, 126, 0.28)"
           maskStrokeColor="var(--accent)"
-          maskStrokeWidth={1.5}
+          maskStrokeWidth={2}
           pannable
           zoomable
           ariaLabel="Workflow minimap navigation"
-          className="!bg-[var(--surface)] !border !border-[var(--border-subtle)] !rounded-lg !shadow-sm cursor-grab active:cursor-grabbing"
-          style={{ width: 170, height: 110 }}
+          className="workflow-minimap !bg-[var(--surface)] !border !border-[var(--border-default)] !rounded-2xl !shadow-xl cursor-grab active:cursor-grabbing"
+          style={{ width: 196, height: 132 }}
         />
       </ReactFlow>
 
       {/* Empty canvas overlay */}
       {nodes.length === 0 && (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center pointer-events-none select-none z-10">
-          <div className="w-12 h-12 rounded-[12px] bg-[var(--surface)] border border-[var(--border-subtle)] flex items-center justify-center mb-3 text-[var(--text-tertiary)] shadow-sm">
+          <div className="w-12 h-12 rounded-[14px] bg-[var(--surface)] border border-[var(--border-default)] flex items-center justify-center mb-3 text-[var(--accent)] shadow-lg">
             <PlusIcon className="w-6 h-6 stroke-[1.5]" />
           </div>
           <h4 className="text-[15px] font-semibold text-[var(--text-primary)] tracking-tight mb-1">
-            {isReadOnly ? "Empty workflow" : "Start building"}
+            {isReadOnly ? "Empty workflow" : "Your canvas is ready"}
           </h4>
           <p className="text-[13px] text-[var(--text-secondary)] max-w-xs leading-relaxed">
             {isReadOnly
-              ? "This workflow has no nodes."
-              : "Open the Node Library and drag a node onto the canvas to get started."}
+              ? "This version has no workflow steps."
+              : "Add a trigger, then connect steps to design your workflow."}
           </p>
         </div>
       )}

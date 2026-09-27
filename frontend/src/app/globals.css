@@ -117,6 +117,190 @@ body {
 }
 
 .react-flow__minimap-mask {
-  fill: rgba(0, 0, 0, 0.5) !important;
+  fill: rgba(111, 113, 126, 0.28) !important;
+  stroke: var(--accent) !important;
+  stroke-width: 2px !important;
 }
 
+.workflow-minimap {
+  padding: 6px;
+  overflow: hidden;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.025);
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.workflow-minimap:hover {
+  border-color: var(--accent) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.24), 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  transform: translateY(-1px);
+}
+
+.workflow-minimap .react-flow__minimap-mask {
+  fill: rgba(111, 113, 126, 0.28) !important;
+  stroke: var(--accent) !important;
+  stroke-width: 2px !important;
+}
+
+.workflow-minimap .react-flow__minimap-node {
+  stroke: rgba(255, 255, 255, 0.24);
+  stroke-width: 1px;
+}
+
+.light .workflow-minimap {
+  box-shadow: 0 12px 30px rgba(31, 41, 55, 0.14), 0 0 0 1px rgba(31, 41, 55, 0.04);
+}
+
+.light .workflow-minimap .react-flow__minimap-mask {
+  fill: rgba(84, 91, 107, 0.12) !important;
+}
+
+.light .workflow-minimap .react-flow__minimap-node {
+  stroke: rgba(31, 41, 55, 0.2);
+}
+
+/* Workflow editor studio surface and node/edge states. */
+.workflow-canvas {
+  --workflow-node-bg: #101114;
+  --workflow-node-text: #f5f5f5;
+  --workflow-node-muted: #a1a1aa;
+  --workflow-node-config-bg: rgba(0, 0, 0, 0.25);
+  --workflow-node-border: rgba(255, 255, 255, 0.1);
+  --workflow-edge: #52545c;
+  --workflow-edge-label-bg: #18191e;
+  --workflow-edge-label-text: #dedee4;
+  --workflow-shadow: rgba(0, 0, 0, 0.34);
+  --workflow-grid-dot: #777985;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(68, 55, 130, 0.14), transparent 52%),
+    radial-gradient(ellipse at 50% 50%, #111216 0%, #0b0c0f 72%);
+}
+
+.light .workflow-canvas {
+  --workflow-node-bg: #ffffff;
+  --workflow-node-text: #171717;
+  --workflow-node-muted: #626873;
+  --workflow-node-config-bg: #f4f5f7;
+  --workflow-node-border: #e1e4ea;
+  --workflow-edge: #9298a5;
+  --workflow-edge-label-bg: #ffffff;
+  --workflow-edge-label-text: #303542;
+  --workflow-shadow: rgba(31, 41, 55, 0.12);
+  --workflow-grid-dot: #aeb4c0;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(99, 102, 241, 0.08), transparent 55%),
+    radial-gradient(ellipse at 50% 50%, #fafbfc 0%, #f1f3f6 78%);
+}
+
+.workflow-node {
+  background: var(--workflow-node-bg, #101114);
+  color: var(--workflow-node-text, #f5f5f5);
+  border-color: var(--workflow-node-border, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 8px 24px var(--workflow-shadow, rgba(0, 0, 0, 0.25)), 0 1px 2px var(--workflow-shadow, rgba(0, 0, 0, 0.35));
+}
+
+.workflow-node .workflow-node-title {
+  color: var(--workflow-node-text, #f5f5f5) !important;
+}
+
+.workflow-node .workflow-node-category,
+.workflow-node .workflow-node-id {
+  color: var(--workflow-node-muted, #a1a1aa) !important;
+}
+
+.workflow-node-divider,
+.workflow-node-footer {
+  border-color: var(--workflow-node-border, rgba(255, 255, 255, 0.1));
+}
+
+.workflow-node-config {
+  color: var(--text-secondary);
+  border-color: var(--workflow-node-border, rgba(255, 255, 255, 0.1));
+  background: var(--workflow-node-config-bg, rgba(0, 0, 0, 0.25));
+}
+
+.workflow-handle {
+  border-color: var(--workflow-node-bg, #101114) !important;
+}
+
+.workflow-flow .react-flow__pane {
+  cursor: grab;
+}
+
+.workflow-flow .react-flow__pane:active {
+  cursor: grabbing;
+}
+
+.workflow-flow .react-flow__edge-path {
+  transition: stroke 140ms ease, stroke-width 140ms ease, filter 140ms ease;
+}
+
+.workflow-flow .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #818cf8;
+  stroke-width: 2.5px;
+  filter: drop-shadow(0 0 4px rgba(129, 140, 248, 0.48));
+}
+
+.workflow-flow .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #a78bfa;
+  stroke-width: 2.8px;
+  filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.58));
+}
+
+.workflow-flow .react-flow__edge-textbg {
+  fill: var(--workflow-edge-label-bg, #18191e);
+  stroke: var(--workflow-node-border, rgba(255, 255, 255, 0.1));
+  stroke-width: 1px;
+}
+
+.workflow-flow .react-flow__edge-text {
+  fill: var(--workflow-edge-label-text, #dedee4);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+}
+
+.workflow-flow .react-flow__edge-textbg {
+  stroke-width: 1px;
+}
+
+.workflow-flow .react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+.workflow-node:hover {
+  border-color: color-mix(in srgb, var(--node-accent) 50%, var(--border-strong));
+  box-shadow: 0 12px 32px var(--workflow-shadow, rgba(0, 0, 0, 0.34)), 0 0 0 1px color-mix(in srgb, var(--node-accent) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.workflow-node.is-selected {
+  border-color: var(--node-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent) 22%, transparent), 0 12px 32px var(--workflow-shadow, rgba(0, 0, 0, 0.4)), 0 0 28px color-mix(in srgb, var(--node-accent) 16%, transparent);
+}
+
+.workflow-controls button {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.workflow-controls button:hover {
+  background: var(--elevated) !important;
+}
+
+.light .workflow-flow .react-flow__edge-path {
+  stroke: #858b99;
+}
+
+.light .workflow-flow .react-flow__edge:hover .react-flow__edge-path,
+.light .workflow-flow .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #6d5ce8;
+  filter: drop-shadow(0 0 4px rgba(109, 92, 232, 0.32));
+}
+
+.light .workflow-flow .react-flow__background pattern circle {
+  fill: var(--workflow-grid-dot);
+  opacity: 0.42;
+}
+
+.workflow-flow .react-flow__background pattern circle {
+  fill: var(--workflow-grid-dot, #777985);
+  opacity: 0.34;
+}

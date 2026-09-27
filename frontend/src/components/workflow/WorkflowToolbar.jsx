@@ -63,7 +63,6 @@ export default function WorkflowToolbar({
   versionNumber = 1,
   versions = [],
   onSelectVersion,
-  updatedAt,
   status = "draft",
   saveState = "saved", // 'saved' | 'unsaved' | 'saving' | 'failed'
   saveError = null,
@@ -118,9 +117,6 @@ export default function WorkflowToolbar({
             </span>
           )}
         </div>
-        <span className="hidden xl:inline text-[10px] text-[var(--text-tertiary)] border-l border-[var(--border-subtle)] pl-2">
-          Last saved {updatedAt ? new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Not saved yet"}
-        </span>
       </div>
 
       {/* Right: Save indicator + actions */}

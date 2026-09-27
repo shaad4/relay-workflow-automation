@@ -4,109 +4,80 @@ import { memo } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { getNodeDefinition } from "./nodeDefinitions";
 
+const categoryColors = {
+  triggers: "#f59e0b",
+  actions: "#38bdf8",
+  ai: "#a78bfa",
+  logic: "#34d399",
+  human: "#fb7185",
+};
+
 function WorkflowNode({ data, selected }) {
   const typeId = data?.typeId || data?.node_type || "custom";
   const def = getNodeDefinition(typeId);
   const name = data?.name || data?.label || def.name;
   const config = data?.config || data?.data || {};
+  const group = typeId.split(".")[0];
+  const color = categoryColors[group] || "#818cf8";
+  const isTrigger = group === "trigger";
+  const isCondition = typeId === "logic.condition";
 
-  // Formatter for config preview line
   const getConfigSummary = () => {
-    if (typeId === "trigger.webhook") return `POST ${config.path || "/hooks/..."}`;
-    if (typeId === "trigger.schedule") return `Cron: ${config.cron || "0 0 * * *"}`;
+    if (typeId === "trigger.webhook") return `${config.method || "POST"}  ${config.path || "/hooks/..."}`;
+    if (typeId === "trigger.schedule") return `${config.cron || "0 0 * * *"}  ·  ${config.timezone || "UTC"}`;
     if (typeId === "trigger.manual") return "Manual trigger";
-    if (typeId === "action.http_request") return `${config.method || "POST"} ${config.url || "https://..."}`;
-    if (typeId === "action.email") return `To: ${config.to || "user@..."}`;
-    if (typeId === "action.refund") return `Charge: ${config.charge_id || "ch_..."}`;
-    if (typeId === "ai.decision") return `Model: ${config.model || "gemini-2.5-flash"}`;
-    if (typeId === "ai.rag_search") return `KB: ${config.knowledge_base || "default"}`;
-    if (typeId === "ai.generate") return `Model: ${config.model || "gemini-2.5-flash"}`;
-    if (typeId === "logic.condition") return `${config.field || "field"} ${config.operator || "=="} ${config.value || "val"}`;
-    if (typeId === "human.approval") return `Approver: ${config.approver || "admin@..."}`;
+    if (typeId === "action.http_request") return `${config.method || "POST"}  ${config.url || "https://..."}`;
+    if (typeId === "action.email") return `To  ${config.to || "user@..."}`;
+    if (typeId === "action.refund") return `Charge  ${config.charge_id || "ch_..."}`;
+    if (typeId === "ai.decision" || typeId === "ai.generate") return config.model || "gemini-2.5-flash";
+    if (typeId === "ai.rag_search") return `Index  ${config.knowledge_base || "default"}`;
+    if (typeId === "logic.condition") return `${config.field || "field"}  ${config.operator || "=="}  ${config.value || "value"}`;
+    if (typeId === "human.approval") return `Approver  ${config.approver || "admin@..."}`;
     return "Configured";
   };
 
-  const isTrigger = typeId.startsWith("trigger.");
-  const isCondition = typeId === "logic.condition";
+  const handleClass = "workflow-handle !h-3 !w-3 !rounded-full !border-2 !border-[var(--canvas)] !bg-[#737373] transition-all hover:!bg-white hover:!scale-125";
 
   return (
     <div
-      className={`w-52 bg-[var(--surface)] border rounded-md p-2 text-[var(--text-primary)] transition-all duration-100 ease-out select-none font-sans ${
-        selected
-          ? "border-[#4F46E5] ring-2 ring-[#4F46E5]/25 shadow-sm"
-          : "border-[var(--border-subtle)] hover:border-[var(--border-strong)] shadow-2xs"
-      }`}
+      className={`workflow-node group relative w-[248px] overflow-visible rounded-xl border text-[var(--text-primary)] font-sans transition-all duration-150 ${selected ? "is-selected" : ""}`}
+      style={{ "--node-accent": color }}
     >
-      {/* Top Handle (Input) - Triggers don't need top handles */}
-      {!isTrigger && (
-        <Handle
-          type="target"
-          position={Position.Top}
-          className="!w-2 !h-2 !bg-[var(--surface)] !border-2 !border-[var(--text-tertiary)] hover:!border-[#4F46E5] transition-colors !-top-1"
-        />
-      )}
+      {!isTrigger && <Handle type="target" position={Position.Top} className={`${handleClass} !-top-1.5`} />}
 
-      {/* Node Header */}
-      <div className="flex items-center justify-between gap-1.5 mb-1 pb-1 border-b border-[var(--border-subtle)]/60">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-[12px] shrink-0">{def.icon}</span>
-          <span className="text-[12px] font-semibold text-[var(--text-primary)] truncate leading-tight">
-            {name}
-          </span>
+      <div className="h-[3px] rounded-t-xl" style={{ background: `linear-gradient(90deg, ${color}, ${color}55)` }} />
+      <div className="flex items-center gap-3 px-3.5 pt-3 pb-2.5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-[17px]" style={{ color, borderColor: `${color}35`, background: `${color}12` }}>
+          {def.icon}
         </div>
-
-        <span className="text-[8px] font-mono tracking-wider text-[var(--text-tertiary)] uppercase bg-[var(--canvas)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)] shrink-0">
-          {def.category}
-        </span>
+        <div className="min-w-0 flex-1">
+          <div className="workflow-node-title truncate text-[13px] font-semibold tracking-[-0.02em]">{name}</div>
+          <div className="mt-0.5 flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+            <span className="workflow-node-category text-[10px] font-medium capitalize">{def.category || group}</span>
+          </div>
+        </div>
+        <span className="text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true">···</span>
       </div>
 
-      {/* Node Type ID & Config Summary */}
-      <div className="space-y-0.5">
-        <div className="text-[9px] font-mono text-[var(--text-tertiary)] truncate">
-          {typeId}
-        </div>
-        <div className="text-[10px] font-mono text-[var(--text-secondary)] truncate bg-[var(--canvas)]/80 px-1.5 py-0.5 rounded border border-[var(--border-subtle)]/50">
+      <div className="workflow-node-divider mx-3.5 border-t" />
+      <div className="px-3.5 py-2.5">
+        <div className="workflow-node-config truncate rounded-md border px-2.5 py-2 font-mono text-[10px] leading-4" title={getConfigSummary()}>
           {getConfigSummary()}
         </div>
       </div>
 
-      {/* Status indicator */}
-      <div className="mt-1 flex items-center justify-between text-[9px] text-[var(--text-tertiary)] pt-0.5">
-        <div className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#3FB950]" />
-          <span className="text-[9px]">Ready</span>
-        </div>
-        {data?.node_id && (
-          <span className="font-mono text-[8px] text-[var(--text-tertiary)]">
-            #{data.node_id}
-          </span>
-        )}
+      <div className="workflow-node-footer flex items-center justify-between border-t px-3.5 py-2 text-[10px] text-[var(--text-tertiary)]">
+        <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#35c98a] shadow-[0_0_8px_#35c98a80]" />Ready</span>
+        <span className="workflow-node-id font-mono">{data?.nodeId || data?.node_id || "step"}</span>
       </div>
 
-      {/* Bottom Handle (Output) */}
       {!isCondition ? (
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          className="!w-2 !h-2 !bg-[var(--surface)] !border-2 !border-[var(--text-tertiary)] hover:!border-[#4F46E5] transition-colors !-bottom-1"
-        />
+        <Handle type="source" position={Position.Bottom} className={`${handleClass} !-bottom-1.5`} />
       ) : (
-        /* Condition node has true/false outputs */
         <>
-          <Handle
-            type="source"
-            position={Position.Bottom}
-            id="true"
-            className="!w-2 !h-2 !bg-[#3FB950] !border-2 !border-[var(--surface)] !-ml-6 !-bottom-1"
-            title="True"
-          />
-          <Handle
-            type="source"
-            position={Position.Bottom}
-            id="false"
-            className="!w-2 !h-2 !bg-[#F85149] !border-2 !border-[var(--surface)] !ml-6 !-bottom-1"
-            title="False"
-          />
+          <Handle type="source" position={Position.Bottom} id="true" className={`${handleClass} !-bottom-1.5 !bg-[#35c98a] !-ml-7`} title="True" />
+          <Handle type="source" position={Position.Bottom} id="false" className={`${handleClass} !-bottom-1.5 !bg-[#fb7185] !ml-7`} title="False" />
         </>
       )}
     </div>
