@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   useNodesState,
   useEdgesState,
@@ -274,6 +275,7 @@ export default function WorkflowBuilder({
   onRefresh = () => {},
   onSelectVersion = () => {},
 }) {
+  const router = useRouter();
   const workflowId = workflow?.id ?? "";
   const versionNumber = version?.version_number ?? version?.version ?? 1;
   const isReadOnly = (version?.status ?? "draft") === "published";
@@ -300,11 +302,14 @@ export default function WorkflowBuilder({
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const historyFrameRef = useRef(null);
   const historyTimerRef = useRef(null);
   const canvasStateRef = useRef({ nodes: rfNodes, edges: rfEdges });
+  const allowNextPopRef = useRef(false);
   // saveState: 'saved' | 'unsaved' | 'saving' | 'failed'
   const [saveState, setSaveState] = useState("saved");
   const [saveError, setSaveError] = useState(null);
@@ -366,6 +371,53 @@ export default function WorkflowBuilder({
     return () => window.removeEventListener("beforeunload", handler);
   }, [saveState]);
 
+  const hasUnsavedChanges = saveState === "unsaved" || saveState === "failed";
+  const navigateWithGuard = useCallback((href) => {
+    if (hasUnsavedChanges) {
+      setPendingNavigation(href);
+      return;
+    }
+    router.push(href);
+  }, [hasUnsavedChanges, router]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handleLinkClick = (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target.closest("a[href]");
+      if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+      const destination = new URL(link.href, window.location.href);
+      if (destination.origin !== window.location.origin || destination.href === window.location.href) return;
+      event.preventDefault();
+      setPendingNavigation(`${destination.pathname}${destination.search}${destination.hash}`);
+    };
+    const handlePopState = () => {
+      if (allowNextPopRef.current) {
+        allowNextPopRef.current = false;
+        return;
+      }
+      window.history.go(1);
+      setPendingNavigation("back");
+    };
+    document.addEventListener("click", handleLinkClick, true);
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      document.removeEventListener("click", handleLinkClick, true);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [hasUnsavedChanges]);
+
+  const confirmLeaveWithoutSaving = useCallback(() => {
+    const destination = pendingNavigation;
+    setPendingNavigation(null);
+    if (!destination) return;
+    if (destination === "back") {
+      allowNextPopRef.current = true;
+      window.history.back();
+    }
+    else router.push(destination);
+  }, [pendingNavigation, router]);
+
   // ── Node selection ────────────────────────────────────────────────────────
   const handleNodeSelect = useCallback((node) => {
     setSelectedNodeId(node ? node.id : null);
@@ -380,6 +432,13 @@ export default function WorkflowBuilder({
     if (edge) setIsInspectorOpen(true);
     else setIsInspectorOpen(false);
   }, []);
+
+  const handleCanvasContextMenu = useCallback((event, target) => {
+    event.preventDefault();
+    if (target.type === "node") handleNodeSelect(nodes.find((node) => node.id === target.id) ?? null);
+    else handleEdgeSelect(edges.find((edge) => edge.id === target.id) ?? null);
+    setContextMenu({ ...target, x: event.clientX, y: event.clientY });
+  }, [nodes, edges, handleNodeSelect, handleEdgeSelect]);
 
   // ── Mark unsaved helper ───────────────────────────────────────────────────
   const markUnsaved = useCallback(() => {
@@ -567,6 +626,45 @@ export default function WorkflowBuilder({
     },
     [isCanvasReadOnly, selectedNodeId, selectedEdgeId, edges, markUnsaved, setNodes, setEdges, recordHistory]
   );
+
+  const handleDuplicateNode = useCallback((id) => {
+    if (isCanvasReadOnly) return;
+    const original = nodes.find((node) => node.id === id);
+    if (!original) return;
+    recordHistory();
+    const typeId = original.data?.typeId || "action.http_request";
+    const definition = getNodeDefinition(typeId);
+    const duplicate = {
+      ...original,
+      id: `temp-node-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      position: { x: original.position.x + 48, y: original.position.y + 48 },
+      selected: false,
+      data: { ...original.data, nodeId: getNextNodeId(typeId), label: `${original.data?.label || definition.name} copy` },
+    };
+    setNodes((current) => current.concat(duplicate));
+    setSelectedNodeId(duplicate.id);
+    setSelectedEdgeId(null);
+    setIsInspectorOpen(true);
+    setContextMenu(null);
+    markUnsaved();
+  }, [isCanvasReadOnly, nodes, recordHistory, setNodes, markUnsaved]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const closeMenu = () => setContextMenu(null);
+    const onMouseDown = (event) => {
+      if (!event.target.closest("[data-workflow-context-menu]")) closeMenu();
+    };
+    const onKeyDown = (event) => { if (event.key === "Escape") closeMenu(); };
+    document.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("scroll", closeMenu, true);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [contextMenu]);
 
   // ── Edge: connect (local only) ────────────────────────────────────────────
   const handleConnect = useCallback(
@@ -979,6 +1077,7 @@ export default function WorkflowBuilder({
         e.preventDefault();
         handleSave();
       } else if (e.key === "Escape") {
+        setContextMenu(null);
         setSelectedNodeId(null);
         setSelectedEdgeId(null);
       }
@@ -995,6 +1094,11 @@ export default function WorkflowBuilder({
       {/* ── 1. Top Toolbar ─────────────────────────────────────────────────── */}
       <WorkflowToolbar
         workflowName={workflow?.name || "Workflow"}
+        onNavigate={navigateWithGuard}
+        workflowDescription={workflow?.description || ""}
+        workflowId={workflowId}
+        token={token}
+        onWorkflowUpdated={onRefresh}
         versionNumber={versionNumber}
         versions={versions}
         onSelectVersion={(nextVersion) => {
@@ -1123,8 +1227,32 @@ export default function WorkflowBuilder({
             onQuickAddReady={setGetViewportCenter}
             onNodeDragStop={handleNodeDragStop}
             onNodeDragStart={handleNodeDragStart}
+            onContextMenu={handleCanvasContextMenu}
             isReadOnly={isCanvasReadOnly}
           />
+
+          {contextMenu && (
+            <div
+              role="menu"
+              className="fixed z-[70] min-w-44 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] p-1.5 text-[12px] text-[var(--text-primary)] shadow-2xl"
+              data-workflow-context-menu
+              style={{ left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - (contextMenu.type === "node" ? 190 : 145))) }}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              {contextMenu.type === "node" ? (
+                <>
+                  <button type="button" role="menuitem" onClick={() => { setIsInspectorOpen(true); setContextMenu(null); }} className="workflow-context-action">Open node inspector</button>
+                  {!isCanvasReadOnly && <button type="button" role="menuitem" onClick={() => handleDuplicateNode(contextMenu.id)} className="workflow-context-action">Duplicate node</button>}
+                  {!isCanvasReadOnly && <button type="button" role="menuitem" onClick={() => { handleDeleteNode(contextMenu.id); setContextMenu(null); }} className="workflow-context-action is-destructive">Delete node <span>⌫</span></button>}
+                </>
+              ) : (
+                <>
+                  <button type="button" role="menuitem" onClick={() => { setIsInspectorOpen(true); setContextMenu(null); }} className="workflow-context-action">Edit connection</button>
+                  {!isCanvasReadOnly && <button type="button" role="menuitem" onClick={() => { handleDeleteEdge(contextMenu.id); setContextMenu(null); }} className="workflow-context-action is-destructive">Delete connection <span>⌫</span></button>}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: Node Inspector */}
@@ -1154,6 +1282,20 @@ export default function WorkflowBuilder({
         errors={validationResult.errors}
         onClose={() => setValidationOpen(false)}
       />
+
+      {pendingNavigation && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]" role="presentation">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="unsaved-navigation-title" aria-describedby="unsaved-navigation-description" className="w-full max-w-sm rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-5 shadow-2xl">
+            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-500">!</div>
+            <h2 id="unsaved-navigation-title" className="text-[15px] font-semibold text-[var(--text-primary)]">Leave without saving?</h2>
+            <p id="unsaved-navigation-description" className="mt-1.5 text-[13px] leading-5 text-[var(--text-secondary)]">Your workflow has unsaved changes. If you leave now, those changes will be lost.</p>
+            <div className="mt-5 flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-3">
+              <button type="button" autoFocus onClick={() => setPendingNavigation(null)} className="h-9 rounded-lg border border-[var(--border-default)] px-3 text-[12px] font-medium text-[var(--text-primary)] hover:bg-[var(--elevated)]">Stay in builder</button>
+              <button type="button" onClick={confirmLeaveWithoutSaving} className="h-9 rounded-lg bg-red-600 px-3 text-[12px] font-medium text-white hover:bg-red-700">Leave without saving</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

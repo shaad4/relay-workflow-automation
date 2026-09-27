@@ -42,6 +42,22 @@ function TrashIcon(props) {
   );
 }
 
+function WorkflowMark({ name = "Workflow" }) {
+  const hue = Array.from(name).reduce((value, char) => value + char.charCodeAt(0), 0) % 360;
+  return (
+    <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--elevated)] text-[var(--text-primary)]">
+      <div className="absolute inset-0 opacity-20" style={{ background: `radial-gradient(circle at 30% 20%, hsl(${hue} 85% 65%), transparent 70%)` }} />
+      <svg className="relative h-5 w-5" viewBox="0 0 24 24" fill="none" stroke={`hsl(${hue} 75% 62%)`} strokeWidth="1.6" aria-hidden="true">
+        <circle cx="5" cy="6" r="2.2" />
+        <circle cx="19" cy="18" r="2.2" />
+        <circle cx="18" cy="6" r="2.2" />
+        <path d="M7.2 6H12a4 4 0 0 1 4 4v5.8M16 6h-.2" />
+        <path d="M16.4 15.8H12a4 4 0 0 1-4-4V8.2" />
+      </svg>
+    </div>
+  );
+}
+
 export function formatRelativeTime(dateString) {
   if (!dateString) return "—";
   const date = new Date(dateString);
@@ -87,7 +103,7 @@ export function formatDate(dateString) {
   });
 }
 
-export default function WorkflowRow({ workflow, isLast = false, onDeleteRequest }) {
+export default function WorkflowRow({ workflow, onDeleteRequest }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
@@ -98,7 +114,6 @@ export default function WorkflowRow({ workflow, isLast = false, onDeleteRequest 
   const description = workflow.description || "";
   const status = workflow.status || "draft";
   const updatedAt = formatRelativeTime(workflow.updated_at || workflow.created_at);
-  const createdAt = formatDate(workflow.created_at);
 
   const handleCloseMenu = useCallback(() => {
     setMenuOpen(false);
@@ -159,47 +174,34 @@ export default function WorkflowRow({ workflow, isLast = false, onDeleteRequest 
 
   return (
     <div
-      role="row"
+      role="link"
       tabIndex={0}
       onClick={handleRowClick}
       onKeyDown={handleKeyDown}
-      className={`group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--elevated)]/80 border-b border-[var(--border-subtle)] last:border-b-0 transition-colors duration-100 ease-out cursor-pointer focus:outline-none focus:bg-[var(--elevated)] ${
-        isLast ? "rounded-b-lg" : ""
-      }`}
+      className="group relative flex min-h-[216px] flex-col overflow-visible rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-4 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
     >
-      {/* Workflow Name & Description */}
-      <div className="min-w-0 flex-1 pr-3">
-        <div className="flex items-center gap-2">
-          <span className="text-[14px] font-medium text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors truncate">
-            {name}
-          </span>
+      <div className="flex items-start gap-3 pr-9">
+        <WorkflowMark name={name} />
+        <div className="min-w-0 flex-1 pt-0.5">
+          <div className="truncate text-[15px] font-semibold tracking-tight text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">{name}</div>
+          <div className="mt-1 truncate font-mono text-[10px] text-[var(--text-tertiary)]">/workflows/{workflowId.slice(0, 8)}</div>
         </div>
-        {description && (
-          <p className="text-[12px] text-[var(--text-tertiary)] truncate mt-0.5 max-w-lg font-normal">
-            {description}
-          </p>
-        )}
       </div>
 
-      {/* Columns: Status, Updated, Created, Actions */}
-      <div className="flex items-center justify-between sm:justify-end gap-5 sm:gap-6 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--border-subtle)]/40">
-        {/* Status */}
-        <div className="w-24 shrink-0">
+      <p className="mt-4 min-h-[54px] text-[13px] leading-[19px] text-[var(--text-secondary)] line-clamp-3">
+        {description || <span className="italic text-[var(--text-tertiary)]">No description added yet.</span>}
+      </p>
+
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-3">
+        <div className="flex min-w-0 items-center gap-2.5">
           <WorkflowStatus status={status} />
+          <span className="h-1 w-1 rounded-full bg-[var(--border-strong)]" />
+          <span className="truncate text-[11px] text-[var(--text-tertiary)]">Updated {updatedAt}</span>
         </div>
+        <span className="shrink-0 text-[11px] font-medium text-[var(--accent)] opacity-0 transition-opacity group-hover:opacity-100">Open ↗</span>
+      </div>
 
-        {/* Updated At (Monospace Vercel style) */}
-        <div className="w-24 shrink-0 text-left font-mono text-[12px] text-[var(--text-tertiary)] hidden md:block">
-          {updatedAt}
-        </div>
-
-        {/* Created At (Monospace Vercel style) */}
-        <div className="w-28 shrink-0 text-left font-mono text-[12px] text-[var(--text-tertiary)] hidden lg:block">
-          {createdAt}
-        </div>
-
-        {/* Actions Button */}
-        <div ref={menuRef} className="w-16 shrink-0 flex justify-end relative">
+      <div ref={menuRef} className="absolute right-3 top-3 z-10">
           <button
             type="button"
             aria-label={`Actions for ${name}`}
@@ -285,7 +287,6 @@ export default function WorkflowRow({ workflow, isLast = false, onDeleteRequest 
             </div>
           )}
         </div>
-      </div>
     </div>
   );
 }

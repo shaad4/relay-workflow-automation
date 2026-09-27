@@ -44,26 +44,11 @@ export default function WorkflowList({ workflows = [], onDeleteSuccess }) {
 
   return (
     <div className="w-full">
-      {/* Vercel-Style Table Container (overflow-visible to prevent popover clipping) */}
-      <div className="w-full bg-[var(--surface)] border border-[var(--border-subtle)] rounded-lg font-sans">
-        {/* Table Monospace Header */}
-        <div className="hidden sm:flex items-center justify-between gap-4 h-9 px-4 border-b border-[var(--border-subtle)] bg-[var(--elevated)]/60 rounded-t-lg text-[11px] font-mono tracking-wider uppercase text-[var(--text-tertiary)] select-none">
-          <div className="flex-1">Workflow</div>
-          <div className="flex items-center justify-end gap-5 sm:gap-6 shrink-0">
-            <div className="w-24">Status</div>
-            <div className="w-24 hidden md:block text-left">Updated</div>
-            <div className="w-28 hidden lg:block text-left">Created</div>
-            <div className="w-16 text-right">Actions</div>
-          </div>
-        </div>
-
-        {/* Workflow Rows */}
-        <div className="divide-y divide-[var(--border-subtle)]">
-          {workflows.map((wf, index) => (
+      <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+          {workflows.map((wf) => (
             <WorkflowRow
               key={wf.id}
               workflow={wf}
-              isLast={index === workflows.length - 1}
               onDeleteRequest={(target) => {
                 const isDraft = String(target?.status || "").toLowerCase() === "draft";
                 if (isDraft) {
@@ -72,7 +57,6 @@ export default function WorkflowList({ workflows = [], onDeleteSuccess }) {
               }}
             />
           ))}
-        </div>
       </div>
 
       {/* Delete Confirmation Modal */}

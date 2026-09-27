@@ -39,6 +39,7 @@ export default function WorkflowCanvas({
   onQuickAddReady,
   onNodeDragStop,
   onNodeDragStart,
+  onContextMenu,
   isReadOnly = false,
 }) {
   return (
@@ -56,6 +57,7 @@ export default function WorkflowCanvas({
         onQuickAddReady={onQuickAddReady}
         onNodeDragStop={onNodeDragStop}
         onNodeDragStart={onNodeDragStart}
+        onContextMenu={onContextMenu}
         isReadOnly={isReadOnly}
       />
     </ReactFlowProvider>
@@ -75,6 +77,7 @@ function WorkflowCanvasInner({
   onQuickAddReady,
   onNodeDragStop,
   onNodeDragStart,
+  onContextMenu,
   isReadOnly,
 }) {
   const { screenToFlowPosition } = useReactFlow();
@@ -167,6 +170,8 @@ function WorkflowCanvasInner({
         onEdgeClick={(_, edge) => onEdgeSelect && onEdgeSelect(edge)}
         onNodeDragStop={onNodeDragStop}
         onNodeDragStart={onNodeDragStart}
+        onNodeContextMenu={(event, node) => onContextMenu?.(event, { type: "node", id: node.id })}
+        onEdgeContextMenu={(event, edge) => onContextMenu?.(event, { type: "edge", id: edge.id })}
         nodeTypes={nodeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
         connectionLineStyle={{ stroke: "var(--accent)", strokeWidth: 2 }}

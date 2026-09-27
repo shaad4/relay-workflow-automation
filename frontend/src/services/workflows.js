@@ -30,6 +30,14 @@ export async function getWorkflow(token, workflowId) {
   });
 }
 
+export async function updateWorkflow(token, workflowId, workflowData) {
+  return apiRequest(`/workflows/${workflowId}/`, {
+    method: "PATCH",
+    headers: getHeaders(token),
+    body: JSON.stringify(workflowData),
+  });
+}
+
 export async function deleteWorkflow(token, workflowId) {
   return apiRequest(`/workflows/${workflowId}/`, {
     method: "DELETE",

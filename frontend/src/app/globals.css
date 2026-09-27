@@ -285,6 +285,33 @@ body {
   background: var(--elevated) !important;
 }
 
+.workflow-context-action {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  text-align: left;
+  color: var(--text-secondary);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.workflow-context-action:hover {
+  background: var(--elevated);
+  color: var(--text-primary);
+}
+
+.workflow-context-action.is-destructive {
+  color: #ef4444;
+}
+
+.workflow-context-action.is-destructive:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
 .light .workflow-flow .react-flow__edge-path {
   stroke: #858b99;
 }
