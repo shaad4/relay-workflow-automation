@@ -64,6 +64,39 @@ function EditIcon(props) {
   );
 }
 
+function EdgeInspector({ edge, isReadOnly, onConditionChange, onDelete, onClose }) {
+  const source = edge.source || "Unknown";
+  const target = edge.target || "Unknown";
+  return (
+    <aside className="w-72 shrink-0 bg-[var(--surface)] border-l border-[var(--border-subtle)] flex flex-col">
+      <header className="h-12 px-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+        <div>
+          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Connection</div>
+          <div className="text-[10px] text-[var(--text-tertiary)]">{source} → {target}</div>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close connection inspector" className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">×</button>
+      </header>
+      <div className="p-4 space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1 uppercase tracking-wide">Condition label</span>
+          <input
+            value={edge.data?.condition ?? ""}
+            disabled={isReadOnly}
+            onChange={(event) => onConditionChange(event.target.value)}
+            placeholder="Optional, e.g. approved"
+            className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
+          />
+        </label>
+        {!isReadOnly && (
+          <button type="button" onClick={onDelete} className="h-8 px-3 rounded-[6px] border border-red-500/30 text-red-500 hover:bg-red-500/10 text-[12px] font-medium">
+            Delete connection
+          </button>
+        )}
+      </div>
+    </aside>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Data transformation helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -232,8 +265,10 @@ export default function WorkflowBuilder({
   version = {},
   initialNodes = [],
   initialEdges = [],
+  versions = [],
   token = null,
   onRefresh = () => {},
+  onSelectVersion = () => {},
 }) {
   const workflowId = workflow?.id ?? "";
   const versionNumber = version?.version_number ?? version?.version ?? 1;
@@ -259,6 +294,12 @@ export default function WorkflowBuilder({
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState(null);
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const historyFrameRef = useRef(null);
+  const historyTimerRef = useRef(null);
+  const canvasStateRef = useRef({ nodes: rfNodes, edges: rfEdges });
   // saveState: 'saved' | 'unsaved' | 'saving' | 'failed'
   const [saveState, setSaveState] = useState("saved");
   const [saveError, setSaveError] = useState(null);
@@ -275,6 +316,10 @@ export default function WorkflowBuilder({
   const selectedNode = useMemo(
     () => (selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) ?? null : null),
     [nodes, selectedNodeId]
+  );
+  const selectedEdge = useMemo(
+    () => (selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId) ?? null : null),
+    [edges, selectedEdgeId]
   );
 
   // ── Counter for generating logical node IDs ────────────────────────────────
@@ -319,7 +364,14 @@ export default function WorkflowBuilder({
   // ── Node selection ────────────────────────────────────────────────────────
   const handleNodeSelect = useCallback((node) => {
     setSelectedNodeId(node ? node.id : null);
+    setSelectedEdgeId(null);
     if (node) setIsInspectorOpen(true);
+  }, []);
+
+  const handleEdgeSelect = useCallback((edge) => {
+    setSelectedEdgeId(edge ? edge.id : null);
+    setSelectedNodeId(null);
+    if (edge) setIsInspectorOpen(true);
   }, []);
 
   // ── Mark unsaved helper ───────────────────────────────────────────────────
@@ -327,12 +379,69 @@ export default function WorkflowBuilder({
     setSaveState((prev) => (prev !== "saving" ? "unsaved" : prev));
   }, []);
 
+  const recordHistory = useCallback(() => {
+    const current = canvasStateRef.current;
+    if (!historyFrameRef.current) historyFrameRef.current = current;
+    if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
+    historyTimerRef.current = setTimeout(() => {
+      const frame = historyFrameRef.current;
+      if (frame) setUndoStack((stack) => [...stack.slice(-49), frame]);
+      setRedoStack([]);
+      historyFrameRef.current = null;
+    }, 250);
+  }, []);
+
+  const applyHistorySnapshot = useCallback((snapshot) => {
+    if (!snapshot) return;
+    const next = { nodes: snapshot.nodes, edges: snapshot.edges };
+    canvasStateRef.current = next;
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    markUnsaved();
+  }, [setNodes, setEdges, markUnsaved]);
+
+  const handleUndo = useCallback(() => {
+    if (isCanvasReadOnly) return;
+    let history = undoStack;
+    if (historyTimerRef.current && historyFrameRef.current) {
+      clearTimeout(historyTimerRef.current);
+      history = [...history, historyFrameRef.current];
+      historyFrameRef.current = null;
+      setUndoStack(history);
+    }
+    if (history.length === 0) return;
+    const prior = history[history.length - 1];
+    setUndoStack(history.slice(0, -1));
+    setRedoStack((stack) => [...stack, canvasStateRef.current]);
+    historyFrameRef.current = null;
+    applyHistorySnapshot(prior);
+  }, [undoStack, isCanvasReadOnly, applyHistorySnapshot]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0 || isCanvasReadOnly) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((stack) => stack.slice(0, -1));
+    setUndoStack((stack) => [...stack, canvasStateRef.current]);
+    applyHistorySnapshot(next);
+  }, [redoStack, isCanvasReadOnly, applyHistorySnapshot]);
+
+  useEffect(() => {
+    canvasStateRef.current = { nodes, edges };
+  }, [nodes, edges]);
+
+  useEffect(() => () => {
+    if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
+  }, []);
+
   // ── Node: drop from library ───────────────────────────────────────────────
   const handleDropNode = useCallback(
     (nodeDef, position) => {
       if (isCanvasReadOnly) return;
+      recordHistory();
       const logicalId = getNextNodeId(nodeDef.typeId);
-      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const tempId = `temp-node-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const def = getNodeDefinition(nodeDef.typeId);
 
       const newNode = {
@@ -356,7 +465,7 @@ export default function WorkflowBuilder({
       markUnsaved();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isCanvasReadOnly, markUnsaved]
+    [isCanvasReadOnly, markUnsaved, recordHistory]
   );
 
   // Quick-add via sub-bar buttons
@@ -374,16 +483,27 @@ export default function WorkflowBuilder({
 
   // ── Node: drag-stop (position update, local only) ─────────────────────────
   const handleNodeDragStop = useCallback(
-    (_event, node) => {
+    () => {
       if (isCanvasReadOnly) return;
+      if (!historyFrameRef.current) historyFrameRef.current = canvasStateRef.current;
+      if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
+      const frame = historyFrameRef.current;
+      if (frame) setUndoStack((stack) => [...stack.slice(-49), frame]);
+      setRedoStack([]);
+      historyFrameRef.current = null;
       // Update local position already applied by RF; just mark unsaved
       markUnsaved();
     },
     [isCanvasReadOnly, markUnsaved]
   );
 
+  const handleNodeDragStart = useCallback(() => {
+    if (!isCanvasReadOnly) historyFrameRef.current = canvasStateRef.current;
+  }, [isCanvasReadOnly]);
+
   const handleEdgeUpdate = useCallback((oldEdge, connection) => {
     if (isCanvasReadOnly) return;
+    recordHistory();
     setEdges((current) => current.map((edge) => edge.id === oldEdge.id ? {
       ...edge,
       source: connection.source,
@@ -392,12 +512,30 @@ export default function WorkflowBuilder({
       targetHandle: connection.targetHandle,
     } : edge));
     markUnsaved();
-  }, [isCanvasReadOnly, markUnsaved, setEdges]);
+  }, [isCanvasReadOnly, markUnsaved, setEdges, recordHistory]);
+
+  const handleEdgeConditionChange = useCallback((value) => {
+    if (isCanvasReadOnly || !selectedEdgeId) return;
+    recordHistory();
+    setEdges((current) => current.map((edge) => edge.id === selectedEdgeId
+      ? { ...edge, data: { ...edge.data, condition: value || null }, label: value || "" }
+      : edge));
+    markUnsaved();
+  }, [isCanvasReadOnly, selectedEdgeId, setEdges, markUnsaved, recordHistory]);
+
+  const handleDeleteEdge = useCallback((id) => {
+    if (isCanvasReadOnly) return;
+    recordHistory();
+    setEdges((current) => current.filter((edge) => edge.id !== id));
+    setSelectedEdgeId(null);
+    markUnsaved();
+  }, [isCanvasReadOnly, setEdges, markUnsaved, recordHistory]);
 
   // ── Node: update config from inspector (local only) ───────────────────────
   const handleUpdateNodeData = useCallback(
     (id, newData) => {
       if (isCanvasReadOnly) return;
+      recordHistory();
       setNodes((nds) =>
         nds.map((n) =>
           n.id === id
@@ -407,25 +545,30 @@ export default function WorkflowBuilder({
       );
       markUnsaved();
     },
-    [isCanvasReadOnly, markUnsaved, setNodes]
+    [isCanvasReadOnly, markUnsaved, setNodes, recordHistory]
   );
 
   // ── Node: delete (local only) ─────────────────────────────────────────────
   const handleDeleteNode = useCallback(
     (id) => {
       if (isCanvasReadOnly) return;
+      recordHistory();
       setNodes((nds) => nds.filter((n) => n.id !== id));
       setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
       if (selectedNodeId === id) setSelectedNodeId(null);
+      if (selectedEdgeId && edges.some((edge) => edge.id === selectedEdgeId && (edge.source === id || edge.target === id))) {
+        setSelectedEdgeId(null);
+      }
       markUnsaved();
     },
-    [isCanvasReadOnly, selectedNodeId, markUnsaved, setNodes, setEdges]
+    [isCanvasReadOnly, selectedNodeId, selectedEdgeId, edges, markUnsaved, setNodes, setEdges, recordHistory]
   );
 
   // ── Edge: connect (local only) ────────────────────────────────────────────
   const handleConnect = useCallback(
     (connection) => {
       if (isCanvasReadOnly) return;
+      recordHistory();
       const tempEdgeId = `temp-edge-${Date.now()}`;
       const newEdge = {
         ...connection,
@@ -438,27 +581,29 @@ export default function WorkflowBuilder({
       setEdges((eds) => addEdge(newEdge, eds));
       markUnsaved();
     },
-    [isCanvasReadOnly, markUnsaved, setEdges]
+    [isCanvasReadOnly, markUnsaved, setEdges, recordHistory]
   );
 
   // ── Edge: changes (local; deletes mark unsaved) ───────────────────────────
   const handleEdgesChange = useCallback(
     (changes) => {
+      if (changes.some((change) => change.type === "remove")) recordHistory();
       onEdgesChange(changes);
       if (isCanvasReadOnly) return;
       const hasRemoval = changes.some((c) => c.type === "remove");
       if (hasRemoval) markUnsaved();
     },
-    [onEdgesChange, isCanvasReadOnly, markUnsaved]
+    [onEdgesChange, isCanvasReadOnly, markUnsaved, recordHistory]
   );
 
   const handleNodeChanges = useCallback((changes) => {
+    if (changes.some((change) => change.type === "remove")) recordHistory();
     onNodesChange(changes);
     if (isCanvasReadOnly) return;
     if (changes.some((change) => change.type === "position" && change.dragging === false)) {
       markUnsaved();
     }
-  }, [onNodesChange, isCanvasReadOnly, markUnsaved]);
+  }, [onNodesChange, isCanvasReadOnly, markUnsaved, recordHistory]);
 
   // ── SAVE: diff-based sync to backend ─────────────────────────────────────
   const handleSave = useCallback(async () => {
@@ -475,8 +620,8 @@ export default function WorkflowBuilder({
     const srvEdges = serverEdgesRef.current;
 
     // Categorise nodes
-    const newNodes = nodesSnap.filter((n) => n.id.startsWith("temp-"));
-    const existingNodes = nodesSnap.filter((n) => !n.id.startsWith("temp-"));
+    const newNodes = nodesSnap.filter((n) => n.id.startsWith("temp-node-"));
+    const existingNodes = nodesSnap.filter((n) => !n.id.startsWith("temp-node-"));
     const updatedNodes = existingNodes.filter((n) => {
       const sn = srvNodes.find((s) => s.rfId === n.id);
       if (!sn) return false;
@@ -492,8 +637,8 @@ export default function WorkflowBuilder({
     );
 
     // Categorise edges
-    const newEdges = edgesSnap.filter((e) => e.id.startsWith("temp-"));
-    const existingEdges = edgesSnap.filter((e) => !e.id.startsWith("temp-"));
+    const newEdges = edgesSnap.filter((e) => e.id.startsWith("temp-edge-"));
+    const existingEdges = edgesSnap.filter((e) => !e.id.startsWith("temp-edge-"));
     const updatedEdges = existingEdges.filter((edge) => {
       const serverEdge = srvEdges.find((candidate) => candidate.rfId === edge.id);
       if (!serverEdge) return false;
@@ -569,7 +714,7 @@ export default function WorkflowBuilder({
 
       // ── 3. Delete removed edges first (FK constraint) ───────────────────
       for (const se of edgesToDelete) {
-        if (!se.rfId.startsWith("temp-")) {
+        if (!se.rfId.startsWith("temp-edge-")) {
           await deleteWorkflowEdge(token, workflowId, versionNumber, se.rfId);
         }
         serverEdgesRef.current = serverEdgesRef.current.filter(
@@ -657,14 +802,32 @@ export default function WorkflowBuilder({
             return n;
           })
         );
-        setEdges((prev) =>
-          prev.map((e) => {
+      setEdges((prev) =>
+        prev.map((e) => {
             const newId = tempEdgeToReal[e.id] ?? e.id;
             const newSource = tempToReal[e.source] ?? e.source;
             const newTarget = tempToReal[e.target] ?? e.target;
             return { ...e, id: newId, source: newSource, target: newTarget };
-          })
-        );
+        })
+      );
+      setUndoStack((stack) => stack.map((snapshot) => ({
+        nodes: snapshot.nodes.map((node) => tempToReal[node.id] ? { ...node, id: tempToReal[node.id] } : node),
+        edges: snapshot.edges.map((edge) => ({
+          ...edge,
+          id: tempEdgeToReal[edge.id] ?? edge.id,
+          source: tempToReal[edge.source] ?? edge.source,
+          target: tempToReal[edge.target] ?? edge.target,
+        })),
+      })));
+      setRedoStack((stack) => stack.map((snapshot) => ({
+        nodes: snapshot.nodes.map((node) => tempToReal[node.id] ? { ...node, id: tempToReal[node.id] } : node),
+        edges: snapshot.edges.map((edge) => ({
+          ...edge,
+          id: tempEdgeToReal[edge.id] ?? edge.id,
+          source: tempToReal[edge.source] ?? edge.source,
+          target: tempToReal[edge.target] ?? edge.target,
+        })),
+      })));
         // Update selectedNodeId if it was a temp node
         if (selectedNodeId && tempToReal[selectedNodeId]) {
           setSelectedNodeId(tempToReal[selectedNodeId]);
@@ -765,7 +928,7 @@ export default function WorkflowBuilder({
         await publishWorkflow(token, workflowId, versionNumber);
       }
       setCurrentVersionStatus("published");
-      if (onRefresh) onRefresh();
+      onRefresh();
     } catch (err) {
       console.error("Publish failed:", err);
     } finally {
@@ -796,18 +959,29 @@ export default function WorkflowBuilder({
       )
         return;
 
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedNodeId && !isCanvasReadOnly) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        handleRedo();
+      } else if ((e.key === "Delete" || e.key === "Backspace") && selectedEdgeId && !isCanvasReadOnly) {
+        e.preventDefault();
+        handleDeleteEdge(selectedEdgeId);
+      } else if ((e.key === "Delete" || e.key === "Backspace") && selectedNodeId && !isCanvasReadOnly) {
         handleDeleteNode(selectedNodeId);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         handleSave();
       } else if (e.key === "Escape") {
         setSelectedNodeId(null);
+        setSelectedEdgeId(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedNodeId, isCanvasReadOnly, handleDeleteNode, handleSave]);
+  }, [selectedNodeId, selectedEdgeId, isCanvasReadOnly, handleDeleteNode, handleDeleteEdge, handleSave, handleUndo, handleRedo]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Render
@@ -818,7 +992,16 @@ export default function WorkflowBuilder({
       <WorkflowToolbar
         workflowName={workflow?.name || "Workflow"}
         versionNumber={versionNumber}
+        versions={versions}
+        onSelectVersion={(nextVersion) => {
+          if (saveState !== "saved") {
+            setSaveError("Save or discard your changes before switching versions.");
+            return;
+          }
+          onSelectVersion(nextVersion);
+        }}
         status={currentVersionStatus}
+        updatedAt={workflow?.updated_at}
         saveState={saveState}
         saveError={saveError}
         isReadOnly={isCanvasReadOnly}
@@ -829,6 +1012,10 @@ export default function WorkflowBuilder({
         isValidating={isValidating}
         isPublishing={isPublishing}
         isCreatingDraft={isCreatingDraft}
+        canUndo={undoStack.length > 0}
+        canRedo={redoStack.length > 0}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
       />
 
       {/* ── 2. Sub-bar: Library / Inspector toggles + Quick Add ────────────── */}
@@ -928,14 +1115,24 @@ export default function WorkflowBuilder({
             onConnect={handleConnect}
             onEdgeUpdate={handleEdgeUpdate}
             onNodeSelect={handleNodeSelect}
+            onEdgeSelect={handleEdgeSelect}
             onDropNode={handleDropNode}
             onNodeDragStop={handleNodeDragStop}
+            onNodeDragStart={handleNodeDragStart}
             isReadOnly={isCanvasReadOnly}
           />
         </div>
 
         {/* Right: Node Inspector */}
-        {isInspectorOpen && (
+        {isInspectorOpen && selectedEdge ? (
+          <EdgeInspector
+            edge={selectedEdge}
+            isReadOnly={isCanvasReadOnly}
+            onConditionChange={handleEdgeConditionChange}
+            onDelete={() => handleDeleteEdge(selectedEdge.id)}
+            onClose={() => { setIsInspectorOpen(false); setSelectedEdgeId(null); }}
+          />
+        ) : isInspectorOpen && (
           <NodeInspector
             selectedNode={selectedNode}
             onUpdateNode={handleUpdateNodeData}

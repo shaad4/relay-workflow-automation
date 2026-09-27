@@ -61,6 +61,9 @@ function RefreshCwIcon(props) {
 export default function WorkflowToolbar({
   workflowName = "Workflow",
   versionNumber = 1,
+  versions = [],
+  onSelectVersion,
+  updatedAt,
   status = "draft",
   saveState = "saved", // 'saved' | 'unsaved' | 'saving' | 'failed'
   saveError = null,
@@ -72,6 +75,10 @@ export default function WorkflowToolbar({
   isValidating = false,
   isPublishing = false,
   isCreatingDraft = false,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
 }) {
   return (
     <div className="h-12 px-4 bg-[var(--surface)] border-b border-[var(--border-subtle)] flex items-center justify-between gap-4 select-none shrink-0 font-sans z-10">
@@ -88,10 +95,22 @@ export default function WorkflowToolbar({
           {workflowName}
         </span>
 
-        <div className="flex items-center gap-2 pl-2 border-l border-[var(--border-subtle)]">
-          <span className="text-[11px] font-mono font-medium text-[var(--text-secondary)] bg-[var(--elevated)] px-2 py-0.5 rounded-[4px] border border-[var(--border-subtle)] shrink-0">
-            v{versionNumber}
-          </span>
+        <div className="flex items-center gap-1.5 pl-2 border-l border-[var(--border-subtle)]">
+          <label className="relative flex items-center">
+            <select
+              value={versionNumber}
+              onChange={(event) => onSelectVersion?.(Number(event.target.value))}
+              className="appearance-none text-[11px] font-mono font-medium text-[var(--text-secondary)] bg-[var(--elevated)] pl-2 pr-6 py-1 rounded-[4px] border border-[var(--border-subtle)] cursor-pointer focus:outline-none focus:border-[var(--accent)]"
+              aria-label="Select workflow version"
+            >
+              {[...versions].sort((a, b) => Number(b.version_number ?? b.version) - Number(a.version_number ?? a.version)).map((item) => {
+                const number = item.version_number ?? item.version;
+                return <option key={item.id ?? number} value={number}>v{number} · {item.status}</option>;
+              })}
+              {versions.length === 0 && <option value={versionNumber}>v{versionNumber}</option>}
+            </select>
+            <span className="pointer-events-none absolute right-2 text-[var(--text-tertiary)]">⌄</span>
+          </label>
           <WorkflowStatus status={status} />
           {isReadOnly && (
             <span className="text-[10px] font-mono text-[var(--text-tertiary)] bg-[var(--elevated)] border border-[var(--border-subtle)] px-1.5 py-0.5 rounded-[4px]">
@@ -99,10 +118,19 @@ export default function WorkflowToolbar({
             </span>
           )}
         </div>
+        <span className="hidden xl:inline text-[10px] text-[var(--text-tertiary)] border-l border-[var(--border-subtle)] pl-2">
+          Last saved {updatedAt ? new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Not saved yet"}
+        </span>
       </div>
 
       {/* Right: Save indicator + actions */}
       <div className="flex items-center gap-3 shrink-0">
+        {!isReadOnly && (
+          <div className="flex items-center gap-1 border-r border-[var(--border-subtle)] pr-2">
+            <button type="button" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" aria-label="Undo" className="h-8 w-8 rounded-[6px] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-35 disabled:cursor-not-allowed">↶</button>
+            <button type="button" onClick={onRedo} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)" aria-label="Redo" className="h-8 w-8 rounded-[6px] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-35 disabled:cursor-not-allowed">↷</button>
+          </div>
+        )}
         {/* Save state indicator */}
         <div className="flex items-center gap-1.5 text-[12px] text-[var(--text-tertiary)] font-mono pr-2">
           {saveState === "saving" && (
@@ -114,7 +142,7 @@ export default function WorkflowToolbar({
           {saveState === "unsaved" && (
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-[#D29922] animate-pulse" />
-              <span className="text-[#D29922]">Unsaved changes</span>
+              <span className="text-[#D29922]">{saveError ?? "Unsaved changes"}</span>
             </>
           )}
           {saveState === "failed" && (

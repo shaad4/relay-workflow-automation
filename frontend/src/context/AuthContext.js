@@ -21,6 +21,7 @@ export function AuthProvider({ children }) {
 
   async function login(accessToken, refresh_token) {
     setAccessToken(accessToken);
+    localStorage.setItem("access_token", accessToken);
 
     localStorage.setItem("refresh_token", refresh_token);
 
@@ -40,6 +41,7 @@ export function AuthProvider({ children }) {
       const response = await refreshToken(storedRefreshToken);
 
       setAccessToken(response.access_token);
+      localStorage.setItem("access_token", response.access_token);
 
       const currentUser = await getCurrentUser(
         response.access_token
@@ -47,6 +49,7 @@ export function AuthProvider({ children }) {
 
       setUser(currentUser);
     } catch {
+      localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
 
       setAccessToken(null);
@@ -66,11 +69,27 @@ export function AuthProvider({ children }) {
     initializeAuth();
   }, []);
 
+  useEffect(() => {
+    const handleAccessToken = (event) => setAccessToken(event.detail);
+    const handleSessionExpired = () => {
+      localStorage.removeItem("access_token");
+      setAccessToken(null);
+      setUser(null);
+    };
+    window.addEventListener("relay:access-token", handleAccessToken);
+    window.addEventListener("relay:session-expired", handleSessionExpired);
+    return () => {
+      window.removeEventListener("relay:access-token", handleAccessToken);
+      window.removeEventListener("relay:session-expired", handleSessionExpired);
+    };
+  }, []);
+
   function logout() {
     setAccessToken(null);
     setUser(null);
 
     localStorage.removeItem("refresh_token");
+    localStorage.removeItem("access_token");
   }
 
   return (

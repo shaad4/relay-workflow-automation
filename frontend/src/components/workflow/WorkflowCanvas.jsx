@@ -32,8 +32,10 @@ export default function WorkflowCanvas({
   onConnect,
   onEdgeUpdate,
   onNodeSelect,
+  onEdgeSelect,
   onDropNode,
   onNodeDragStop,
+  onNodeDragStart,
   isReadOnly = false,
 }) {
   const defaultEdgeOptions = useMemo(
@@ -100,7 +102,9 @@ export default function WorkflowCanvas({
         onEdgeUpdate={onEdgeUpdate}
         onNodeClick={(_, node) => onNodeSelect && onNodeSelect(node)}
         onPaneClick={() => onNodeSelect && onNodeSelect(null)}
+        onEdgeClick={(_, edge) => onEdgeSelect && onEdgeSelect(edge)}
         onNodeDragStop={onNodeDragStop}
+        onNodeDragStart={onNodeDragStart}
         nodeTypes={nodeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
         nodesDraggable={!isReadOnly}

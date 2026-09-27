@@ -73,6 +73,7 @@ export default function WorkflowBuilderPage({ params }) {
 
   const [workflow, setWorkflow] = useState(null);
   const [version, setVersion] = useState(null);
+  const [versions, setVersions] = useState([]);
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,6 +119,7 @@ export default function WorkflowBuilderPage({ params }) {
 
       setWorkflow(wfData);
       setVersion(selectedVersion);
+      setVersions(versionsList);
       setNodes(nodesData);
       setEdges(edgesData);
       // Force WorkflowBuilder to fully remount with fresh state
@@ -129,6 +131,30 @@ export default function WorkflowBuilderPage({ params }) {
       setIsLoading(false);
     }
   }, [token, workflowId]);
+
+  const selectWorkflowVersion = useCallback(async (versionNumber) => {
+    if (!token || !workflowId || Number(versionNumber) === Number(version?.version_number ?? version?.version)) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const selectedVersion = versions.find((item) =>
+        Number(item.version_number ?? item.version) === Number(versionNumber)
+      );
+      if (!selectedVersion) throw new Error("Workflow version was not found.");
+      const [nodesResponse, edgesResponse] = await Promise.all([
+        getWorkflowNodes(token, workflowId, versionNumber),
+        getWorkflowEdges(token, workflowId, versionNumber),
+      ]);
+      setVersion(selectedVersion);
+      setNodes(normalizeList(nodesResponse, "nodes"));
+      setEdges(normalizeList(edgesResponse, "edges"));
+      setBuilderKey((key) => key + 1);
+    } catch (err) {
+      setError(err?.message || "Unable to load this workflow version.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token, workflowId, version, versions]);
 
   useEffect(() => {
     fetchWorkflowData();
@@ -214,10 +240,12 @@ export default function WorkflowBuilderPage({ params }) {
             key={builderKey}
             workflow={workflow}
             version={version}
+            versions={versions}
             initialNodes={nodes}
             initialEdges={edges}
             token={token}
             onRefresh={fetchWorkflowData}
+            onSelectVersion={selectWorkflowVersion}
           />
         )}
       </DashboardShell>
