@@ -934,7 +934,7 @@ async def publish_workflow(
 
     version.status = "published"
 
-    workflow.status = "published"
+    workflow.status = "active"
     workflow.published_version_id = version.id
 
     try:
@@ -950,3 +950,73 @@ async def publish_workflow(
         "version": version.version,
         "status": version.status,
     }
+
+async def deactivate_workflow(
+    workflow_id: UUID,
+    workspace_id: str,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    if workflow.published_version_id is None:
+        raise ValueError("Workflow has no published version")
+
+    if workflow.status == "inactive":
+        raise ValueError("Workflow is already inactive")
+
+    workflow.status = "inactive"
+
+    try:
+        await session.commit()
+        await session.refresh(workflow)
+    except Exception:
+        await session.rollback()
+        raise
+
+    return workflow
+
+
+async def activate_workflow(
+    workflow_id: UUID,
+    workspace_id: str,
+    session: AsyncSession,
+):
+    workflow_result = await session.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace_id,
+        )
+    )
+
+    workflow = workflow_result.scalar_one_or_none()
+
+    if workflow is None:
+        return None
+
+    if workflow.published_version_id is None:
+        raise ValueError("Workflow has no published version")
+
+    if workflow.status == "active":
+        raise ValueError("Workflow is already active")
+
+    workflow.status = "active"
+
+    try:
+        await session.commit()
+        await session.refresh(workflow)
+    except Exception:
+        await session.rollback()
+        raise
+
+    return workflow
+

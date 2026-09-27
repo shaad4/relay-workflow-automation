@@ -189,6 +189,19 @@ async def publish_workflow_version(
         f"{workflow_id}/versions/{version_number}/publish",
     )
 
+@router.post("/{workflow_id}/deactivate/")
+async def deactivate_workflow(request: Request, workflow_id: str):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/deactivate",
+    )
+
+@router.post("/{workflow_id}/activate/")
+async def activate_workflow(request: Request, workflow_id: str):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/activate",
+    )
 
 
 async def proxy_workflow_request(

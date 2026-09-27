@@ -44,4 +44,10 @@ class WorkflowPublishResponse(BaseModel):
     version: int
     status: str
 
+
+class WorkflowStatusResponse(BaseModel):
+    id: UUID
+    status: str
+    published_version_id: UUID | None
+
     

@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
-from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate, WorkflowValidationResponse, WorkflowPublishResponse
+from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate, WorkflowValidationResponse, WorkflowPublishResponse, WorkflowStatusResponse
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeResponse, WorkflowNodeUpdate
 from app.schemas.workflow_version import WorkflowVersionResponse
 from app.schemas.workflow_edge import WorkflowEdgeResponse, WorkflowEdgeCreate, WorkflowEdgeUpdate
@@ -29,6 +29,8 @@ from app.services.workflow_service import (
     delete_workflow_edge,
     validate_workflow,
     publish_workflow,
+    activate_workflow,
+    deactivate_workflow,
 )
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -524,3 +526,65 @@ async def publish_workflow_version_route(
         )
 
     return result
+
+
+@router.post(
+    "/{workflow_id}/deactivate/",
+    response_model=WorkflowStatusResponse,
+)
+async def deactivate_workflow_route(
+    workflow_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await deactivate_workflow(
+            workflow_id=workflow_id,
+            workspace_id=identity["workspace_id"],
+            session=session,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow not found",
+        )
+
+    return {
+        "id": result.id,
+        "status": result.status,
+        "published_version_id": result.published_version_id,
+    }
+
+
+@router.post(
+    "/{workflow_id}/activate/",
+    response_model=WorkflowStatusResponse,
+)
+async def activate_workflow_route(
+    workflow_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await activate_workflow(
+            workflow_id=workflow_id,
+            workspace_id=identity["workspace_id"],
+            session=session,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workflow not found",
+        )
+
+    return {
+        "id": result.id,
+        "status": result.status,
+        "published_version_id": result.published_version_id,
+    }
