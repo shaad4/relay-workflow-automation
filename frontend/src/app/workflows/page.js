@@ -245,6 +245,11 @@ function WorkflowsContent() {
         <WorkflowList
           workflows={filteredWorkflows}
           onDeleteSuccess={() => setReloadKey((prev) => prev + 1)}
+          onWorkflowStatusChange={(workflowId, status) => {
+            setWorkflows((current) => current.map((workflow) =>
+              workflow.id === workflowId ? { ...workflow, status } : workflow
+            ));
+          }}
         />
       )}
 

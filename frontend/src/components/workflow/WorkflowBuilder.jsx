@@ -1094,11 +1094,14 @@ export default function WorkflowBuilder({
       {/* ── 1. Top Toolbar ─────────────────────────────────────────────────── */}
       <WorkflowToolbar
         workflowName={workflow?.name || "Workflow"}
+        workflowStatus={workflow?.status || "draft"}
         onNavigate={navigateWithGuard}
         workflowDescription={workflow?.description || ""}
         workflowId={workflowId}
         token={token}
         onWorkflowUpdated={onRefresh}
+        onWorkflowStatusChange={(status) => onRefresh({ status })}
+        onWorkflowDeleted={() => router.push("/workflows")}
         versionNumber={versionNumber}
         versions={versions}
         onSelectVersion={(nextVersion) => {
@@ -1108,7 +1111,7 @@ export default function WorkflowBuilder({
           }
           onSelectVersion(nextVersion);
         }}
-        status={currentVersionStatus}
+        status={workflow?.status || "draft"}
         saveState={saveState}
         saveError={saveError}
         isReadOnly={isCanvasReadOnly}

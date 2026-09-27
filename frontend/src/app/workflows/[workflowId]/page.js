@@ -81,7 +81,11 @@ export default function WorkflowBuilderPage({ params }) {
   // Key to force full remount of WorkflowBuilder when version changes
   const [builderKey, setBuilderKey] = useState(0);
 
-  const fetchWorkflowData = useCallback(async () => {
+  const fetchWorkflowData = useCallback(async (workflowPatch = null) => {
+    if (workflowPatch) {
+      setWorkflow((current) => current ? { ...current, ...workflowPatch } : current);
+      return;
+    }
     if (!workflowId) {
       setError("Missing workflow ID");
       setIsLoading(false);

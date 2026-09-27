@@ -38,6 +38,20 @@ export async function updateWorkflow(token, workflowId, workflowData) {
   });
 }
 
+export async function activateWorkflow(token, workflowId) {
+  return apiRequest(`/workflows/${workflowId}/activate/`, {
+    method: "POST",
+    headers: getHeaders(token),
+  });
+}
+
+export async function deactivateWorkflow(token, workflowId) {
+  return apiRequest(`/workflows/${workflowId}/deactivate/`, {
+    method: "POST",
+    headers: getHeaders(token),
+  });
+}
+
 export async function deleteWorkflow(token, workflowId) {
   return apiRequest(`/workflows/${workflowId}/`, {
     method: "DELETE",

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import WorkflowStatus from "../workflows/WorkflowStatus";
-import { updateWorkflow } from "@/services/workflows";
+import { activateWorkflow, deactivateWorkflow, deleteWorkflow, updateWorkflow } from "@/services/workflows";
 
 function CheckIcon(props) {
   return (
@@ -61,10 +61,13 @@ function RefreshCwIcon(props) {
 
 export default function WorkflowToolbar({
   workflowName = "Workflow",
+  workflowStatus = "draft",
   workflowDescription = "",
   workflowId,
   token,
   onWorkflowUpdated,
+  onWorkflowStatusChange,
+  onWorkflowDeleted,
   onNavigate,
   versionNumber = 1,
   versions = [],
@@ -90,6 +93,34 @@ export default function WorkflowToolbar({
   const [descriptionDraft, setDescriptionDraft] = useState(workflowDescription);
   const [metadataError, setMetadataError] = useState("");
   const [isSavingMetadata, setIsSavingMetadata] = useState(false);
+  const [isTogglingWorkflow, setIsTogglingWorkflow] = useState(false);
+  const [showWorkflowStatusConfirm, setShowWorkflowStatusConfirm] = useState(false);
+  const [workflowStatusError, setWorkflowStatusError] = useState("");
+  const [workflowMenuOpen, setWorkflowMenuOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingWorkflow, setIsDeletingWorkflow] = useState(false);
+  const [deleteWorkflowError, setDeleteWorkflowError] = useState("");
+  const workflowMenuRef = useRef(null);
+  // Older workflow payloads may expose "published"; the workflow-level state is active.
+  const normalizedWorkflowStatus = String(workflowStatus).toLowerCase() === "published"
+    ? "active"
+    : String(workflowStatus).toLowerCase();
+
+  useEffect(() => {
+    if (!workflowMenuOpen) return;
+    const closeOnOutsideClick = (event) => {
+      if (!workflowMenuRef.current?.contains(event.target)) setWorkflowMenuOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setWorkflowMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [workflowMenuOpen]);
 
   const startMetadataEdit = () => {
     setNameDraft(workflowName);
@@ -121,8 +152,40 @@ export default function WorkflowToolbar({
     }
   };
 
+  const confirmDeleteWorkflow = async () => {
+    if (isDeletingWorkflow) return;
+    setIsDeletingWorkflow(true);
+    setDeleteWorkflowError("");
+    try {
+      await deleteWorkflow(token, workflowId);
+      setShowDeleteConfirm(false);
+      onWorkflowDeleted?.();
+    } catch (error) {
+      setDeleteWorkflowError(error?.message || "Unable to delete workflow.");
+    } finally {
+      setIsDeletingWorkflow(false);
+    }
+  };
+
+  const toggleWorkflowStatus = async () => {
+    if (isTogglingWorkflow) return;
+    setIsTogglingWorkflow(true);
+    setWorkflowStatusError("");
+    try {
+      const response = normalizedWorkflowStatus === "active"
+        ? await deactivateWorkflow(token, workflowId)
+        : await activateWorkflow(token, workflowId);
+      onWorkflowStatusChange?.(response?.status || (normalizedWorkflowStatus === "active" ? "inactive" : "active"));
+      setShowWorkflowStatusConfirm(false);
+    } catch (error) {
+      setWorkflowStatusError(error?.message || `Unable to ${normalizedWorkflowStatus === "active" ? "deactivate" : "activate"} workflow.`);
+    } finally {
+      setIsTogglingWorkflow(false);
+    }
+  };
+
   return (
-    <div className="h-12 px-4 bg-[var(--surface)] border-b border-[var(--border-subtle)] flex items-center justify-between gap-4 select-none shrink-0 font-sans z-10">
+    <div className="relative h-12 px-4 bg-[var(--surface)] border-b border-[var(--border-subtle)] flex items-center justify-between gap-4 select-none shrink-0 font-sans z-20">
       {/* Left: Breadcrumb + version + status */}
       <div className="flex items-center gap-2.5 min-w-0">
         <button
@@ -148,6 +211,54 @@ export default function WorkflowToolbar({
           </button>
         </div>
 
+        <div ref={workflowMenuRef} className="relative shrink-0">
+          <button
+            type="button"
+            aria-label="Workflow actions"
+            aria-haspopup="menu"
+            aria-expanded={workflowMenuOpen}
+            title="Workflow actions"
+            onClick={() => setWorkflowMenuOpen((open) => !open)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-tertiary)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+          >
+            <span aria-hidden="true" className="text-lg leading-none">⋯</span>
+          </button>
+          {workflowMenuOpen && (
+            <div role="menu" aria-label="Workflow actions" className="absolute left-0 top-full z-50 mt-1 w-48 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] p-1 text-[var(--text-primary)] shadow-xl">
+              <button type="button" role="menuitem" onClick={() => { setWorkflowMenuOpen(false); startMetadataEdit(); }} className="w-full rounded-md px-2.5 py-2 text-left text-[12px] text-[var(--text-secondary)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)]">Edit workflow details</button>
+              {isReadOnly && (
+                <button type="button" role="menuitem" disabled={isCreatingDraft} onClick={() => { setWorkflowMenuOpen(false); onEditWorkflow?.(); }} className="w-full rounded-md px-2.5 py-2 text-left text-[12px] text-[var(--text-secondary)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)] disabled:opacity-50">Create draft version</button>
+              )}
+              <button type="button" role="menuitem" onClick={() => { setWorkflowMenuOpen(false); onNavigate?.("/workflows"); }} className="w-full rounded-md px-2.5 py-2 text-left text-[12px] text-[var(--text-secondary)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)]">Back to workflows</button>
+              <div className="my-1 border-t border-[var(--border-subtle)]" />
+              <button type="button" role="menuitem" disabled={normalizedWorkflowStatus !== "draft"} title={normalizedWorkflowStatus !== "draft" ? "Only draft workflows can be deleted" : "Delete this workflow"} onClick={() => { setWorkflowMenuOpen(false); setDeleteWorkflowError(""); setShowDeleteConfirm(true); }} className="w-full rounded-md px-2.5 py-2 text-left text-[12px] text-red-500 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40">Delete workflow</button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 pl-2 border-l border-[var(--border-subtle)]">
+          <WorkflowStatus status={normalizedWorkflowStatus} />
+          {(normalizedWorkflowStatus === "active" || normalizedWorkflowStatus === "inactive") && (
+            <span className="text-[10px] text-[var(--text-tertiary)]" title="Activation applies to the entire workflow, across all versions">All versions</span>
+          )}
+          {(normalizedWorkflowStatus === "active" || normalizedWorkflowStatus === "inactive") && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={normalizedWorkflowStatus === "active"}
+              aria-label={`${normalizedWorkflowStatus === "active" ? "Deactivate" : "Activate"} entire workflow`}
+              title="Switch applies to the entire workflow, across all versions"
+              onClick={() => { setWorkflowStatusError(""); setShowWorkflowStatusConfirm(true); }}
+              disabled={isTogglingWorkflow}
+              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50 disabled:cursor-not-allowed disabled:opacity-60 ${normalizedWorkflowStatus === "active" ? "bg-[#3FB950]" : "bg-[var(--border-strong)]"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${normalizedWorkflowStatus === "active" ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+              {isTogglingWorkflow && <span className="sr-only">{normalizedWorkflowStatus === "active" ? "Deactivating" : "Activating"} workflow</span>}
+            </button>
+          )}
+          {workflowStatusError && <span role="alert" className="max-w-48 text-[11px] text-red-500">{workflowStatusError}</span>}
+        </div>
+
         <div className="flex items-center gap-1.5 pl-2 border-l border-[var(--border-subtle)]">
           <label className="relative flex items-center">
             <select
@@ -164,7 +275,6 @@ export default function WorkflowToolbar({
             </select>
             <span className="pointer-events-none absolute right-2 text-[var(--text-tertiary)]">⌄</span>
           </label>
-          <WorkflowStatus status={status} />
           {isReadOnly && (
             <span className="text-[10px] font-mono text-[var(--text-tertiary)] bg-[var(--elevated)] border border-[var(--border-subtle)] px-1.5 py-0.5 rounded-[4px]">
               READ ONLY
@@ -197,6 +307,46 @@ export default function WorkflowToolbar({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {showWorkflowStatusConfirm && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isTogglingWorkflow) setShowWorkflowStatusConfirm(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="workflow-status-confirm-title" className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-5 shadow-2xl">
+            <h2 id="workflow-status-confirm-title" className="text-[16px] font-semibold text-[var(--text-primary)]">
+              {normalizedWorkflowStatus === "active" ? "Deactivate workflow?" : "Activate workflow?"}
+            </h2>
+            <p className="mt-2 text-[13px] leading-5 text-[var(--text-secondary)]">
+              {normalizedWorkflowStatus === "active"
+                ? "This will stop the entire workflow from running. The change applies to all versions, not only the version currently selected."
+                : "This will enable the entire workflow to run. The change applies to all versions, not only the version currently selected."}
+            </p>
+            {workflowStatusError && <p role="alert" className="mt-3 text-[12px] text-red-500">{workflowStatusError}</p>}
+            <div className="mt-5 flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-3">
+              <button type="button" disabled={isTogglingWorkflow} onClick={() => setShowWorkflowStatusConfirm(false)} className="h-8 rounded-lg border border-[var(--border-default)] px-3 text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={isTogglingWorkflow} onClick={toggleWorkflowStatus} className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-medium text-white disabled:opacity-50 ${normalizedWorkflowStatus === "active" ? "bg-red-600 hover:bg-red-700" : "bg-[var(--accent)] hover:opacity-90"}`}>
+                {isTogglingWorkflow && <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+                {isTogglingWorkflow ? (normalizedWorkflowStatus === "active" ? "Deactivating..." : "Activating...") : (normalizedWorkflowStatus === "active" ? "Deactivate workflow" : "Activate workflow")}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isDeletingWorkflow) setShowDeleteConfirm(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="workflow-delete-confirm-title" className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-5 shadow-2xl">
+            <h2 id="workflow-delete-confirm-title" className="text-[16px] font-semibold text-[var(--text-primary)]">Delete workflow?</h2>
+            <p className="mt-2 text-[13px] leading-5 text-[var(--text-secondary)]">This permanently deletes <span className="font-medium text-[var(--text-primary)]">{workflowName}</span> and its versions. This cannot be undone.</p>
+            {deleteWorkflowError && <p role="alert" className="mt-3 text-[12px] text-red-500">{deleteWorkflowError}</p>}
+            <div className="mt-5 flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-3">
+              <button type="button" disabled={isDeletingWorkflow} onClick={() => setShowDeleteConfirm(false)} className="h-8 rounded-lg border border-[var(--border-default)] px-3 text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={isDeletingWorkflow} onClick={confirmDeleteWorkflow} className="inline-flex h-8 items-center gap-2 rounded-lg bg-red-600 px-3 text-[12px] font-medium text-white hover:bg-red-700 disabled:opacity-50">
+                {isDeletingWorkflow && <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+                {isDeletingWorkflow ? "Deleting..." : "Delete workflow"}
+              </button>
+            </div>
+          </section>
         </div>
       )}
 

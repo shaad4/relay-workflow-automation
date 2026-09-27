@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import { activateWorkflow, deactivateWorkflow } from "@/services/workflows";
 import WorkflowStatus from "./WorkflowStatus";
 
 function MoreHorizontalIcon(props) {
@@ -103,10 +105,14 @@ export function formatDate(dateString) {
   });
 }
 
-export default function WorkflowRow({ workflow, onDeleteRequest }) {
+export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatusChange }) {
   const router = useRouter();
+  const { accessToken } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
+  const [isChangingStatus, setIsChangingStatus] = useState(false);
+  const [showStatusConfirm, setShowStatusConfirm] = useState(false);
+  const [statusError, setStatusError] = useState("");
   const menuRef = useRef(null);
 
   const workflowId = workflow.id;
@@ -170,7 +176,28 @@ export default function WorkflowRow({ workflow, onDeleteRequest }) {
     }
   };
 
-  const isDraft = String(status).toLowerCase() === "draft";
+  const normalizedStatus = String(status).toLowerCase();
+  const isDraft = normalizedStatus === "draft";
+  const canToggleStatus = normalizedStatus === "active" || normalizedStatus === "inactive" || normalizedStatus === "published";
+  const isActive = normalizedStatus === "active" || normalizedStatus === "published";
+
+  const handleToggleStatus = async (e) => {
+    e.stopPropagation();
+    if (isChangingStatus || !canToggleStatus) return;
+    setIsChangingStatus(true);
+    setStatusError("");
+    try {
+      const response = isActive
+        ? await deactivateWorkflow(accessToken, workflowId)
+        : await activateWorkflow(accessToken, workflowId);
+      onWorkflowStatusChange?.(workflowId, response?.status || (isActive ? "inactive" : "active"));
+      setShowStatusConfirm(false);
+    } catch (error) {
+      setStatusError(error?.message || `Unable to ${isActive ? "deactivate" : "activate"} workflow.`);
+    } finally {
+      setIsChangingStatus(false);
+    }
+  };
 
   return (
     <div
@@ -249,6 +276,25 @@ export default function WorkflowRow({ workflow, onDeleteRequest }) {
                 <span>Edit</span>
               </button>
 
+              {canToggleStatus && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={isChangingStatus}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStatusError("");
+                    handleCloseMenu();
+                    setShowStatusConfirm(true);
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] rounded-[4px] transition-colors cursor-pointer text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isChangingStatus ? (isActive ? "Deactivating..." : "Activating...") : isActive ? "Deactivate" : "Activate"}
+                </button>
+              )}
+
+              {statusError && <p role="alert" className="px-2.5 py-1 text-[11px] leading-4 text-red-500">{statusError}</p>}
+
               <div className="my-1 border-t border-[var(--border-subtle)]" />
 
               {isDraft ? (
@@ -287,6 +333,29 @@ export default function WorkflowRow({ workflow, onDeleteRequest }) {
             </div>
           )}
         </div>
+
+      {showStatusConfirm && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]" role="presentation" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} onMouseDown={(event) => { if (event.target === event.currentTarget && !isChangingStatus) setShowStatusConfirm(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby={`workflow-status-confirm-${workflowId}`} className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-5 text-left shadow-2xl">
+            <h2 id={`workflow-status-confirm-${workflowId}`} className="text-[16px] font-semibold text-[var(--text-primary)]">
+              {isActive ? "Deactivate workflow?" : "Activate workflow?"}
+            </h2>
+            <p className="mt-2 text-[13px] leading-5 text-[var(--text-secondary)]">
+              {isActive
+                ? "This will stop the entire workflow from running. The change applies to all versions, not only the version currently selected."
+                : "This will enable the entire workflow to run. The change applies to all versions, not only the version currently selected."}
+            </p>
+            {statusError && <p role="alert" className="mt-3 text-[12px] text-red-500">{statusError}</p>}
+            <div className="mt-5 flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-3">
+              <button type="button" disabled={isChangingStatus} onClick={() => setShowStatusConfirm(false)} className="h-8 rounded-lg border border-[var(--border-default)] px-3 text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={isChangingStatus} onClick={handleToggleStatus} className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-medium text-white disabled:opacity-50 ${isActive ? "bg-red-600 hover:bg-red-700" : "bg-[var(--accent)] hover:opacity-90"}`}>
+                {isChangingStatus && <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+                {isChangingStatus ? (isActive ? "Deactivating..." : "Activating...") : (isActive ? "Deactivate workflow" : "Activate workflow")}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

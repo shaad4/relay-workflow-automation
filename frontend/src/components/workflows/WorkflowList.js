@@ -15,7 +15,7 @@ function AlertTriangleIcon(props) {
   );
 }
 
-export default function WorkflowList({ workflows = [], onDeleteSuccess }) {
+export default function WorkflowList({ workflows = [], onDeleteSuccess, onWorkflowStatusChange }) {
   const { accessToken } = useAuth();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -49,6 +49,7 @@ export default function WorkflowList({ workflows = [], onDeleteSuccess }) {
             <WorkflowRow
               key={wf.id}
               workflow={wf}
+              onWorkflowStatusChange={onWorkflowStatusChange}
               onDeleteRequest={(target) => {
                 const isDraft = String(target?.status || "").toLowerCase() === "draft";
                 if (isDraft) {
