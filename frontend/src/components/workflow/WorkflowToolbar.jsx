@@ -72,7 +72,6 @@ export default function WorkflowToolbar({
   versionNumber = 1,
   versions = [],
   onSelectVersion,
-  status = "draft",
   saveState = "saved", // 'saved' | 'unsaved' | 'saving' | 'failed'
   saveError = null,
   isReadOnly = false,

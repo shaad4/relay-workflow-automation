@@ -32,7 +32,7 @@ export default function WorkflowCanvas({
   onNodesChange,
   onEdgesChange,
   onConnect,
-  onEdgeUpdate,
+  onReconnect,
   onNodeSelect,
   onEdgeSelect,
   onDropNode,
@@ -50,7 +50,7 @@ export default function WorkflowCanvas({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onEdgeUpdate={onEdgeUpdate}
+        onReconnect={onReconnect}
         onNodeSelect={onNodeSelect}
         onEdgeSelect={onEdgeSelect}
         onDropNode={onDropNode}
@@ -70,7 +70,7 @@ function WorkflowCanvasInner({
   onNodesChange,
   onEdgesChange,
   onConnect,
-  onEdgeUpdate,
+  onReconnect,
   onNodeSelect,
   onEdgeSelect,
   onDropNode,
@@ -164,7 +164,7 @@ function WorkflowCanvasInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onEdgeUpdate={onEdgeUpdate}
+        onReconnect={onReconnect}
         onNodeClick={(_, node) => onNodeSelect && onNodeSelect(node)}
         onPaneClick={() => onNodeSelect && onNodeSelect(null)}
         onEdgeClick={(_, edge) => onEdgeSelect && onEdgeSelect(edge)}
@@ -177,6 +177,7 @@ function WorkflowCanvasInner({
         connectionLineStyle={{ stroke: "var(--accent)", strokeWidth: 2 }}
         nodesDraggable={!isReadOnly}
         nodesConnectable={!isReadOnly}
+        edgesReconnectable={!isReadOnly}
         elementsSelectable={true}
         fitView
         fitViewOptions={{ padding: 0.3, maxZoom: 0.9 }}

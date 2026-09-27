@@ -564,7 +564,7 @@ export default function WorkflowBuilder({
     if (!isCanvasReadOnly) historyFrameRef.current = canvasStateRef.current;
   }, [isCanvasReadOnly]);
 
-  const handleEdgeUpdate = useCallback((oldEdge, connection) => {
+  const handleReconnect = useCallback((oldEdge, connection) => {
     if (isCanvasReadOnly) return;
     recordHistory();
     setEdges((current) => current.map((edge) => edge.id === oldEdge.id ? {
@@ -1111,7 +1111,6 @@ export default function WorkflowBuilder({
           }
           onSelectVersion(nextVersion);
         }}
-        status={workflow?.status || "draft"}
         saveState={saveState}
         saveError={saveError}
         isReadOnly={isCanvasReadOnly}
@@ -1223,7 +1222,7 @@ export default function WorkflowBuilder({
             onNodesChange={handleNodeChanges}
             onEdgesChange={handleEdgesChange}
             onConnect={handleConnect}
-            onEdgeUpdate={handleEdgeUpdate}
+            onReconnect={handleReconnect}
             onNodeSelect={handleNodeSelect}
             onEdgeSelect={handleEdgeSelect}
             onDropNode={handleDropNode}
