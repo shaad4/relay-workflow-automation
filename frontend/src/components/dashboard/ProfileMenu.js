@@ -111,7 +111,7 @@ export default function ProfileMenu({ open, onClose, positionClass = "bottom-ful
       ref={menuRef}
       role="menu"
       aria-orientation="vertical"
-      className={`absolute ${positionClass} w-64 bg-[var(--surface)] border border-[var(--border-subtle)] rounded-xl shadow-lg p-1.5 z-50 text-[var(--text-primary)] animate-in fade-in zoom-in-95 duration-100 ease-out select-none`}
+      className={`absolute ${positionClass} w-64 max-h-[calc(100vh-80px)] overflow-y-auto bg-[var(--surface)] border border-[var(--border-subtle)] rounded-xl shadow-xl p-1.5 z-50 text-[var(--text-primary)] animate-in fade-in zoom-in-95 duration-100 ease-out select-none`}
     >
       {/* User Information Header */}
       <div className="px-3 py-2.5 mb-1 border-b border-[var(--border-subtle)]">

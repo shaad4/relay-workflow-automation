@@ -97,7 +97,7 @@ export default function DashboardSidebar({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-[var(--surface)] border-r border-[var(--border-subtle)] transition-all duration-150 ease-out select-none overflow-hidden">
+    <div className="flex flex-col h-full bg-[var(--surface)] border-r border-[var(--border-subtle)] transition-all duration-150 ease-out select-none overflow-visible">
       {/* Brand Header */}
       <div className={`h-14 flex items-center ${isCollapsed ? "justify-center px-2" : "justify-between px-4"} border-b border-[var(--border-subtle)] shrink-0`}>
         {!isCollapsed ? (

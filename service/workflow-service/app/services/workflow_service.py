@@ -313,6 +313,15 @@ async def create_workflow_node(
     if version.status != "draft":
         raise ValueError("Only draft versions can be modified")
 
+    duplicate_result = await session.execute(
+        select(WorkflowNode.id).where(
+            WorkflowNode.workflow_version_id == version.id,
+            WorkflowNode.node_id == data.node_id,
+        )
+    )
+    if duplicate_result.scalar_one_or_none() is not None:
+        raise ValueError(f"Node ID '{data.node_id}' already exists in this version")
+
     node = WorkflowNode(
         workflow_version_id=version.id,
         node_id=data.node_id,
@@ -418,12 +427,29 @@ async def update_workflow_node(
         )
     )
 
-    node = node_result.scalar_one_or_none()
+    matching_nodes = node_result.scalars().all()
+    if len(matching_nodes) > 1:
+        raise ValueError(
+            f"Node ID '{node_id}' is ambiguous because this version contains duplicates"
+        )
+    node = matching_nodes[0] if matching_nodes else None
 
     if node is None:
         return None
 
     update_data = data.model_dump(exclude_unset=True)
+
+    new_node_id = update_data.get("node_id")
+    if new_node_id is not None and new_node_id != node.node_id:
+        duplicate_result = await session.execute(
+            select(WorkflowNode.id).where(
+                WorkflowNode.workflow_version_id == version.id,
+                WorkflowNode.node_id == new_node_id,
+                WorkflowNode.id != node.id,
+            )
+        )
+        if duplicate_result.scalar_one_or_none() is not None:
+            raise ValueError(f"Node ID '{new_node_id}' already exists in this version")
 
     for field, value in update_data.items():
         setattr(node, field, value)
@@ -478,7 +504,14 @@ async def delete_workflow_node(
         )
     )
 
-    node = node_result.scalar_one_or_none()
+    nodes = node_result.scalars().all()
+
+    if len(nodes) > 1:
+        raise ValueError(
+            f"Node ID '{node_id}' is ambiguous because this version contains duplicates"
+        )
+
+    node = nodes[0] if nodes else None
 
     if node is None:
         return None

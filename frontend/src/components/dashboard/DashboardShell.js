@@ -4,7 +4,7 @@ import { useState } from "react";
 import DashboardSidebar from "./DashboardSidebar";
 import DashboardNavbar from "./DashboardNavbar";
 
-export default function DashboardShell({ children, pageTitle = "Dashboard" }) {
+export default function DashboardShell({ children, pageTitle = "Dashboard", fullWidth = false }) {
   const [isCollapsed, setIsCollapsed] = useState(() => {
     if (typeof window !== "undefined") {
       try {
@@ -51,7 +51,13 @@ export default function DashboardShell({ children, pageTitle = "Dashboard" }) {
         />
 
         {/* Page Content */}
-        <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto">
+        <main
+          className={
+            fullWidth
+              ? "flex-1 flex flex-col min-w-0 h-[calc(100vh-56px)] overflow-hidden"
+              : "flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto"
+          }
+        >
           {children}
         </main>
       </div>

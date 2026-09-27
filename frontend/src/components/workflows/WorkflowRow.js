@@ -87,9 +87,10 @@ export function formatDate(dateString) {
   });
 }
 
-export default function WorkflowRow({ workflow, onDeleteRequest }) {
+export default function WorkflowRow({ workflow, isLast = false, onDeleteRequest }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const menuRef = useRef(null);
 
   const workflowId = workflow.id;
@@ -102,6 +103,16 @@ export default function WorkflowRow({ workflow, onDeleteRequest }) {
   const handleCloseMenu = useCallback(() => {
     setMenuOpen(false);
   }, []);
+
+  const handleToggleMenu = (e) => {
+    e.stopPropagation();
+    if (!menuOpen && menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUpward(spaceBelow < 160);
+    }
+    setMenuOpen((prev) => !prev);
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -144,13 +155,17 @@ export default function WorkflowRow({ workflow, onDeleteRequest }) {
     }
   };
 
+  const isDraft = String(status).toLowerCase() === "draft";
+
   return (
     <div
       role="row"
       tabIndex={0}
       onClick={handleRowClick}
       onKeyDown={handleKeyDown}
-      className="group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--elevated)]/80 border-b border-[var(--border-subtle)] last:border-b-0 transition-colors duration-100 ease-out cursor-pointer focus:outline-none focus:bg-[var(--elevated)]"
+      className={`group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--elevated)]/80 border-b border-[var(--border-subtle)] last:border-b-0 transition-colors duration-100 ease-out cursor-pointer focus:outline-none focus:bg-[var(--elevated)] ${
+        isLast ? "rounded-b-lg" : ""
+      }`}
     >
       {/* Workflow Name & Description */}
       <div className="min-w-0 flex-1 pr-3">
@@ -190,10 +205,7 @@ export default function WorkflowRow({ workflow, onDeleteRequest }) {
             aria-label={`Actions for ${name}`}
             aria-expanded={menuOpen}
             aria-haspopup="true"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuOpen((prev) => !prev);
-            }}
+            onClick={handleToggleMenu}
             className="p-1 rounded-[4px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface)] transition-colors focus:outline-none focus:ring-1 focus:ring-[var(--accent)] cursor-pointer"
           >
             <MoreHorizontalIcon className="w-4 h-4 stroke-[1.5]" />
@@ -203,7 +215,9 @@ export default function WorkflowRow({ workflow, onDeleteRequest }) {
           {menuOpen && (
             <div
               role="menu"
-              className="absolute right-0 top-full mt-1 w-36 bg-[var(--surface)] border border-[var(--border-subtle)] rounded-md shadow-lg p-1 z-50 text-[var(--text-primary)] animate-in fade-in zoom-in-95 duration-100 ease-out select-none"
+              className={`absolute right-0 ${
+                openUpward ? "bottom-full mb-1" : "top-full mt-1"
+              } w-36 bg-[var(--surface)] border border-[var(--border-subtle)] rounded-md shadow-lg p-1 z-50 text-[var(--text-primary)] animate-in fade-in zoom-in-95 duration-100 ease-out select-none`}
             >
               <button
                 type="button"
@@ -235,21 +249,39 @@ export default function WorkflowRow({ workflow, onDeleteRequest }) {
 
               <div className="my-1 border-t border-[var(--border-subtle)]" />
 
-              <button
-                type="button"
-                role="menuitem"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCloseMenu();
-                  if (onDeleteRequest) {
-                    onDeleteRequest(workflow);
-                  }
-                }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-red-500 dark:text-red-400 hover:bg-red-500/10 rounded-[4px] transition-colors cursor-pointer text-left"
-              >
-                <TrashIcon className="w-3.5 h-3.5 stroke-[1.5]" />
-                <span>Delete</span>
-              </button>
+              {isDraft ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCloseMenu();
+                    if (onDeleteRequest) {
+                      onDeleteRequest(workflow);
+                    }
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-red-500 dark:text-red-400 hover:bg-red-500/10 rounded-[4px] transition-colors cursor-pointer text-left"
+                >
+                  <TrashIcon className="w-3.5 h-3.5 stroke-[1.5]" />
+                  <span>Delete</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled
+                  title="Only draft workflows can be deleted"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-disabled)] opacity-40 cursor-not-allowed select-none rounded-[4px]"
+                >
+                  <div className="flex items-center gap-2">
+                    <TrashIcon className="w-3.5 h-3.5 stroke-[1.5]" />
+                    <span>Delete</span>
+                  </div>
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
@@ -228,6 +229,13 @@ async def create_workflow_node_route(
         raise HTTPException(
             status_code=400,
             detail=str(exc),
+        ) from exc
+    except IntegrityError as exc:
+        # The database uniqueness constraint also protects against concurrent
+        # requests racing past the service-level duplicate check.
+        raise HTTPException(
+            status_code=409,
+            detail="A node with this ID already exists in this version",
         ) from exc
 
     if node is None:

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, Text, func
+from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -10,6 +10,13 @@ from app.db.base import Base
 
 class WorkflowNode(Base):
     __tablename__ = "workflow_nodes"
+    __table_args__ = (
+        UniqueConstraint(
+            "workflow_version_id",
+            "node_id",
+            name="uq_workflow_nodes_version_node_id",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

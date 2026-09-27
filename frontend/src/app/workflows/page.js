@@ -13,6 +13,8 @@ import WorkflowSearchEmptyState from "@/components/workflows/WorkflowSearchEmpty
 import WorkflowErrorState from "@/components/workflows/WorkflowErrorState";
 import WorkflowList from "@/components/workflows/WorkflowList";
 
+import CreateWorkflowDialog from "@/components/workflows/CreateWorkflowDialog";
+
 function PlusIcon(props) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
@@ -58,6 +60,7 @@ function WorkflowsContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // 'all' | 'published' | 'draft'
   const [reloadKey, setReloadKey] = useState(0);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const handleRetry = () => {
     setLoading(true);
@@ -136,7 +139,7 @@ function WorkflowsContent() {
           </p>
         </div>
 
-        {/* Create New Workflow CTA */}
+        {/* Create New Workflow CTA Button */}
         <div className="flex items-center gap-2">
           {!loading && (
             <button
@@ -149,13 +152,14 @@ function WorkflowsContent() {
             </button>
           )}
 
-          <Link
-            href="/workflows/new"
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
             className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[13px] transition-all duration-100 ease-out focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/40 cursor-pointer shrink-0 shadow-none"
           >
             <PlusIcon className="w-4 h-4 stroke-[2]" />
             <span>New Workflow</span>
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -224,7 +228,7 @@ function WorkflowsContent() {
           onRetry={handleRetry}
         />
       ) : workflows.length === 0 ? (
-        <WorkflowEmptyState />
+        <WorkflowEmptyState onCreateNew={() => setIsCreateModalOpen(true)} />
       ) : filteredWorkflows.length === 0 ? (
         <WorkflowSearchEmptyState
           query={searchQuery}
@@ -234,8 +238,18 @@ function WorkflowsContent() {
           }}
         />
       ) : (
-        <WorkflowList workflows={filteredWorkflows} />
+        <WorkflowList
+          workflows={filteredWorkflows}
+          onDeleteSuccess={() => setReloadKey((prev) => prev + 1)}
+        />
       )}
+
+      {/* Create Workflow Modal */}
+      <CreateWorkflowDialog
+        open={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={() => setReloadKey((prev) => prev + 1)}
+      />
     </div>
   );
 }

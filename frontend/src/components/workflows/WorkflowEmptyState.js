@@ -21,7 +21,7 @@ function WorkflowIcon(props) {
   );
 }
 
-export default function WorkflowEmptyState() {
+export default function WorkflowEmptyState({ onCreateNew }) {
   return (
     <div className="w-full bg-[var(--surface)] border border-[var(--border-subtle)] rounded-xl p-8 sm:p-12 text-center my-4 select-none">
       <div className="mx-auto w-12 h-12 rounded-[8px] bg-[var(--elevated)] border border-[var(--border-subtle)] flex items-center justify-center mb-4 text-[var(--text-tertiary)]">
@@ -36,13 +36,24 @@ export default function WorkflowEmptyState() {
         Create your first workflow to automate a process.
       </p>
 
-      <Link
-        href="/workflows/new"
-        className="inline-flex items-center gap-2 h-9 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[14px] transition-all duration-100 ease-out focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/40 cursor-pointer shadow-none"
-      >
-        <PlusIcon className="w-4 h-4 stroke-[2]" />
-        <span>New Workflow</span>
-      </Link>
+      {onCreateNew ? (
+        <button
+          type="button"
+          onClick={onCreateNew}
+          className="inline-flex items-center gap-2 h-9 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[14px] transition-all duration-100 ease-out focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/40 cursor-pointer shadow-none"
+        >
+          <PlusIcon className="w-4 h-4 stroke-[2]" />
+          <span>New Workflow</span>
+        </button>
+      ) : (
+        <Link
+          href="/workflows/new"
+          className="inline-flex items-center gap-2 h-9 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[14px] transition-all duration-100 ease-out focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/40 cursor-pointer shadow-none"
+        >
+          <PlusIcon className="w-4 h-4 stroke-[2]" />
+          <span>New Workflow</span>
+        </Link>
+      )}
     </div>
   );
 }
