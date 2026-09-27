@@ -11,6 +11,30 @@ function parseResponse(response, text) {
   }
 }
 
+function getErrorMessage(detail) {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item.msg === "string") {
+          const field = Array.isArray(item.loc)
+            ? item.loc.filter((part) => part !== "body").join(".")
+            : "";
+          return field ? `${field}: ${item.msg}` : item.msg;
+        }
+        return null;
+      })
+      .filter(Boolean);
+    if (messages.length) return messages.join(" ");
+  }
+  if (detail && typeof detail === "object") {
+    if (typeof detail.message === "string") return detail.message;
+    if (typeof detail.msg === "string") return detail.msg;
+  }
+  return null;
+}
+
 async function refreshAccessToken() {
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
@@ -69,7 +93,9 @@ export async function apiRequest(
 
   if (!response.ok) {
     throw new Error(
-      data.detail || data.message || "Something went wrong"
+      getErrorMessage(data.detail) ||
+        getErrorMessage(data.message) ||
+        "Something went wrong"
     );
   }
 

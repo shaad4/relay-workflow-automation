@@ -40,8 +40,34 @@ export function isPasswordValid(password = "") {
   return getPasswordRequirements(password).every((req) => req.satisfied);
 }
 
+export function getPasswordError(password = "") {
+  if (password.length < 8) return "Password must be at least 8 characters long.";
+  if (password.length > 128) return "Password must not exceed 128 characters.";
+  if (!/[A-Z]/.test(password)) {
+    return "Password must contain at least one uppercase letter.";
+  }
+  if (!/[a-z]/.test(password)) {
+    return "Password must contain at least one lowercase letter.";
+  }
+  if (!/[0-9]/.test(password)) {
+    return "Password must contain at least one number.";
+  }
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return "Password must contain at least one special character.";
+  }
+  return null;
+}
+
 export function isEmailValid(email = "") {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function getLengthError(value, label) {
+  const length = value.trim().length;
+  if (length === 0) return `${label} is required.`;
+  if (length < 2) return `${label} must be at least 2 characters long.`;
+  if (length > 100) return `${label} must not exceed 100 characters.`;
+  return null;
 }
 
 export default function RegisterForm() {
@@ -86,10 +112,9 @@ export default function RegisterForm() {
   const passwordRequirements = getPasswordRequirements(formData.password);
 
   // Field validation checks
-  const nameError =
-    touched.name && !formData.name.trim()
-      ? "Full name is required."
-      : null;
+  const nameError = touched.name
+    ? getLengthError(formData.name, "Full name")
+    : null;
 
   const emailError = touched.email
     ? !formData.email.trim()
@@ -99,17 +124,14 @@ export default function RegisterForm() {
       : null
     : null;
 
-  const workspaceNameError =
-    touched.workspace_name && !formData.workspace_name.trim()
-      ? "Workspace name is required."
-      : null;
+  const workspaceNameError = touched.workspace_name
+    ? getLengthError(formData.workspace_name, "Workspace name")
+    : null;
 
   const passwordError = touched.password
     ? !formData.password
       ? "Password is required."
-      : !isPasswordValid(formData.password)
-      ? "Password does not meet strength requirements."
-      : null
+      : getPasswordError(formData.password)
     : null;
 
   const confirmPasswordError = touched.confirmPassword
@@ -121,9 +143,11 @@ export default function RegisterForm() {
     : null;
 
   const isStep1Valid = Boolean(
-    formData.name.trim() && isEmailValid(formData.email)
+    !getLengthError(formData.name, "Full name") && isEmailValid(formData.email)
   );
-  const isStep2Valid = Boolean(formData.workspace_name.trim());
+  const isStep2Valid = Boolean(
+    !getLengthError(formData.workspace_name, "Workspace name")
+  );
   const isStep3Valid = Boolean(
     isPasswordValid(formData.password) &&
       formData.confirmPassword === formData.password
