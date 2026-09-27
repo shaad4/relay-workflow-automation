@@ -19,6 +19,10 @@ export const metadata = {
     template: "%s | Relay",
   },
   description: "Design, automate, and manage workflows with Relay.",
+  icons: {
+    icon: [{ url: "/icon.png", type: "image/png", sizes: "512x512" }],
+    apple: [{ url: "/icon.png", type: "image/png", sizes: "512x512" }],
+  },
 };
 
 export default function RootLayout({ children }) {
