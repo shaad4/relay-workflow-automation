@@ -1,10 +1,13 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import AuthNavbar from "@/components/layout/AuthNavbar";
 import ResetPasswordForm from "@/components/auth/ResetPasswordForm";
 
 export default function ResetPasswordPage() {
+  useEffect(() => {
+    document.title = "Reset Password | Relay";
+  }, []);
   return (
     <div className="min-h-screen w-full flex flex-col bg-[var(--canvas)] text-[var(--text-primary)]">
       {/* Navigation Header */}

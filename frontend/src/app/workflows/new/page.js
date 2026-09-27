@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 import Link from "next/link";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
@@ -24,6 +26,9 @@ function WorkflowIcon(props) {
 }
 
 export default function NewWorkflowPage() {
+  useEffect(() => {
+    document.title = "New Workflow | Relay";
+  }, []);
   return (
     <ProtectedRoute>
       <DashboardShell pageTitle="New Workflow">

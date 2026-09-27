@@ -17,6 +17,9 @@ function getExchangePromise(code) {
 }
 
 function GoogleCallbackContent() {
+  useEffect(() => {
+    document.title = "Signing In | Relay";
+  }, []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();

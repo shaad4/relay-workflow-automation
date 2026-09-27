@@ -211,6 +211,9 @@ function VerifyEmailContent() {
 }
 
 export default function VerifyEmailPage() {
+  useEffect(() => {
+    document.title = "Verify Email | Relay";
+  }, []);
   return (
     <div className="min-h-screen w-full flex flex-col bg-[var(--canvas)] text-[var(--text-primary)]">
       {/* Navigation Header */}

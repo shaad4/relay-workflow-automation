@@ -160,6 +160,10 @@ export default function WorkflowBuilderPage({ params }) {
     fetchWorkflowData();
   }, [fetchWorkflowData]);
 
+  useEffect(() => {
+    document.title = workflow?.name ? `${workflow.name} | Workflow Builder | Relay` : "Workflow Builder | Relay";
+  }, [workflow?.name]);
+
   // ── Loading skeleton ───────────────────────────────────────────────────────
   const LoadingSkeleton = () => (
     <div className="w-full h-full flex flex-col bg-[var(--canvas)] select-none">

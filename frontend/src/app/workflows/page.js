@@ -62,6 +62,10 @@ function WorkflowsContent() {
   const [reloadKey, setReloadKey] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  useEffect(() => {
+    document.title = "Workflows | Relay";
+  }, []);
+
   const handleRetry = () => {
     setLoading(true);
     setError(null);

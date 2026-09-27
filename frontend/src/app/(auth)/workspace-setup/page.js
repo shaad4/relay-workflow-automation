@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { completeGoogleSignup } from "@/services/auth";
@@ -9,6 +9,9 @@ import PublicRoute from "@/components/auth/PublicRoute";
 import AuthNavbar from "@/components/layout/AuthNavbar";
 
 function WorkspaceSetupContent() {
+  useEffect(() => {
+    document.title = "Set Up Workspace | Relay";
+  }, []);
   const searchParams = useSearchParams();
   const router = useRouter();
   const { login } = useAuth();

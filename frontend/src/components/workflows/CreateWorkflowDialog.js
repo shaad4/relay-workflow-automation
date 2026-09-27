@@ -139,54 +139,57 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="create-workflow-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 font-sans select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-150 font-sans"
     >
-      <div className="w-full max-w-md bg-[var(--surface)] border border-[var(--border-default)] rounded-xl p-6 shadow-2xl text-left relative animate-in zoom-in-95 duration-150">
+      <div className="relative my-auto w-full max-w-lg overflow-hidden rounded-2xl border border-[var(--border-default)] bg-[var(--surface)] text-left shadow-2xl animate-in zoom-in-95 duration-150">
+        <div className="h-1 w-full bg-gradient-to-r from-indigo-500 via-violet-500 to-sky-400" />
         {/* Close Button */}
         <button
           type="button"
           onClick={onClose}
           disabled={isSubmitting}
           aria-label="Close dialog"
-          className="absolute top-4 right-4 p-1 rounded-[6px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] transition-colors cursor-pointer disabled:opacity-50"
+          className="absolute right-4 top-4 z-10 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text-primary)] cursor-pointer disabled:opacity-50"
         >
           <XIcon className="w-4 h-4 stroke-[1.5]" />
         </button>
 
         {/* Modal Header with Icon Badge */}
-        <div className="flex items-start gap-3.5 mb-5 pr-6">
-          <div className="w-10 h-10 rounded-[8px] bg-[var(--elevated)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent)] shrink-0 shadow-2xs">
-            <WorkflowIcon className="w-5 h-5 stroke-[1.5]" />
-          </div>
-          <div>
-            <h2
-              id="create-workflow-title"
-              className="text-[16px] font-semibold text-[var(--text-primary)] tracking-tight leading-snug"
-            >
-              Create workflow
-            </h2>
-            <p className="text-[13px] text-[var(--text-secondary)] mt-0.5 leading-normal">
-              Create a workflow to automate your process.
-            </p>
+        <div className="border-b border-[var(--border-subtle)] px-6 pb-5 pt-6 pr-14">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-500 shadow-sm">
+              <WorkflowIcon className="h-6 w-6 stroke-[1.5]" />
+            </div>
+            <div>
+              <h2
+                id="create-workflow-title"
+                className="text-[18px] font-semibold tracking-tight leading-snug text-[var(--text-primary)]"
+              >
+                Create a workflow
+              </h2>
+              <p className="mt-1 text-[13px] leading-5 text-[var(--text-secondary)]">
+                Start with a name and a short description. You can add steps next.
+              </p>
+            </div>
           </div>
         </div>
 
         {/* General API Error Banner */}
         {apiError && (
-          <div className="mb-4 p-3 rounded-[6px] bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-[12px] flex items-center gap-2">
+          <div className="mx-6 mt-5 flex items-center gap-2.5 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-[12px] text-red-600 dark:text-red-400">
             <AlertCircleIcon className="w-4 h-4 stroke-[1.5] shrink-0" />
             <span>{apiError}</span>
           </div>
         )}
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5 px-6 py-5">
           {/* Name Field */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label
                 htmlFor="workflow-name-input"
-                className="text-[12px] font-medium text-[var(--text-secondary)]"
+                className="text-[12px] font-semibold text-[var(--text-primary)]"
               >
                 Name <span className="text-red-500">*</span>
               </label>
@@ -206,7 +209,7 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
               }}
               disabled={isSubmitting}
               placeholder="e.g. Order Processing"
-              className={`w-full h-9 px-3 text-[13px] bg-[var(--input-bg)] text-[var(--text-primary)] placeholder-[var(--text-disabled)] rounded-[6px] border transition-all duration-100 ease-out focus:outline-none ${
+              className={`w-full h-11 px-3.5 text-[14px] bg-[var(--input-bg)] text-[var(--text-primary)] placeholder-[var(--text-disabled)] rounded-xl border transition-all duration-100 ease-out focus:outline-none ${
                 validationError
                   ? "border-red-500 focus:ring-1 focus:ring-red-500"
                   : "border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)]"
@@ -225,7 +228,7 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
             <div className="flex items-center justify-between mb-1.5">
               <label
                 htmlFor="workflow-description-input"
-                className="text-[12px] font-medium text-[var(--text-secondary)]"
+                className="text-[12px] font-semibold text-[var(--text-primary)]"
               >
                 Description
               </label>
@@ -236,22 +239,24 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
 
             <textarea
               id="workflow-description-input"
-              rows={3}
+              rows={4}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={isSubmitting}
               placeholder="What does this workflow do?"
-              className="w-full p-2.5 text-[13px] bg-[var(--input-bg)] text-[var(--text-primary)] placeholder-[var(--text-disabled)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-all duration-100 ease-out resize-none leading-relaxed"
+              className="w-full resize-y rounded-xl border border-[var(--border-default)] bg-[var(--input-bg)] p-3.5 text-[13px] leading-5 text-[var(--text-primary)] placeholder-[var(--text-disabled)] transition-all focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20"
             />
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-4 mt-2 border-t border-[var(--border-subtle)] flex items-center justify-end gap-2.5">
+          <div className="-mx-6 -mb-5 mt-1 flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] bg-[var(--elevated)]/45 px-6 py-4">
+            <p className="hidden text-[11px] text-[var(--text-tertiary)] sm:block">You can change these details later.</p>
+            <div className="ml-auto flex items-center gap-2.5">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="h-8 px-3.5 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--elevated)] hover:border-[var(--border-strong)] text-[12px] font-medium text-[var(--text-primary)] transition-all duration-100 ease-out cursor-pointer disabled:opacity-50"
+              className="h-9 rounded-lg border border-[var(--border-default)] bg-[var(--surface)] px-4 text-[12px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--elevated)] disabled:opacity-50"
             >
               Cancel
             </button>
@@ -259,7 +264,7 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="h-8 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[12px] transition-all duration-100 ease-out flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-none"
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-[12px] font-semibold text-white shadow-sm transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSubmitting ? (
                 <>
@@ -273,6 +278,7 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
                 </>
               )}
             </button>
+            </div>
           </div>
         </form>
       </div>
