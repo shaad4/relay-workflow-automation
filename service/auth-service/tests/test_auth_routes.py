@@ -17,6 +17,8 @@ from app.routes import auth
 
 @pytest.fixture
 def client(monkeypatch):
+    monkeypatch.setattr(auth, "send_verification_email", lambda *args: None)
+    monkeypatch.setattr(auth, "send_password_reset_email", lambda *args: None)
     app = FastAPI()
     app.include_router(auth.router)
 
@@ -258,9 +260,9 @@ def test_google_login_redirects_and_sets_state_cookie(client, monkeypatch):
 
 def test_google_callback_validates_state(client):
     missing = client.get("/auth/google/callback?state=state-value")
+    client.cookies.set("google_oauth_state", "state-value")
     invalid = client.get(
         "/auth/google/callback?state=wrong",
-        cookies={"google_oauth_state": "state-value"},
     )
 
     assert missing.status_code == 400
@@ -268,9 +270,9 @@ def test_google_callback_validates_state(client):
 
 
 def test_google_callback_redirects_on_provider_error(client):
+    client.cookies.set("google_oauth_state", "state-value")
     response = client.get(
         "/auth/google/callback?state=state-value&error=access_denied",
-        cookies={"google_oauth_state": "state-value"},
         follow_redirects=False,
     )
 
@@ -279,9 +281,9 @@ def test_google_callback_redirects_on_provider_error(client):
 
 
 def test_google_callback_requires_code(client):
+    client.cookies.set("google_oauth_state", "state-value")
     response = client.get(
         "/auth/google/callback?state=state-value",
-        cookies={"google_oauth_state": "state-value"},
     )
 
     assert response.status_code == 400
@@ -316,9 +318,9 @@ def test_google_callback_redirects_to_login_exchange_or_signup(
     monkeypatch.setattr(auth, "create_google_login_session", create_google_login_session)
     monkeypatch.setattr(auth, "create_google_signup_session", create_google_signup_session)
 
+    client.cookies.set("google_oauth_state", "state-value")
     response = client.get(
         "/auth/google/callback?state=state-value&code=google-code",
-        cookies={"google_oauth_state": "state-value"},
         follow_redirects=False,
     )
 
