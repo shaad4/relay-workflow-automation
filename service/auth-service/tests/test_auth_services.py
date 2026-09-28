@@ -159,6 +159,23 @@ def test_resend_verification_skips_unknown_or_verified_user(monkeypatch):
         assert asyncio.run(verification.resend_verification_email("u@example.com", FakeSession([Result(user)]))) is None
 
 
+def test_create_and_resend_verification_tokens():
+    user = SimpleNamespace(id=uuid4(), email="u@example.com", email_verified_at=None, name="User")
+    session = FakeSession([Result(user), Result()])
+    token = asyncio.run(verification.create_verification_token(user.id, session))
+    assert token.user_id == user.id
+    assert token.token
+    assert token.expires_at > datetime.now(timezone.utc)
+
+    session = FakeSession([Result(user), Result()])
+    resent_token, returned_user = asyncio.run(
+        verification.resend_verification_email(user.email, session)
+    )
+    assert returned_user is user
+    assert resent_token.user_id == user.id
+    assert session.commits == 1
+
+
 def test_password_reset_validation_and_success(monkeypatch):
     user = SimpleNamespace(id=uuid4(), password_hash="old")
     token = SimpleNamespace(user_id=user.id, used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=5))
@@ -181,6 +198,24 @@ def test_password_reset_validation_and_success(monkeypatch):
             results.append(Result(reset_user))
         with pytest.raises(ValueError, match=message):
             asyncio.run(password_reset.reset_password("bad", "Secure123!", FakeSession(results)))
+
+
+def test_create_password_reset_token_for_existing_user():
+    user = SimpleNamespace(id=uuid4(), email="u@example.com")
+    session = FakeSession([Result(user), Result()])
+    token, returned_user = asyncio.run(
+        password_reset.create_password_reset_token(user.email, session)
+    )
+    assert returned_user is user
+    assert token.user_id == user.id
+    assert token.token
+    assert token.expires_at > datetime.now(timezone.utc)
+    assert session.commits == 1
+    assert session.refreshes == 1
+
+    assert asyncio.run(
+        password_reset.create_password_reset_token("missing@example.com", FakeSession([Result()]))
+    ) is None
 
 
 def test_current_token_and_current_user_dependency(monkeypatch):
@@ -257,6 +292,18 @@ def test_google_signup_session_complete_and_rejections(monkeypatch):
     assert user.google_id == session_row.google_id
     assert session_row.used_at is not None
     assert session.commits == 1
+
+
+def test_create_google_signup_session():
+    created = asyncio.run(
+        google_signup.create_google_signup_session(
+            "google-id", "new@example.com", "New User", FakeSession()
+        )
+    )
+    assert created.google_id == "google-id"
+    assert created.email == "new@example.com"
+    assert created.name == "New User"
+    assert created.expires_at > datetime.now(timezone.utc)
 
     for row, name, expected in [
         (None, "Workspace", "Invalid Google signup session"),
