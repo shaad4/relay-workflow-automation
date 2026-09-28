@@ -54,6 +54,7 @@ services:
 
     ports:
       - "8002:8000"
+      - "50052:50052"
 
     env_file:
       - ./service/workflow-service/.env
