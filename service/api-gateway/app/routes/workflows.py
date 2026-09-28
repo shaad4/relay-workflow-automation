@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Request
-from fastapi.responses import Response
+from urllib.parse import quote
+
 import httpx
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
 
 router = APIRouter(prefix="/workflows")
 
@@ -210,15 +212,13 @@ async def proxy_workflow_request(
 ):
     body = await request.body()
 
+    path_segments = path.split("/") if path else []
+    if any(segment in {".", ".."} for segment in path_segments):
+        raise HTTPException(status_code=400, detail="Invalid workflow path")
+
+    encoded_path = "/".join(quote(segment, safe="") for segment in path_segments)
     url = f"{WORKFLOW_SERVICE_URL}/workflows"
-
-    if path:
-        url = f"{url}/{path}/"
-    else:
-        url = f"{url}/"
-
-    print("PROXY METHOD:", request.method)
-    print("PROXY URL:", url)
+    url = f"{url}/{encoded_path}/" if encoded_path else f"{url}/"
 
     async with httpx.AsyncClient() as client:
         response = await client.request(

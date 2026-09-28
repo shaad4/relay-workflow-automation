@@ -324,7 +324,7 @@ function RAGConfig({ config, onChange }) {
         <FieldLabel>Top K Results</FieldLabel>
         <TextInput
           value={String(config.top_k ?? 5)}
-          onChange={(v) => onChange("top_k", parseInt(v, 10) || 5)}
+          onChange={(v) => onChange("top_k", Number.parseInt(v, 10) || 5)}
           placeholder="5"
           mono
         />
@@ -390,7 +390,7 @@ function ApprovalConfig({ config, onChange }) {
         <FieldLabel>Timeout (hours)</FieldLabel>
         <TextInput
           value={String(config.timeout_hours ?? 24)}
-          onChange={(v) => onChange("timeout_hours", parseInt(v, 10) || 24)}
+          onChange={(v) => onChange("timeout_hours", Number.parseInt(v, 10) || 24)}
           placeholder="24"
           mono
         />

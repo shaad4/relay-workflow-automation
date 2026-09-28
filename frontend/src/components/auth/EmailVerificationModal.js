@@ -88,7 +88,6 @@ export default function EmailVerificationModal({ open, email, onClose }) {
   return (
     <div
       className="fixed inset-0 z-[100] bg-black/75 flex items-center justify-center p-4 transition-opacity duration-180 ease-out"
-      onClick={onClose}
     >
       <div
         role="dialog"

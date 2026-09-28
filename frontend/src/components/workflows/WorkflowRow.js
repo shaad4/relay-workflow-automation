@@ -63,7 +63,7 @@ function WorkflowMark({ name = "Workflow" }) {
 export function formatRelativeTime(dateString) {
   if (!dateString) return "—";
   const date = new Date(dateString);
-  if (isNaN(date.getTime())) return dateString;
+  if (Number.isNaN(date.getTime())) return dateString;
 
   const now = new Date();
   const diffInSeconds = Math.floor((now - date) / 1000);
@@ -96,7 +96,7 @@ export function formatRelativeTime(dateString) {
 export function formatDate(dateString) {
   if (!dateString) return "—";
   const date = new Date(dateString);
-  if (isNaN(date.getTime())) return dateString;
+  if (Number.isNaN(date.getTime())) return dateString;
 
   return date.toLocaleDateString("en-US", {
     month: "short",

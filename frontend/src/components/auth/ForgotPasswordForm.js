@@ -5,7 +5,17 @@ import Link from "next/link";
 import { forgotPassword } from "@/services/auth";
 
 export function isEmailValid(email = "") {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const [localPart, domain, ...extraParts] = email.trim().split("@");
+  return Boolean(
+    localPart &&
+      domain &&
+      extraParts.length === 0 &&
+      !/\s/.test(localPart) &&
+      !/\s/.test(domain) &&
+      domain.includes(".") &&
+      !domain.startsWith(".") &&
+      !domain.endsWith(".")
+  );
 }
 
 export default function ForgotPasswordForm() {

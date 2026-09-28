@@ -471,11 +471,11 @@ body {
 .ai-evaluating { animation-name:ai-evaluate; }.ai-approved { animation-name:ai-decided; }
 .email-generating { animation-name:email-generate; }.email-sent { animation-name:email-delivered; }
 .payment-processing { animation-name:payment-process; }.payment-processed { animation-name:payment-done; }
-@keyframes route-1 { 0%,2.9%,8.2%,50%,52.9%,58.2%,100% { left:0;opacity:0; } 3.2%,53.2% { left:0;opacity:1; } 8%,58% { left:calc(100% - 22px);opacity:1; } 8.2%,58.2% { left:calc(100% - 22px);opacity:0; } }
-@keyframes route-2 { 0%,13.9%,17.2%,50%,63.9%,67.2%,100% { left:0;opacity:0; } 14.2%,64.2% { left:0;opacity:1; } 17%,67% { left:calc(100% - 22px);opacity:1; } 17.2%,67.2% { left:calc(100% - 22px);opacity:0; } }
-@keyframes route-3 { 0%,22.9%,26.2%,50%,72.9%,76.2%,100% { left:0;opacity:0; } 23.2%,73.2% { left:0;opacity:1; } 26%,76% { left:calc(100% - 22px);opacity:1; } 26.2%,76.2% { left:calc(100% - 22px);opacity:0; } }
-@keyframes route-4 { 0%,31.9%,35.2%,50%,81.9%,85.2%,100% { left:0;opacity:0; } 32.2%,82.2% { left:0;opacity:1; } 35%,85% { left:calc(100% - 22px);opacity:1; } 35.2%,85.2% { left:calc(100% - 22px);opacity:0; } }
-@keyframes route-5 { 0%,40.9%,44.2%,50%,90.9%,94.2%,100% { left:0;opacity:0; } 41.2%,91.2% { left:0;opacity:1; } 44%,94% { left:calc(100% - 22px);opacity:1; } 44.2%,94.2% { left:calc(100% - 22px);opacity:0; } }
+@keyframes route-1 { 0%,2.9%,50%,52.9%,100% { left:0;opacity:0; } 3.2%,53.2% { left:0;opacity:1; } 8%,58% { left:calc(100% - 22px);opacity:1; } 8.2%,58.2% { left:calc(100% - 22px);opacity:0; } }
+@keyframes route-2 { 0%,13.9%,50%,63.9%,100% { left:0;opacity:0; } 14.2%,64.2% { left:0;opacity:1; } 17%,67% { left:calc(100% - 22px);opacity:1; } 17.2%,67.2% { left:calc(100% - 22px);opacity:0; } }
+@keyframes route-3 { 0%,22.9%,50%,72.9%,100% { left:0;opacity:0; } 23.2%,73.2% { left:0;opacity:1; } 26%,76% { left:calc(100% - 22px);opacity:1; } 26.2%,76.2% { left:calc(100% - 22px);opacity:0; } }
+@keyframes route-4 { 0%,31.9%,50%,81.9%,100% { left:0;opacity:0; } 32.2%,82.2% { left:0;opacity:1; } 35%,85% { left:calc(100% - 22px);opacity:1; } 35.2%,85.2% { left:calc(100% - 22px);opacity:0; } }
+@keyframes route-5 { 0%,40.9%,50%,90.9%,100% { left:0;opacity:0; } 41.2%,91.2% { left:0;opacity:1; } 44%,94% { left:calc(100% - 22px);opacity:1; } 44.2%,94.2% { left:calc(100% - 22px);opacity:0; } }
 @keyframes data-fetch { 0%,8.9%,12%,49.9%,57.9%,62%,100% { display:none; } 9%,11.9%,58%,61.9% { display:block; } }
 @keyframes data-loaded { 0%,11.9%,50%,60.9% { display:none; } 12%,49.9%,61%,100% { display:block; } }
 @keyframes ai-evaluate { 0%,17.9%,21%,49.9%,66.9%,70%,100% { display:none; } 18%,20.9%,67%,69.9% { display:block; } }
@@ -494,11 +494,11 @@ body {
   .workflow-edge.edge-4 > span { animation-name:route-4-v; }
   .workflow-edge.edge-5 > span { animation-name:route-5-v; }
 }
-@keyframes route-1-v { 0%,2.9%,8.2%,50%,52.9%,58.2%,100% { top:0;opacity:0; } 3.2%,53.2% { top:0;opacity:1; } 8%,58% { top:calc(100% - 22px);opacity:1; } 8.2%,58.2% { top:calc(100% - 22px);opacity:0; } }
-@keyframes route-2-v { 0%,13.9%,17.2%,50%,63.9%,67.2%,100% { top:0;opacity:0; } 14.2%,64.2% { top:0;opacity:1; } 17%,67% { top:calc(100% - 22px);opacity:1; } 17.2%,67.2% { top:calc(100% - 22px);opacity:0; } }
-@keyframes route-3-v { 0%,22.9%,26.2%,50%,72.9%,76.2%,100% { top:0;opacity:0; } 23.2%,73.2% { top:0;opacity:1; } 26%,76% { top:calc(100% - 22px);opacity:1; } 26.2%,76.2% { top:calc(100% - 22px);opacity:0; } }
-@keyframes route-4-v { 0%,31.9%,35.2%,50%,81.9%,85.2%,100% { top:0;opacity:0; } 32.2%,82.2% { top:0;opacity:1; } 35%,85% { top:calc(100% - 22px);opacity:1; } 35.2%,85.2% { top:calc(100% - 22px);opacity:0; } }
-@keyframes route-5-v { 0%,40.9%,44.2%,50%,90.9%,94.2%,100% { top:0;opacity:0; } 41.2%,91.2% { top:0;opacity:1; } 44%,94% { top:calc(100% - 22px);opacity:1; } 44.2%,94.2% { top:calc(100% - 22px);opacity:0; } }
+@keyframes route-1-v { 0%,2.9%,50%,52.9%,100% { top:0;opacity:0; } 3.2%,53.2% { top:0;opacity:1; } 8%,58% { top:calc(100% - 22px);opacity:1; } 8.2%,58.2% { top:calc(100% - 22px);opacity:0; } }
+@keyframes route-2-v { 0%,13.9%,50%,63.9%,100% { top:0;opacity:0; } 14.2%,64.2% { top:0;opacity:1; } 17%,67% { top:calc(100% - 22px);opacity:1; } 17.2%,67.2% { top:calc(100% - 22px);opacity:0; } }
+@keyframes route-3-v { 0%,22.9%,50%,72.9%,100% { top:0;opacity:0; } 23.2%,73.2% { top:0;opacity:1; } 26%,76% { top:calc(100% - 22px);opacity:1; } 26.2%,76.2% { top:calc(100% - 22px);opacity:0; } }
+@keyframes route-4-v { 0%,31.9%,50%,81.9%,100% { top:0;opacity:0; } 32.2%,82.2% { top:0;opacity:1; } 35%,85% { top:calc(100% - 22px);opacity:1; } 35.2%,85.2% { top:calc(100% - 22px);opacity:0; } }
+@keyframes route-5-v { 0%,40.9%,50%,90.9%,100% { top:0;opacity:0; } 41.2%,91.2% { top:0;opacity:1; } 44%,94% { top:calc(100% - 22px);opacity:1; } 44.2%,94.2% { top:calc(100% - 22px);opacity:0; } }
 
 /* Refined public landing navigation. */
 .home-nav { position:sticky; z-index:20; top:0; height:78px; padding:0 clamp(20px,5vw,82px); border-bottom:1px solid #ffffff10; background:#060607d9; backdrop-filter:blur(18px); }

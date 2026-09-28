@@ -144,9 +144,17 @@ export default function NodeLibrary({ onAddNode, onClose }) {
                   {category.nodes.map((node) => (
                     <div
                       key={node.typeId}
+                      role="button"
+                      tabIndex={0}
                       draggable
                       onDragStart={(e) => onDragStart(e, node)}
                       onClick={() => onAddNode && onAddNode(node)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onAddNode?.(node);
+                        }
+                      }}
                       className="group flex items-center justify-between p-2 rounded-[6px] bg-[var(--canvas)] hover:bg-[var(--elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] transition-all duration-100 ease-out cursor-grab active:cursor-grabbing"
                     >
                       <div className="flex items-center gap-2 min-w-0">

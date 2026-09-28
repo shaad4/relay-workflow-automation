@@ -349,7 +349,7 @@ export default function WorkflowBuilder({
       if (!prefix) continue;
       const match = (n.data.nodeId ?? "").match(/_(\d+)$/);
       if (match) {
-        const num = parseInt(match[1], 10);
+        const num = Number.parseInt(match[1], 10);
         nodeCounterRef.current[prefix] = Math.max(
           nodeCounterRef.current[prefix] ?? 0,
           num
@@ -507,7 +507,7 @@ export default function WorkflowBuilder({
       if (isCanvasReadOnly) return;
       recordHistory();
       const logicalId = getNextNodeId(nodeDef.typeId);
-      const tempId = `temp-node-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const tempId = `temp-node-${globalThis.crypto.randomUUID()}`;
       const def = getNodeDefinition(nodeDef.typeId);
 
       const newNode = {
@@ -636,7 +636,7 @@ export default function WorkflowBuilder({
     const definition = getNodeDefinition(typeId);
     const duplicate = {
       ...original,
-      id: `temp-node-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: `temp-node-${globalThis.crypto.randomUUID()}`,
       position: { x: original.position.x + 48, y: original.position.y + 48 },
       selected: false,
       data: { ...original.data, nodeId: getNextNodeId(typeId), label: `${original.data?.label || definition.name} copy` },
@@ -1236,6 +1236,7 @@ export default function WorkflowBuilder({
           {contextMenu && (
             <div
               role="menu"
+              tabIndex={-1}
               className="fixed z-[70] min-w-44 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] p-1.5 text-[12px] text-[var(--text-primary)] shadow-2xl"
               data-workflow-context-menu
               style={{ left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - (contextMenu.type === "node" ? 190 : 145))) }}
@@ -1292,7 +1293,7 @@ export default function WorkflowBuilder({
             <h2 id="unsaved-navigation-title" className="text-[15px] font-semibold text-[var(--text-primary)]">Leave without saving?</h2>
             <p id="unsaved-navigation-description" className="mt-1.5 text-[13px] leading-5 text-[var(--text-secondary)]">Your workflow has unsaved changes. If you leave now, those changes will be lost.</p>
             <div className="mt-5 flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-3">
-              <button type="button" autoFocus onClick={() => setPendingNavigation(null)} className="h-9 rounded-lg border border-[var(--border-default)] px-3 text-[12px] font-medium text-[var(--text-primary)] hover:bg-[var(--elevated)]">Stay in builder</button>
+              <button type="button" onClick={() => setPendingNavigation(null)} className="h-9 rounded-lg border border-[var(--border-default)] px-3 text-[12px] font-medium text-[var(--text-primary)] hover:bg-[var(--elevated)]">Stay in builder</button>
               <button type="button" onClick={confirmLeaveWithoutSaving} className="h-9 rounded-lg bg-red-600 px-3 text-[12px] font-medium text-white hover:bg-red-700">Leave without saving</button>
             </div>
           </div>

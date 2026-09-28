@@ -223,7 +223,7 @@ export default function WorkflowToolbar({
             <span aria-hidden="true" className="text-lg leading-none">⋯</span>
           </button>
           {workflowMenuOpen && (
-            <div role="menu" aria-label="Workflow actions" className="absolute left-0 top-full z-50 mt-1 w-48 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] p-1 text-[var(--text-primary)] shadow-xl">
+            <div role="menu" aria-label="Workflow actions" tabIndex={-1} className="absolute left-0 top-full z-50 mt-1 w-48 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] p-1 text-[var(--text-primary)] shadow-xl">
               <button type="button" role="menuitem" onClick={() => { setWorkflowMenuOpen(false); startMetadataEdit(); }} className="w-full rounded-md px-2.5 py-2 text-left text-[12px] text-[var(--text-secondary)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)]">Edit workflow details</button>
               {isReadOnly && (
                 <button type="button" role="menuitem" disabled={isCreatingDraft} onClick={() => { setWorkflowMenuOpen(false); onEditWorkflow?.(); }} className="w-full rounded-md px-2.5 py-2 text-left text-[12px] text-[var(--text-secondary)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)] disabled:opacity-50">Create draft version</button>
@@ -291,7 +291,7 @@ export default function WorkflowToolbar({
             </div>
             <label className="mb-3 block">
               <span className="mb-1 block text-[11px] font-medium text-[var(--text-secondary)]">Name</span>
-              <input autoFocus maxLength={255} value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} className="h-9 w-full rounded-lg border border-[var(--border-default)] bg-[var(--input-bg)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]" />
+              <input maxLength={255} value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} className="h-9 w-full rounded-lg border border-[var(--border-default)] bg-[var(--input-bg)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]" />
             </label>
             <label className="mb-3 block">
               <span className="mb-1 block text-[11px] font-medium text-[var(--text-secondary)]">Description</span>

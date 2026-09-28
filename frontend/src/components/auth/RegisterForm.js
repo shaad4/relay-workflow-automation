@@ -59,7 +59,17 @@ export function getPasswordError(password = "") {
 }
 
 export function isEmailValid(email = "") {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const [localPart, domain, ...extraParts] = email.trim().split("@");
+  return Boolean(
+    localPart &&
+      domain &&
+      extraParts.length === 0 &&
+      !/\s/.test(localPart) &&
+      !/\s/.test(domain) &&
+      domain.includes(".") &&
+      !domain.startsWith(".") &&
+      !domain.endsWith(".")
+  );
 }
 
 function getLengthError(value, label) {
@@ -474,7 +484,6 @@ export default function RegisterForm() {
                 name="workspace_name"
                 type="text"
                 required
-                autoFocus
                 disabled={isSubmitting}
                 value={formData.workspace_name}
                 onChange={handleChange}
@@ -551,7 +560,6 @@ export default function RegisterForm() {
                   name="password"
                   type={showPassword ? "text" : "password"}
                   required
-                  autoFocus
                   disabled={isSubmitting}
                   value={formData.password}
                   onChange={handleChange}
