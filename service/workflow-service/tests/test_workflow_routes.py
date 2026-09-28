@@ -1,4 +1,5 @@
 import sys
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -76,6 +77,29 @@ def client():
     app.dependency_overrides[workflows.get_db] = fake_get_db
     with TestClient(app) as test_client:
         yield test_client
+
+
+def test_grpc_server_starts_and_stops_with_lifespan(monkeypatch):
+    from app import main
+
+    calls = []
+
+    class FakeGrpcServer:
+        async def stop(self, grace):
+            calls.append(("stop", grace))
+
+    async def start_server():
+        calls.append(("start",))
+        return FakeGrpcServer()
+
+    monkeypatch.setattr(main, "start_grpc_server", start_server)
+
+    async def run_lifespan():
+        async with main.lifespan(main.app):
+            calls.append(("running",))
+
+    asyncio.run(run_lifespan())
+    assert calls == [("start",), ("running",), ("stop", 5)]
 
 
 def test_create_workflow(client, monkeypatch):
@@ -271,13 +295,23 @@ def test_activate_and_deactivate_workflow(client, monkeypatch, route, service_na
     assert response.json()["status"] == status
 
 
-def test_health_and_protected_route(client):
+def test_health_and_protected_route(monkeypatch):
     from app.main import app
 
-    app.dependency_overrides[get_current_identity] = lambda: {
-        "user_id": "user-123",
-        "workspace_id": str(WORKSPACE_ID),
-    }
+    class FakeGrpcServer:
+        async def stop(self, grace):
+            pass
+
+    async def start_server():
+        return FakeGrpcServer()
+
+    monkeypatch.setattr("app.main.start_grpc_server", start_server)
+
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_current_identity,
+        lambda: {"user_id": "user-123", "workspace_id": str(WORKSPACE_ID)},
+    )
     with TestClient(app) as main_client:
         health = main_client.get("/health")
         protected = main_client.get("/protected-test")
@@ -289,6 +323,15 @@ def test_health_and_protected_route(client):
 
 def test_workflow_route_uses_auth_service_grpc(monkeypatch):
     from app.main import app
+
+    class FakeGrpcServer:
+        async def stop(self, grace):
+            pass
+
+    async def start_server():
+        return FakeGrpcServer()
+
+    monkeypatch.setattr("app.main.start_grpc_server", start_server)
 
     class AuthClient:
         async def validate_token(self, token):
@@ -313,7 +356,7 @@ def test_workflow_route_uses_auth_service_grpc(monkeypatch):
     async def fake_get_db():
         yield object()
 
-    app.dependency_overrides[workflows.get_db] = fake_get_db
+    monkeypatch.setitem(app.dependency_overrides, workflows.get_db, fake_get_db)
     with TestClient(app) as test_client:
         response = test_client.get(
             "/workflows/",
