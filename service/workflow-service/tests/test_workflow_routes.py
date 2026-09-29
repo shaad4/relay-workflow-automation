@@ -6,14 +6,50 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+import httpx
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.dependencies import get_current_identity
 from app.grpc.generated.auth import auth_pb2
 from app.routes import workflows
+
+
+class InProcessClient:
+    def __init__(self, app):
+        self.app = app
+        self.cookies = httpx.Cookies()
+
+    def request(self, method, path, **kwargs):
+        kwargs = dict(kwargs)
+        request_cookies = kwargs.pop("cookies", None)
+        if request_cookies:
+            self.cookies.update(request_cookies)
+
+        async def send():
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=self.app),
+                base_url="http://testserver",
+                cookies=self.cookies,
+            ) as client:
+                response = await client.request(method, path, **kwargs)
+                self.cookies.update(client.cookies)
+                return response
+
+        return asyncio.run(send())
+
+    def get(self, path, **kwargs):
+        return self.request("GET", path, **kwargs)
+
+    def post(self, path, **kwargs):
+        return self.request("POST", path, **kwargs)
+
+    def patch(self, path, **kwargs):
+        return self.request("PATCH", path, **kwargs)
+
+    def delete(self, path, **kwargs):
+        return self.request("DELETE", path, **kwargs)
 
 
 WORKFLOW_ID = uuid4()
@@ -66,17 +102,17 @@ edge = SimpleNamespace(
 def client():
     app = FastAPI()
     app.include_router(workflows.router)
-    app.dependency_overrides[get_current_identity] = lambda: {
-        "user_id": str(uuid4()),
-        "workspace_id": str(WORKSPACE_ID),
-    }
+
+    async def fake_identity():
+        return {"user_id": str(uuid4()), "workspace_id": str(WORKSPACE_ID)}
+
+    app.dependency_overrides[get_current_identity] = fake_identity
 
     async def fake_get_db():
         yield object()
 
     app.dependency_overrides[workflows.get_db] = fake_get_db
-    with TestClient(app) as test_client:
-        yield test_client
+    yield InProcessClient(app)
 
 
 def test_grpc_server_starts_and_stops_with_lifespan(monkeypatch):
@@ -152,6 +188,17 @@ def test_delete_workflow(client, monkeypatch):
     monkeypatch.setattr(workflows, "delete_workflow", delete_workflow)
     response = client.delete(f"/workflows/{WORKFLOW_ID}/")
     assert response.status_code == 204
+
+
+def test_delete_workflow_returns_conflict_for_active_status(client, monkeypatch):
+    async def delete_workflow(workflow_id, workspace_id, session):
+        raise ValueError("Only draft or inactive workflows can be deleted")
+
+    monkeypatch.setattr(workflows, "delete_workflow", delete_workflow)
+    response = client.delete(f"/workflows/{WORKFLOW_ID}/")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Only draft or inactive workflows can be deleted"
 
 
 def test_workflow_versions(client, monkeypatch):
@@ -307,14 +354,13 @@ def test_health_and_protected_route(monkeypatch):
 
     monkeypatch.setattr("app.main.start_grpc_server", start_server)
 
-    monkeypatch.setitem(
-        app.dependency_overrides,
-        get_current_identity,
-        lambda: {"user_id": "user-123", "workspace_id": str(WORKSPACE_ID)},
-    )
-    with TestClient(app) as main_client:
-        health = main_client.get("/health")
-        protected = main_client.get("/protected-test")
+    async def fake_identity():
+        return {"user_id": "user-123", "workspace_id": str(WORKSPACE_ID)}
+
+    monkeypatch.setitem(app.dependency_overrides, get_current_identity, fake_identity)
+    main_client = InProcessClient(app)
+    health = main_client.get("/health")
+    protected = main_client.get("/protected-test")
     assert health.status_code == 200
     assert health.json() == {"status": "ok", "service": "workflow-service"}
     assert protected.status_code == 200
@@ -357,14 +403,19 @@ def test_workflow_route_uses_auth_service_grpc(monkeypatch):
         yield object()
 
     monkeypatch.setitem(app.dependency_overrides, workflows.get_db, fake_get_db)
-    with TestClient(app) as test_client:
-        response = test_client.get(
-            "/workflows/",
-            headers={"Authorization": "Bearer valid-access-token"},
-        )
+    test_client = InProcessClient(app)
+    response = test_client.get(
+        "/workflows/",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+    cookie_response = test_client.get(
+        "/workflows/",
+        cookies={"relay_access_token": "valid-access-token"},
+    )
 
     assert response.status_code == 200
     assert response.json()[0]["id"] == str(WORKFLOW_ID)
+    assert cookie_response.status_code == 200
 
 
 @pytest.mark.parametrize(

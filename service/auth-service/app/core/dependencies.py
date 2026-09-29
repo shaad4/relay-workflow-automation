@@ -24,7 +24,11 @@ async def get_current_token(
     access_cookie: str | None = Cookie(default=None, alias="relay_access_token"),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
-    token = credentials.credentials if credentials else access_cookie
+    token = (
+        credentials.credentials
+        if isinstance(credentials, HTTPAuthorizationCredentials)
+        else access_cookie if isinstance(access_cookie, str) else None
+    )
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

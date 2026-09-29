@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
@@ -5,8 +6,8 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+import httpx
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 # Make the service package importable when pytest is started from this folder.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -15,10 +16,38 @@ from app.core.dependencies import get_current_user
 from app.routes import auth
 
 
+class InProcessClient:
+    def __init__(self, app):
+        self.app = app
+        self.cookies = httpx.Cookies()
+
+    def request(self, method, path, **kwargs):
+        async def send():
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=self.app),
+                base_url="http://testserver",
+                cookies=self.cookies,
+            ) as client:
+                response = await client.request(method, path, **kwargs)
+                self.cookies.update(client.cookies)
+                return response
+
+        return asyncio.run(send())
+
+    def get(self, path, **kwargs):
+        return self.request("GET", path, **kwargs)
+
+    def post(self, path, **kwargs):
+        return self.request("POST", path, **kwargs)
+
+
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setattr(auth, "send_verification_email", lambda *args: None)
-    monkeypatch.setattr(auth, "send_password_reset_email", lambda *args: None)
+    async def noop_email(*_args):
+        return None
+
+    monkeypatch.setattr(auth, "send_verification_email", noop_email)
+    monkeypatch.setattr(auth, "send_password_reset_email", noop_email)
     app = FastAPI()
     app.include_router(auth.router)
 
@@ -26,11 +55,22 @@ def client(monkeypatch):
         yield object()
 
     app.dependency_overrides[auth.get_db] = fake_get_db
-    app.dependency_overrides[get_current_user] = lambda: test_user
-    monkeypatch.setenv("FRONTEND_URL", "https://frontend.example")
+    async def fake_get_current_user():
+        return test_user
 
-    with TestClient(app) as test_client:
-        yield test_client
+    app.dependency_overrides[get_current_user] = fake_get_current_user
+    monkeypatch.setenv("FRONTEND_URL", "https://frontend.example")
+    monkeypatch.setattr(
+        auth,
+        "decode_token",
+        lambda _token: {
+            "exp": datetime.now(timezone.utc).timestamp() + 7 * 24 * 60 * 60,
+            "type": "refresh",
+            "sid": "session-id",
+        },
+    )
+
+    yield InProcessClient(app)
 
 
 test_user = SimpleNamespace(
@@ -92,11 +132,13 @@ def test_login(client, monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "access_token": "access-token",
-        "refresh_token": "refresh-token",
-        "token_type": "bearer",
-    }
+    assert response.json() == {"token_type": "bearer"}
+    cookies = response.headers.get_list("set-cookie")
+    assert len(cookies) == 2
+    assert any(cookie.startswith("relay_access_token=") and "httponly" in cookie.lower() for cookie in cookies)
+    assert any(cookie.startswith("relay_refresh_token=") and "httponly" in cookie.lower() and "path=/auth" in cookie.lower() for cookie in cookies)
+    assert "access-token" not in response.text
+    assert "refresh-token" not in response.text
 
 
 def test_login_rejects_invalid_credentials(client, monkeypatch):
@@ -133,31 +175,36 @@ def test_login_requests_email_verification(client, monkeypatch):
 
 
 def test_refresh(client, monkeypatch):
-    async def refresh_access_token(token):
-        return "new-access-token"
+    async def refresh_access_token(token, session):
+        assert token == "refresh-token"
+        return "new-access-token", "rotated-refresh-token"
 
     monkeypatch.setattr(auth, "refresh_access_token", refresh_access_token)
-    response = client.post(
-        "/auth/refresh", json={"refresh_token": "refresh-token"}
-    )
+    client.cookies.set("relay_refresh_token", "refresh-token", path="/auth")
+    response = client.post("/auth/refresh")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "access_token": "new-access-token",
-        "token_type": "bearer",
-    }
+    assert response.json() == {"token_type": "bearer"}
+    cookies = response.headers.get_list("set-cookie")
+    assert any(cookie.startswith("relay_access_token=new-access-token") for cookie in cookies)
+    assert any(cookie.startswith("relay_refresh_token=rotated-refresh-token") for cookie in cookies)
+    assert "new-access-token" not in response.text
+    assert "rotated-refresh-token" not in response.text
 
 
 def test_refresh_rejects_invalid_token(client, monkeypatch):
-    async def refresh_access_token(token):
+    async def refresh_access_token(token, session):
         raise ValueError("Invalid refresh token")
 
     monkeypatch.setattr(auth, "refresh_access_token", refresh_access_token)
-    response = client.post(
-        "/auth/refresh", json={"refresh_token": "invalid"}
-    )
+    client.cookies.set("relay_refresh_token", "invalid", path="/auth")
+    response = client.post("/auth/refresh")
 
     assert response.status_code == 401
+    assert any(
+        cookie.startswith("relay_refresh_token=") and "max-age=0" in cookie.lower()
+        for cookie in response.headers.get_list("set-cookie")
+    )
 
 
 def test_me_and_logout(client):
@@ -168,6 +215,26 @@ def test_me_and_logout(client):
     assert me.json()["id"] == str(test_user.id)
     assert logout.status_code == 200
     assert logout.json() == {"message": "Logged out successfully"}
+
+
+def test_logout_revokes_refresh_session_and_clears_both_cookies(client, monkeypatch):
+    revoked = []
+
+    async def revoke_refresh_session(session_id, session):
+        revoked.append(session_id)
+        return True
+
+    monkeypatch.setattr(auth, "revoke_refresh_session", revoke_refresh_session)
+    client.cookies.set("relay_refresh_token", "refresh-token", path="/auth")
+    client.cookies.set("relay_access_token", "access-token", path="/")
+
+    response = client.post("/auth/logout")
+
+    assert response.status_code == 200
+    assert revoked == ["session-id"]
+    cleared = response.headers.get_list("set-cookie")
+    assert any(cookie.startswith("relay_access_token=") and "max-age=0" in cookie.lower() for cookie in cleared)
+    assert any(cookie.startswith("relay_refresh_token=") and "max-age=0" in cookie.lower() for cookie in cleared)
 
 
 def test_verify_email(client, monkeypatch):
@@ -343,11 +410,8 @@ def test_google_exchange(client, monkeypatch):
     response = client.post("/auth/google/exchange", json={"code": str(uuid4())})
 
     assert response.status_code == 200
-    assert response.json() == {
-        "access_token": "access-token",
-        "refresh_token": "refresh-token",
-        "token_type": "bearer",
-    }
+    assert response.json() == {"token_type": "bearer"}
+    assert len(response.headers.get_list("set-cookie")) == 2
 
 
 def test_google_exchange_rejects_invalid_session(client, monkeypatch):
@@ -371,11 +435,8 @@ def test_google_signup_completion(client, monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "access_token": "access-token",
-        "refresh_token": "refresh-token",
-        "token_type": "bearer",
-    }
+    assert response.json() == {"token_type": "bearer"}
+    assert len(response.headers.get_list("set-cookie")) == 2
 
 
 def test_google_signup_completion_rejects_invalid_session(client, monkeypatch):

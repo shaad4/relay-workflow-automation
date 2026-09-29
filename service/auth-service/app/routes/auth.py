@@ -192,19 +192,26 @@ async def refresh_token(
     session: AsyncSession = Depends(get_db),
 ):
     if not refresh_cookie:
-        raise HTTPException(status_code=401, detail="Refresh session is missing")
+        error_response = JSONResponse(
+            status_code=401,
+            content={"detail": "Refresh session is missing"},
+        )
+        clear_access_cookie(error_response)
+        clear_refresh_cookie(error_response)
+        return error_response
     try:
         access_token, next_refresh_token = await refresh_access_token(
             refresh_cookie,
             session,
         )
     except ValueError as exc:
-        clear_access_cookie(response)
-        clear_refresh_cookie(response)
-        raise HTTPException(
+        error_response = JSONResponse(
             status_code=401,
-            detail=str(exc),
+            content={"detail": str(exc)},
         )
+        clear_access_cookie(error_response)
+        clear_refresh_cookie(error_response)
+        return error_response
 
     set_access_cookie(response, access_token)
     set_refresh_cookie(response, next_refresh_token)

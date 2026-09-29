@@ -263,13 +263,37 @@ def test_delete_workflow_returns_false_when_missing_and_deletes_when_found():
         service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, missing_session)
     ) is False
 
-    found = SimpleNamespace(id=WORKFLOW_ID)
+    found = SimpleNamespace(id=WORKFLOW_ID, status="draft")
     session = FakeSession([Result(scalar=found)])
     assert asyncio.run(
         service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, session)
     ) is True
     assert session.deleted == [found]
     assert session.commits == 1
+
+
+@pytest.mark.parametrize("status", ["draft", "inactive"])
+def test_delete_workflow_accepts_draft_and_inactive(status):
+    workflow = SimpleNamespace(id=WORKFLOW_ID, status=status)
+    session = FakeSession([Result(scalar=workflow)])
+
+    assert asyncio.run(
+        service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, session)
+    ) is True
+    assert session.deleted == [workflow]
+    assert session.commits == 1
+
+
+@pytest.mark.parametrize("status", ["active", "published"])
+def test_delete_workflow_rejects_active_statuses(status):
+    workflow = SimpleNamespace(id=WORKFLOW_ID, status=status)
+    session = FakeSession([Result(scalar=workflow)])
+
+    with pytest.raises(ValueError, match="Only draft or inactive"):
+        asyncio.run(service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, session))
+
+    assert session.deleted == []
+    assert session.commits == 0
 
 
 def test_create_workflow_node_rejects_non_draft_and_adds_valid_node():

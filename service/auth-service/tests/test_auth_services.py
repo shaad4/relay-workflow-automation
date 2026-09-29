@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core import dependencies, jwt as jwt_service, security
 from app.core.exceptions import EmailVerificationRequired
 from app.schemas.auth import LoginRequest, RegisterRequest
-from app.services import auth_service, email_verification_service as verification
+from app.services import auth_service, token_sessions, email_verification_service as verification
 from app.services import password_reset_service as password_reset
 from app.services import google_login, google_oauth, google_signup
 
@@ -110,8 +110,10 @@ def test_login_user_validates_credentials_and_verification(monkeypatch):
     assert session.commits == 1
 
     verified = SimpleNamespace(**{**vars(unverified), "email_verified_at": datetime.now(timezone.utc)})
-    monkeypatch.setattr(auth_service, "create_access_token", lambda claims: "access")
-    monkeypatch.setattr(auth_service, "create_refresh_token", lambda claims: "refresh")
+    async def create_refresh_session(user_id, workspace_id, session):
+        return "access", "refresh"
+
+    monkeypatch.setattr(auth_service, "create_refresh_session", create_refresh_session)
     session = FakeSession([Result(verified)])
     assert asyncio.run(auth_service.login_user(LoginRequest(email=verified.email, password="Secure123!"), session)) == ("access", "refresh")
 
@@ -125,15 +127,105 @@ def test_login_user_rejects_missing_user_or_bad_password(monkeypatch, user):
 
 
 def test_refresh_access_token_checks_token_type(monkeypatch):
-    monkeypatch.setattr(auth_service, "decode_token", lambda token: {"type": "refresh", "sub": "u", "workspace_id": "w"})
-    monkeypatch.setattr(auth_service, "create_access_token", lambda claims: "new-access")
-    assert asyncio.run(auth_service.refresh_access_token("valid-refresh")) == "new-access"
-    monkeypatch.setattr(auth_service, "decode_token", lambda token: {"type": "access"})
-    with pytest.raises(ValueError, match="Invalid refresh token"):
-        asyncio.run(auth_service.refresh_access_token("access-token"))
-    monkeypatch.setattr(auth_service, "decode_token", lambda token: (_ for _ in ()).throw(jwt.InvalidTokenError()))
-    with pytest.raises(ValueError, match="Invalid or expired"):
-        asyncio.run(auth_service.refresh_access_token("invalid"))
+    calls = []
+
+    async def rotate_refresh_token(token, session):
+        calls.append((token, session))
+        return "new-access", "new-refresh"
+
+    monkeypatch.setattr(auth_service, "rotate_refresh_token", rotate_refresh_token)
+    session = object()
+    assert asyncio.run(auth_service.refresh_access_token("valid-refresh", session)) == (
+        "new-access",
+        "new-refresh",
+    )
+    assert calls == [("valid-refresh", session)]
+
+
+def test_create_refresh_session_uses_fixed_session_expiry(monkeypatch):
+    monkeypatch.setattr(token_sessions, "create_access_token", lambda claims: ("access", claims))
+    monkeypatch.setattr(token_sessions, "create_refresh_token", lambda claims, expires_at: ("refresh", claims, expires_at))
+    session = FakeSession()
+
+    access, refresh = asyncio.run(
+        token_sessions.create_refresh_session(uuid4(), uuid4(), session)
+    )
+
+    assert access[0] == "access"
+    assert refresh[0] == "refresh"
+    row = session.added[0]
+    assert row.expires_at > datetime.now(timezone.utc)
+    assert refresh[2] == row.expires_at
+    assert access[1]["sid"] == str(row.id)
+    assert refresh[1]["sid"] == str(row.id)
+    assert session.flushes == 1
+
+
+def test_rotate_refresh_token_rotates_jti_without_extending_session(monkeypatch):
+    session_id = uuid4()
+    user_id = uuid4()
+    workspace_id = uuid4()
+    current_id = uuid4()
+    next_id = uuid4()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=3)
+    row = SimpleNamespace(
+        id=session_id,
+        user_id=user_id,
+        current_token_id=str(current_id),
+        expires_at=expires_at,
+        revoked_at=None,
+    )
+    monkeypatch.setattr(
+        token_sessions,
+        "decode_token",
+        lambda _token: {
+            "type": "refresh",
+            "sid": str(session_id),
+            "sub": str(user_id),
+            "workspace_id": str(workspace_id),
+            "jti": str(current_id),
+        },
+    )
+    monkeypatch.setattr(token_sessions.uuid, "uuid4", lambda: next_id)
+    monkeypatch.setattr(token_sessions, "create_access_token", lambda claims: ("access", claims))
+    monkeypatch.setattr(token_sessions, "create_refresh_token", lambda claims, expires_at: ("refresh", claims, expires_at))
+    session = FakeSession([Result(row)])
+
+    access, refresh = asyncio.run(token_sessions.rotate_refresh_token("current", session))
+
+    assert row.current_token_id == str(next_id)
+    assert session.commits == 1
+    assert access[1]["sid"] == str(session_id)
+    assert refresh[1]["jti"] == str(next_id)
+    assert refresh[2] == expires_at
+
+
+def test_rotate_refresh_token_reuse_revokes_session(monkeypatch):
+    row = SimpleNamespace(
+        id=uuid4(),
+        user_id=uuid4(),
+        current_token_id=str(uuid4()),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=2),
+        revoked_at=None,
+    )
+    monkeypatch.setattr(
+        token_sessions,
+        "decode_token",
+        lambda _token: {
+            "type": "refresh",
+            "sid": str(row.id),
+            "sub": str(row.user_id),
+            "workspace_id": str(uuid4()),
+            "jti": str(uuid4()),
+        },
+    )
+    session = FakeSession([Result(row)])
+
+    with pytest.raises(ValueError, match="reuse detected"):
+        asyncio.run(token_sessions.rotate_refresh_token("reused", session))
+
+    assert row.revoked_at is not None
+    assert session.commits == 1
 
 
 def test_verification_token_success_and_failure_paths(monkeypatch):
@@ -179,7 +271,7 @@ def test_create_and_resend_verification_tokens():
 def test_password_reset_validation_and_success(monkeypatch):
     user = SimpleNamespace(id=uuid4(), password_hash="old")
     token = SimpleNamespace(user_id=user.id, used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=5))
-    session = FakeSession([Result(token), Result(user)])
+    session = FakeSession([Result(token), Result(user), Result()])
     monkeypatch.setattr(password_reset, "hash_password", lambda password: "new-hash")
     asyncio.run(password_reset.reset_password("token", "Secure123!", session))
     assert user.password_hash == "new-hash"
@@ -225,6 +317,9 @@ def test_current_token_and_current_user_dependency(monkeypatch):
     monkeypatch.setattr(dependencies, "decode_token", lambda token: {"type": "access", "sub": str(uuid4())})
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="token")
     assert asyncio.run(dependencies.get_current_token(credentials))["type"] == "access"
+    assert asyncio.run(
+        dependencies.get_current_token(None, access_cookie="cookie-token")
+    )["type"] == "access"
 
     for decode, message in [
         (lambda token: (_ for _ in ()).throw(jwt.ExpiredSignatureError()), "expired"),
@@ -250,8 +345,10 @@ def test_current_token_and_current_user_dependency(monkeypatch):
 def test_google_login_session_create_consume_and_invalid(monkeypatch):
     user_id = uuid4()
     user = SimpleNamespace(id=user_id, workspace_id=uuid4())
-    monkeypatch.setattr(google_login, "create_access_token", lambda claims: "access")
-    monkeypatch.setattr(google_login, "create_refresh_token", lambda claims: "refresh")
+    async def create_refresh_session(user_id, workspace_id, session):
+        return "access", "refresh"
+
+    monkeypatch.setattr(google_login, "create_refresh_session", create_refresh_session)
 
     created_session = FakeSession()
     login_session = asyncio.run(google_login.create_google_login_session(user_id, created_session))
@@ -280,8 +377,10 @@ def test_google_signup_session_complete_and_rejections(monkeypatch):
         used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=2),
     )
     monkeypatch.setattr(google_signup, "hash_password", lambda password: "hashed")
-    monkeypatch.setattr(google_signup, "create_access_token", lambda claims: "access")
-    monkeypatch.setattr(google_signup, "create_refresh_token", lambda claims: "refresh")
+    async def create_refresh_session(user_id, workspace_id, session):
+        return "access", "refresh"
+
+    monkeypatch.setattr(google_signup, "create_refresh_session", create_refresh_session)
 
     session = FakeSession([Result(session_row), Result(), Result()])
     user, access, refresh = asyncio.run(

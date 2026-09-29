@@ -118,6 +118,68 @@ def test_auth_me_validates_token_and_calls_auth_service(gateway_client, monkeypa
     assert response.headers["x-auth-service"] == "auth"
 
 
+def test_auth_me_accepts_access_cookie_and_forwards_bearer(gateway_client, monkeypatch):
+    token = access_token(monkeypatch)
+    monkeypatch.setattr(
+        "app.dependencies.verify_access_token",
+        lambda received: {"sub": "user-1", "workspace_id": "workspace-1", "type": "access"}
+        if received == token else (_ for _ in ()).throw(ValueError("invalid token")),
+    )
+    calls = fake_upstream(monkeypatch)
+
+    response = gateway_client.get(
+        "/auth/me",
+        headers={"Cookie": f"relay_access_token={token}"},
+    )
+
+    assert response.status_code == 200
+    assert calls[-1]["headers"]["Authorization"] == f"Bearer {token}"
+
+
+def test_cookie_auth_allows_postman_without_origin(gateway_client, monkeypatch):
+    calls = fake_upstream(monkeypatch)
+
+    response = gateway_client.post(
+        "/auth/login",
+        json={"email": "user@example.com", "password": "secret"},
+        headers={"Cookie": "relay_refresh_token=stored-refresh"},
+    )
+
+    assert response.status_code == 200
+    assert len(calls) == 2
+
+
+def test_cookie_auth_rejects_untrusted_origin(gateway_client, monkeypatch):
+    calls = fake_upstream(monkeypatch)
+
+    response = gateway_client.post(
+        "/auth/refresh",
+        headers={
+            "Cookie": "relay_refresh_token=stored-refresh",
+            "Origin": "https://attacker.example",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Untrusted request origin"
+    assert len(calls) == 0
+
+
+def test_cookie_auth_rejects_cross_site_fetch_without_origin(gateway_client, monkeypatch):
+    calls = fake_upstream(monkeypatch)
+
+    response = gateway_client.post(
+        "/auth/refresh",
+        headers={
+            "Cookie": "relay_refresh_token=stored-refresh",
+            "Sec-Fetch-Site": "cross-site",
+        },
+    )
+
+    assert response.status_code == 403
+    assert len(calls) == 0
+
+
 def test_gateway_to_auth_service_me_integration(monkeypatch):
     from fastapi import FastAPI, Header
     from app import dependencies
