@@ -10,6 +10,7 @@ import {
 import {
   refreshToken,
   getCurrentUser,
+  logoutUser,
 } from "@/services/auth";
 
 const AuthContext = createContext(null);
@@ -38,7 +39,7 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const response = await refreshToken(storedRefreshToken);
+      const response = await refreshToken();
 
       setAccessToken(response.access_token);
       localStorage.setItem("access_token", response.access_token);
@@ -84,7 +85,14 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  function logout() {
+  async function logout() {
+    const token = accessToken;
+    try {
+      if (token) await logoutUser(token);
+    } catch (error) {
+      // Clear the local session even if the server cannot be reached.
+      console.error("Server-side logout failed:", error);
+    }
     setAccessToken(null);
     setUser(null);
 

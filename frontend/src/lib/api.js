@@ -35,9 +35,9 @@ function getErrorMessage(detail) {
   return null;
 }
 
-async function refreshAccessToken() {
+export async function refreshAuthTokens() {
   if (refreshPromise) return refreshPromise;
-  refreshPromise = (async () => {
+  const refresh = async () => {
     const refreshToken = localStorage.getItem("refresh_token");
     if (!refreshToken) return null;
     const response = await fetch(`${API_URL}/auth/refresh`, {
@@ -47,15 +47,25 @@ async function refreshAccessToken() {
     });
     const text = await response.text();
     const data = parseResponse(response, text);
-    if (!response.ok || !data.access_token) {
+    if (!response.ok || !data.access_token || !data.refresh_token) {
       localStorage.removeItem("refresh_token");
+      localStorage.removeItem("access_token");
       window.dispatchEvent(new CustomEvent("relay:session-expired"));
       return null;
     }
     localStorage.setItem("access_token", data.access_token);
+    localStorage.setItem("refresh_token", data.refresh_token);
     window.dispatchEvent(new CustomEvent("relay:access-token", { detail: data.access_token }));
-    return data.access_token;
-  })().finally(() => {
+    return data;
+  };
+  const runRefresh = async () => {
+    if (typeof navigator !== "undefined" && navigator.locks?.request) {
+      return navigator.locks.request("relay-refresh-token", refresh);
+    }
+    return refresh();
+  };
+
+  refreshPromise = runRefresh().finally(() => {
     refreshPromise = null;
   });
   return refreshPromise;
@@ -79,11 +89,11 @@ export async function apiRequest(
 
   const isRefreshRequest = endpoint === "/auth/refresh";
   if (response.status === 401 && !isRefreshRequest && typeof window !== "undefined") {
-    const accessToken = await refreshAccessToken();
-    if (accessToken) {
+    const refreshedTokens = await refreshAuthTokens();
+    if (refreshedTokens?.access_token) {
       const headers = new Headers(options.headers || {});
       if (headers.has("Authorization") || options.headers?.authorization) {
-        headers.set("Authorization", `Bearer ${accessToken}`);
+        headers.set("Authorization", `Bearer ${refreshedTokens.access_token}`);
       }
       response = await request({ ...options, headers: Object.fromEntries(headers.entries()) });
       text = await response.text();

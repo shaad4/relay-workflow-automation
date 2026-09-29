@@ -5,10 +5,10 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.jwt import create_access_token, create_refresh_token
 from app.core.security import hash_password
 from app.models import User, Workspace
 from app.models.google_signup_session import GoogleSignupSession
+from app.services.token_sessions import create_refresh_session
 
 GOOGLE_SIGNUP_SESSION_EXPIRE_MINUTES = 10
 
@@ -152,18 +152,10 @@ async def complete_google_signup(
     signup_session.used_at = datetime.now(timezone.utc)
 
     # 11. Create Relay tokens
-    access_token = create_access_token(
-        {
-            "sub": str(user.id),
-            "workspace_id": str(user.workspace_id),
-        }
-    )
-
-    refresh_token = create_refresh_token(
-        {
-            "sub": str(user.id),
-            "workspace_id": str(user.workspace_id),
-        }
+    access_token, refresh_token = await create_refresh_session(
+        user_id=user.id,
+        workspace_id=user.workspace_id,
+        session=session,
     )
 
     # 12. Commit everything together

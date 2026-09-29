@@ -1,10 +1,13 @@
+from datetime import datetime, timezone
+from uuid import UUID
+
 import jwt
 
 from sqlalchemy import select
 
 from app.core.jwt import decode_token
 from app.db.database import AsyncSessionLocal
-from app.models import User
+from app.models import RefreshSession, User
 from app.grpc.generated.auth import auth_pb2
 from app.grpc.generated.auth import auth_pb2_grpc
 
@@ -31,13 +34,33 @@ class AuthInternalService(auth_pb2_grpc.AuthInternalServiceServicer):
                     workspace_id="",
                 )
 
+            session_id = payload.get("sid")
+            if session_id:
+                parsed_session_id = UUID(session_id)
+                parsed_user_id = UUID(user_id)
+                async with AsyncSessionLocal() as session:
+                    result = await session.execute(
+                        select(RefreshSession).where(
+                            RefreshSession.id == parsed_session_id,
+                            RefreshSession.user_id == parsed_user_id,
+                            RefreshSession.revoked_at.is_(None),
+                            RefreshSession.expires_at > datetime.now(timezone.utc),
+                        )
+                    )
+                    if result.scalar_one_or_none() is None:
+                        return auth_pb2.ValidateTokenResponse(
+                            valid=False,
+                            user_id="",
+                            workspace_id="",
+                        )
+
             return auth_pb2.ValidateTokenResponse(
                 valid=True,
                 user_id=user_id,
                 workspace_id=workspace_id,
             )
 
-        except jwt.InvalidTokenError:
+        except (jwt.InvalidTokenError, TypeError, ValueError):
             return auth_pb2.ValidateTokenResponse(
                 valid=False,
                 user_id="",

@@ -91,9 +91,9 @@ export default function ProfileMenu({ open, onClose, positionClass = "bottom-ful
 
   if (!open) return null;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     handleClose();
-    logout();
+    await logout();
     router.replace("/login");
   };
 

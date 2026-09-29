@@ -7,7 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
-from app.models import PasswordResetToken, User
+from app.models import PasswordResetToken, RefreshSession, User
 
 load_dotenv()
 
@@ -115,5 +115,13 @@ async def reset_password(
 
     reset_token.used_at = now
 
-    await session.commit()
+    await session.execute(
+        update(RefreshSession)
+        .where(
+            RefreshSession.user_id == user.id,
+            RefreshSession.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
 
+    await session.commit()

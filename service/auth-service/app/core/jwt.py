@@ -19,10 +19,11 @@ def create_token(
     data: dict,
     expires_minutes: int,
     token_type: str,
+    expires_at: datetime | None = None,
 ) -> str:
     payload = data.copy()
 
-    expire = datetime.now(timezone.utc) + timedelta(
+    expire = expires_at or datetime.now(timezone.utc) + timedelta(
         minutes=expires_minutes
     )
 
@@ -43,11 +44,15 @@ def create_access_token(data: dict) -> str:
     )
 
 
-def create_refresh_token(data: dict) -> str:
+def create_refresh_token(
+    data: dict,
+    expires_at: datetime | None = None,
+) -> str:
     return create_token(
         data=data,
         expires_minutes=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60,
         token_type="refresh",
+        expires_at=expires_at,
     )
 
 def decode_token(token: str) -> dict:

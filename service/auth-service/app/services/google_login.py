@@ -4,9 +4,9 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.jwt import create_access_token, create_refresh_token
 from app.models import User
 from app.models.google_login_session import GoogleLoginSession
+from app.services.token_sessions import create_refresh_session
 
 GOOGLE_LOGIN_SESSION_EXPIRE_MINUTES = 5
 
@@ -76,18 +76,10 @@ async def consume_google_login_session(
 
     login_session.used_at = datetime.now(timezone.utc)
 
-    access_token = create_access_token(
-        {
-            "sub": str(user.id),
-            "workspace_id": str(user.workspace_id),
-        }
-    )
-
-    refresh_token = create_refresh_token(
-        {
-            "sub": str(user.id),
-            "workspace_id": str(user.workspace_id),
-        }
+    access_token, refresh_token = await create_refresh_session(
+        user_id=user.id,
+        workspace_id=user.workspace_id,
+        session=session,
     )
 
     await session.commit()

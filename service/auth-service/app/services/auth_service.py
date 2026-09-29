@@ -1,13 +1,12 @@
-import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import EmailVerificationRequired
-from app.core.jwt import create_access_token, create_refresh_token, decode_token
 from app.core.security import hash_password, verify_password
 from app.models import User, Workspace
 from app.schemas.auth import LoginRequest, RegisterRequest
 from app.services.email_verification_service import create_verification_token
+from app.services.token_sessions import create_refresh_session, rotate_refresh_token
 
 
 async def register_user(
@@ -98,47 +97,20 @@ async def login_user(
             user_name=user.name,
         )
 
-    access_token = create_access_token(
-        {
-            "sub": str(user.id),
-            "workspace_id": str(
-                user.workspace_id
-            ),
-        }
+    access_token, refresh_token = await create_refresh_session(
+        user_id=user.id,
+        workspace_id=user.workspace_id,
+        session=session,
     )
-
-    refresh_token = create_refresh_token(
-        {
-            "sub": str(user.id),
-            "workspace_id": str(
-                user.workspace_id
-            ),
-        }
-    )
+    await session.commit()
 
     return access_token, refresh_token
 
 
 async def refresh_access_token(
-        refresh_token: str,
-) -> str:
-    
-    try:
-        payload = decode_token(refresh_token)
-    except jwt.InvalidTokenError:
-        raise ValueError("Invalid or expired refresh token")
-
-    if payload.get("type") != "refresh":
-        raise ValueError("Invalid refresh token")
-
-
-    access_token = create_access_token(
-        {
-            "sub": payload["sub"],
-            "workspace_id": payload["workspace_id"],
-        }
-    )
-
-    return access_token
+    refresh_token: str,
+    session: AsyncSession,
+) -> tuple[str, str]:
+    return await rotate_refresh_token(refresh_token, session)
     
     

@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, 
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_token, get_current_user
 from app.core.exceptions import EmailVerificationRequired
 from app.db.database import AsyncSessionLocal
 from app.models import User
@@ -56,6 +56,7 @@ from app.services.password_reset_service import (
     create_password_reset_token,
     reset_password,
 )
+from app.services.token_sessions import revoke_refresh_session
 
 load_dotenv()
 
@@ -136,10 +137,14 @@ async def login(
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
 async def refresh_token(
-    data: RefreshTokenRequest
+    data: RefreshTokenRequest,
+    session: AsyncSession = Depends(get_db),
 ):
     try:
-        access_token = await refresh_access_token(data.refresh_token)
+        access_token, next_refresh_token = await refresh_access_token(
+            data.refresh_token,
+            session,
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=401,
@@ -148,6 +153,7 @@ async def refresh_token(
 
     return RefreshTokenResponse(
         access_token=access_token,
+        refresh_token=next_refresh_token,
         token_type="bearer",
     )
 
@@ -160,7 +166,15 @@ async def get_me(
 @router.post("/logout")
 async def logout(
     current_user: User = Depends(get_current_user),
+    payload: dict = Depends(get_current_token),
+    session: AsyncSession = Depends(get_db),
 ):
+    revoked = await revoke_refresh_session(payload.get("sid"), session)
+    if not revoked:
+        raise HTTPException(
+            status_code=401,
+            detail="No active refresh session was found for this token",
+        )
     return {
         "message": "Logged out successfully"
     }

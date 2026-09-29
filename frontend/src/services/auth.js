@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/api";
+import { apiRequest, refreshAuthTokens } from "@/lib/api";
 
 export async function registerUser(data) {
   return apiRequest("/auth/register", {
@@ -14,18 +14,16 @@ export async function loginUser(data) {
   });
 }
 
-export async function refreshToken(refresh_token) {
-  return apiRequest("/auth/refresh", {
-    method: "POST",
-    body: JSON.stringify({
-      refresh_token,
-    }),
-  });
+export async function refreshToken() {
+  const tokens = await refreshAuthTokens();
+  if (!tokens) throw new Error("Your session has expired. Please sign in again.");
+  return tokens;
 }
 
-export async function logoutUser() {
+export async function logoutUser(token) {
   return apiRequest("/auth/logout", {
     method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 }
 

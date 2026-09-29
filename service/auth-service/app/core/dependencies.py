@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 import jwt
@@ -8,13 +9,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.jwt import decode_token
 from app.db.database import AsyncSessionLocal
-from app.models import User
+from app.models import RefreshSession, User
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
 async def get_current_token(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: AsyncSession = Depends(get_db),
 ) -> dict:
 
     if credentials is None:
@@ -50,11 +57,32 @@ async def get_current_token(
             detail="Invalid access token",
         )
 
-    return payload
+    session_id = payload.get("sid")
+    if session_id:
+        try:
+            parsed_session_id = UUID(session_id)
+            parsed_user_id = UUID(payload["sub"])
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid access token",
+            ) from exc
 
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
+        result = await session.execute(
+            select(RefreshSession).where(
+                RefreshSession.id == parsed_session_id,
+                RefreshSession.user_id == parsed_user_id,
+                RefreshSession.revoked_at.is_(None),
+                RefreshSession.expires_at > datetime.now(timezone.utc),
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session has expired or been revoked",
+            )
+
+    return payload
 
 async def get_current_user(
     payload: dict = Depends(get_current_token),
@@ -82,5 +110,3 @@ async def get_current_user(
         )
 
     return user
-
-    
