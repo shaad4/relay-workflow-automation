@@ -1027,12 +1027,37 @@ export default function WorkflowBuilder({
         if (priorSaveState === "failed") throw new Error("Save failed. Publish was not started.");
       }
       if (token && workflowId) {
+        const validation = await validateWorkflow(token, workflowId, versionNumber);
+        if (!validation.valid) {
+          setValidationResult({
+            isValid: false,
+            errors: validation.errors ?? [],
+          });
+          setValidationOpen(true);
+          return;
+        }
         await publishWorkflow(token, workflowId, versionNumber);
       }
       setCurrentVersionStatus("published");
       onRefresh();
     } catch (err) {
       console.error("Publish failed:", err);
+      if (String(err?.message || "").toLowerCase().includes("validation")) {
+        let errors = [{
+          code: "PUBLISH_VALIDATION_FAILED",
+          message: err.message || "Workflow validation failed. Review the workflow requirements and try again.",
+        }];
+
+        try {
+          const validation = await validateWorkflow(token, workflowId, versionNumber);
+          if (validation.errors?.length) errors = validation.errors;
+        } catch (validationError) {
+          console.warn("Could not load publish validation details:", validationError);
+        }
+
+        setValidationResult({ isValid: false, errors });
+        setValidationOpen(true);
+      }
     } finally {
       setIsPublishing(false);
     }
