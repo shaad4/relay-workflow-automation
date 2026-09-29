@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 function PlusIcon(props) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
@@ -36,24 +34,15 @@ export default function WorkflowEmptyState({ onCreateNew }) {
         Create your first workflow to automate a process.
       </p>
 
-      {onCreateNew ? (
-        <button
-          type="button"
-          onClick={onCreateNew}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[14px] transition-all duration-100 ease-out focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/40 cursor-pointer shadow-none"
-        >
+      <button
+        type="button"
+        onClick={onCreateNew}
+        disabled={!onCreateNew}
+        className="inline-flex items-center gap-2 h-9 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[14px] transition-all duration-100 ease-out focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/40 cursor-pointer shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
+      >
           <PlusIcon className="w-4 h-4 stroke-[2]" />
           <span>New Workflow</span>
-        </button>
-      ) : (
-        <Link
-          href="/workflows/new"
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[14px] transition-all duration-100 ease-out focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/40 cursor-pointer shadow-none"
-        >
-          <PlusIcon className="w-4 h-4 stroke-[2]" />
-          <span>New Workflow</span>
-        </Link>
-      )}
+      </button>
     </div>
   );
 }
