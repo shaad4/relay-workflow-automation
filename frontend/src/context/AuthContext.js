@@ -20,34 +20,22 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  async function login(accessToken, refresh_token) {
-    setAccessToken(accessToken);
-    localStorage.setItem("access_token", accessToken);
+  async function login() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
 
-    localStorage.setItem("refresh_token", refresh_token);
+    const currentUser = await getCurrentUser();
 
-    const currentUser = await getCurrentUser(accessToken);
-
+    setAccessToken(true);
     setUser(currentUser);
   }
 
   async function restoreSession() {
-    const storedRefreshToken = localStorage.getItem("refresh_token");
-
-    if (!storedRefreshToken) {
-      return;
-    }
-
     try {
-      const response = await refreshToken();
+      await refreshToken();
+      const currentUser = await getCurrentUser();
 
-      setAccessToken(response.access_token);
-      localStorage.setItem("access_token", response.access_token);
-
-      const currentUser = await getCurrentUser(
-        response.access_token
-      );
-
+      setAccessToken(true);
       setUser(currentUser);
     } catch {
       localStorage.removeItem("access_token");
@@ -61,6 +49,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     async function initializeAuth() {
       try {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
         await restoreSession();
       } finally {
         setIsInitializing(false);
@@ -71,9 +61,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const handleAccessToken = (event) => setAccessToken(event.detail);
+    const handleAccessToken = () => setAccessToken(true);
     const handleSessionExpired = () => {
       localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
       setAccessToken(null);
       setUser(null);
     };
@@ -88,7 +79,7 @@ export function AuthProvider({ children }) {
   async function logout() {
     const token = accessToken;
     try {
-      if (token) await logoutUser(token);
+      if (token) await logoutUser();
     } catch (error) {
       // Clear the local session even if the server cannot be reached.
       console.error("Server-side logout failed:", error);
@@ -96,8 +87,8 @@ export function AuthProvider({ children }) {
     setAccessToken(null);
     setUser(null);
 
-    localStorage.removeItem("refresh_token");
     localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
   }
 
   return (

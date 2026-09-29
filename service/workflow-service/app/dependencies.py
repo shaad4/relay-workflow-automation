@@ -1,11 +1,14 @@
-from fastapi import Header, HTTPException
+from fastapi import Cookie, Header, HTTPException
 
 from app.grpc.auth_client import AuthGrpcClient
 
 
 async def get_current_identity(
     authorization: str | None = Header(default=None),
+    access_cookie: str | None = Cookie(default=None, alias="relay_access_token"),
 ) -> dict:
+    if not authorization and access_cookie:
+        authorization = f"Bearer {access_cookie}"
     if not authorization:
         raise HTTPException(
             status_code=401,

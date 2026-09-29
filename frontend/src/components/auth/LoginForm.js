@@ -93,15 +93,12 @@ export default function LoginForm() {
     setIsUnverified(false);
 
     try {
-      const response = await loginUser({
+      await loginUser({
         email: formData.email.trim(),
         password: formData.password,
       });
 
-      await login(
-        response.access_token,
-        response.refresh_token
-      );
+      await login();
 
       setIsSubmitting(false);
       router.push("/dashboard");

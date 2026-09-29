@@ -39,8 +39,8 @@ function GoogleCallbackContent() {
       try {
         const response = await getExchangePromise(code);
 
-        if (response?.access_token && response?.refresh_token) {
-          await login(response.access_token, response.refresh_token);
+        if (response?.token_type === "bearer") {
+          await login();
           // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.href = "/dashboard";
         } else if (response?.signup_session_id || response?.session) {
@@ -57,28 +57,15 @@ function GoogleCallbackContent() {
         const msg = err?.message || "";
         const lowerMsg = msg.toLowerCase();
 
-        const existingRefreshToken =
-          typeof window !== "undefined" && localStorage.getItem("refresh_token");
-
         if (
           lowerMsg.includes("already been used") ||
           lowerMsg.includes("already used") ||
           lowerMsg.includes("session has already")
         ) {
-          if (existingRefreshToken) {
-            // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-            window.location.href = "/dashboard";
-            return;
-          }
           setError(
             "This Google login session has already been used. Please try signing in again."
           );
         } else if (lowerMsg.includes("expired") || lowerMsg.includes("invalid")) {
-          if (existingRefreshToken) {
-            // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-            window.location.href = "/dashboard";
-            return;
-          }
           setError(
             "Your Google login session has expired or is invalid. Please sign in again."
           );

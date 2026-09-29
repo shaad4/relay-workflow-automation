@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,17 +21,18 @@ async def get_db():
 
 async def get_current_token(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    access_cookie: str | None = Cookie(default=None, alias="relay_access_token"),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
-
-    if credentials is None:
+    token = credentials.credentials if credentials else access_cookie
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
         )
 
     try:
-        payload = decode_token(credentials.credentials)
+        payload = decode_token(token)
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(

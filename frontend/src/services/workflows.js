@@ -1,11 +1,7 @@
 import { apiRequest } from "@/lib/api";
 
-function getHeaders(token) {
-  return token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
+function getHeaders() {
+  return {};
 }
 
 export async function getWorkflows(token) {

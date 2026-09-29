@@ -17,11 +17,16 @@ async def current_user(
     request: Request,
     identity: dict = Depends(get_current_identity),
 ):
+    authorization = request.headers.get("Authorization")
+    if not authorization:
+        access_cookie = request.cookies.get("relay_access_token")
+        if access_cookie:
+            authorization = f"Bearer {access_cookie}"
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{AUTH_SERVICE_URL}/auth/me",
             headers={
-                "Authorization": request.headers.get("Authorization", ""),
+                "Authorization": authorization or "",
             },
         )
 

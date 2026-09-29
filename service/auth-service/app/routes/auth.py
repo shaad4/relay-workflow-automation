@@ -1,11 +1,14 @@
 import os
+from datetime import datetime, timezone
 
+import jwt
 from dotenv import load_dotenv
-from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Query
+
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_token, get_current_user
+from app.core.dependencies import get_current_user
 from app.core.exceptions import EmailVerificationRequired
 from app.db.database import AsyncSessionLocal
 from app.models import User
@@ -18,7 +21,6 @@ from app.schemas.auth import (
     GoogleSignupCompleteResponse,
     LoginRequest,
     LoginResponse,
-    RefreshTokenRequest,
     RefreshTokenResponse,
     RegisterRequest,
     RegisterResponse,
@@ -57,10 +59,57 @@ from app.services.password_reset_service import (
     reset_password,
 )
 from app.services.token_sessions import revoke_refresh_session
+from app.core.jwt import decode_token
 
 load_dotenv()
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+def set_access_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key="relay_access_token",
+        value=token,
+        max_age=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")) * 60,
+        httponly=True,
+        secure=os.getenv("COOKIE_SECURE", "true").lower() == "true",
+        samesite=os.getenv("COOKIE_SAMESITE", "lax").lower(),
+        path="/",
+    )
+
+
+def clear_access_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key="relay_access_token",
+        path="/",
+        secure=os.getenv("COOKIE_SECURE", "true").lower() == "true",
+        httponly=True,
+        samesite=os.getenv("COOKIE_SAMESITE", "lax").lower(),
+    )
+
+
+def set_refresh_cookie(response: Response, token: str) -> None:
+    payload = decode_token(token)
+    max_age = max(0, int(payload["exp"] - datetime.now(timezone.utc).timestamp()))
+    response.set_cookie(
+        key="relay_refresh_token",
+        value=token,
+        max_age=max_age,
+        httponly=True,
+        secure=os.getenv("COOKIE_SECURE", "true").lower() == "true",
+        samesite=os.getenv("COOKIE_SAMESITE", "lax").lower(),
+        path="/auth",
+    )
+
+
+def clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key="relay_refresh_token",
+        path="/auth",
+        secure=os.getenv("COOKIE_SECURE", "true").lower() == "true",
+        httponly=True,
+        samesite=os.getenv("COOKIE_SAMESITE", "lax").lower(),
+    )
 
 async def get_db():
     async with AsyncSessionLocal() as session:
@@ -96,6 +145,7 @@ async def register(
 async def login(
     data: LoginRequest,
     background_tasks: BackgroundTasks,
+    response: Response,
     session: AsyncSession = Depends(get_db),
 ):
     try:
@@ -129,31 +179,36 @@ async def login(
         )
 
 
+    set_access_cookie(response, access_token)
+    set_refresh_cookie(response, refresh_token)
     return LoginResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
         token_type="bearer",
     )
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
 async def refresh_token(
-    data: RefreshTokenRequest,
+    response: Response,
+    refresh_cookie: str | None = Cookie(default=None, alias="relay_refresh_token"),
     session: AsyncSession = Depends(get_db),
 ):
+    if not refresh_cookie:
+        raise HTTPException(status_code=401, detail="Refresh session is missing")
     try:
         access_token, next_refresh_token = await refresh_access_token(
-            data.refresh_token,
+            refresh_cookie,
             session,
         )
     except ValueError as exc:
+        clear_access_cookie(response)
+        clear_refresh_cookie(response)
         raise HTTPException(
             status_code=401,
             detail=str(exc),
         )
 
+    set_access_cookie(response, access_token)
+    set_refresh_cookie(response, next_refresh_token)
     return RefreshTokenResponse(
-        access_token=access_token,
-        refresh_token=next_refresh_token,
         token_type="bearer",
     )
 
@@ -165,16 +220,20 @@ async def get_me(
 
 @router.post("/logout")
 async def logout(
-    current_user: User = Depends(get_current_user),
-    payload: dict = Depends(get_current_token),
+    response: Response,
+    refresh_cookie: str | None = Cookie(default=None, alias="relay_refresh_token"),
     session: AsyncSession = Depends(get_db),
 ):
-    revoked = await revoke_refresh_session(payload.get("sid"), session)
-    if not revoked:
-        raise HTTPException(
-            status_code=401,
-            detail="No active refresh session was found for this token",
-        )
+    if refresh_cookie:
+        try:
+            refresh_payload = decode_token(refresh_cookie)
+            if refresh_payload.get("type") == "refresh":
+                await revoke_refresh_session(refresh_payload.get("sid"), session)
+        except (jwt.InvalidTokenError, KeyError, TypeError, ValueError):
+            # Logout still clears browser cookies when a token is expired or malformed.
+            pass
+    clear_access_cookie(response)
+    clear_refresh_cookie(response)
     return {
         "message": "Logged out successfully"
     }
@@ -400,6 +459,7 @@ async def google_callback(
 )
 async def exchange_google_login_code(
     data: GoogleLoginExchangeRequest,
+    response: Response,
     session: AsyncSession = Depends(get_db),
 ):
     try:
@@ -416,9 +476,9 @@ async def exchange_google_login_code(
             detail=str(exc),
         )
 
+    set_access_cookie(response, access_token)
+    set_refresh_cookie(response, refresh_token)
     return GoogleLoginExchangeResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
         token_type="bearer",
     )
 
@@ -429,6 +489,7 @@ async def exchange_google_login_code(
 )
 async def complete_google_signup_route(
     data: GoogleSignupCompleteRequest,
+    response: Response,
     session: AsyncSession = Depends(get_db),
 ):
     try:
@@ -446,8 +507,8 @@ async def complete_google_signup_route(
             detail=str(exc),
         )
 
+    set_access_cookie(response, access_token)
+    set_refresh_cookie(response, refresh_token)
     return GoogleSignupCompleteResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
         token_type="bearer",
     )

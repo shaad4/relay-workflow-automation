@@ -63,8 +63,8 @@ function WorkspaceSetupContent() {
     try {
       const response = await completeGoogleSignup(session, trimmedName);
 
-      if (response?.access_token && response?.refresh_token) {
-        await login(response.access_token, response.refresh_token);
+      if (response?.token_type === "bearer") {
+        await login();
       }
 
       setIsSubmitting(false);

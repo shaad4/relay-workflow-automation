@@ -86,18 +86,10 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    access_token: str
-    refresh_token: str
     token_type: str
 
 
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-
 class RefreshTokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
     token_type: str
 
 
@@ -142,8 +134,6 @@ class GoogleSignupCompleteRequest(BaseModel):
 
 
 class GoogleSignupCompleteResponse(BaseModel):
-    access_token: str
-    refresh_token: str
     token_type: str = "bearer"
 
 
@@ -152,6 +142,4 @@ class GoogleLoginExchangeRequest(BaseModel):
 
 
 class GoogleLoginExchangeResponse(BaseModel):
-    access_token: str
-    refresh_token: str
     token_type: str = "bearer"

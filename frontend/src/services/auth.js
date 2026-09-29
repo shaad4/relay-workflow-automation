@@ -20,19 +20,15 @@ export async function refreshToken() {
   return tokens;
 }
 
-export async function logoutUser(token) {
+export async function logoutUser() {
   return apiRequest("/auth/logout", {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 }
 
-export async function getCurrentUser(token) {
+export async function getCurrentUser() {
   return apiRequest("/auth/me", {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
   });
 }
 

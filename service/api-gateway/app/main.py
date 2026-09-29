@@ -1,7 +1,8 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.auth import router as auth_router
@@ -30,6 +31,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def enforce_cookie_origin(request: Request, call_next):
+    if (
+        request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"}
+        and (
+            request.cookies.get("relay_access_token")
+            or request.cookies.get("relay_refresh_token")
+        )
+    ):
+        origin = request.headers.get("origin")
+        fetch_site = request.headers.get("sec-fetch-site")
+        origin_is_untrusted = origin and origin.rstrip("/") not in {
+            configured.rstrip("/") for configured in allowed_origins
+        }
+        fetch_is_cross_site = not origin and fetch_site == "cross-site"
+        if origin_is_untrusted or fetch_is_cross_site:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Untrusted request origin"},
+            )
+    return await call_next(request)
+
 app.include_router(auth_router)
 app.include_router(public_auth_router)
 app.include_router(workflows_router)
@@ -41,5 +65,3 @@ async def health():
         "status": "ok",
         "service": "api-gateway",
     }
-
-
