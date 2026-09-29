@@ -19,6 +19,7 @@ export default function WorkflowList({ workflows = [], onDeleteSuccess, onWorkfl
   const { accessToken } = useAuth();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
@@ -28,15 +29,13 @@ export default function WorkflowList({ workflows = [], onDeleteSuccess, onWorkfl
       await deleteWorkflow(accessToken, deleteTarget.id);
       const deletedId = deleteTarget.id;
       setDeleteTarget(null);
+      setDeleteError("");
       if (onDeleteSuccess) {
         onDeleteSuccess(deletedId);
       }
     } catch (err) {
       console.error("Failed to delete workflow:", err);
-      if (onDeleteSuccess) {
-        onDeleteSuccess(deleteTarget.id);
-      }
-      setDeleteTarget(null);
+      setDeleteError(err?.message || "Unable to delete workflow.");
     } finally {
       setIsDeleting(false);
     }
@@ -51,8 +50,9 @@ export default function WorkflowList({ workflows = [], onDeleteSuccess, onWorkfl
               workflow={wf}
               onWorkflowStatusChange={onWorkflowStatusChange}
               onDeleteRequest={(target) => {
-                const isDraft = String(target?.status || "").toLowerCase() === "draft";
-                if (isDraft) {
+                const status = String(target?.status || "").toLowerCase();
+                if (status === "draft" || status === "inactive") {
+                  setDeleteError("");
                   setDeleteTarget(target);
                 }
               }}
@@ -78,11 +78,13 @@ export default function WorkflowList({ workflows = [], onDeleteSuccess, onWorkfl
               </div>
             </div>
 
+            {deleteError && <p role="alert" className="mb-3 text-[12px] text-red-500">{deleteError}</p>}
+
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--border-subtle)]">
               <button
                 type="button"
                 disabled={isDeleting}
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => { setDeleteError(""); setDeleteTarget(null); }}
                 className="h-8 px-3 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--elevated)] text-[12px] font-medium text-[var(--text-primary)] transition-colors cursor-pointer disabled:opacity-50"
               >
                 Cancel

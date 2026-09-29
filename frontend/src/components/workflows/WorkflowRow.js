@@ -178,6 +178,7 @@ export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatu
 
   const normalizedStatus = String(status).toLowerCase();
   const isDraft = normalizedStatus === "draft";
+  const canDelete = isDraft || normalizedStatus === "inactive";
   const canToggleStatus = normalizedStatus === "active" || normalizedStatus === "inactive" || normalizedStatus === "published";
   const isActive = normalizedStatus === "active" || normalizedStatus === "published";
 
@@ -297,7 +298,7 @@ export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatu
 
               <div className="my-1 border-t border-[var(--border-subtle)]" />
 
-              {isDraft ? (
+              {canDelete ? (
                 <button
                   type="button"
                   role="menuitem"
@@ -318,7 +319,7 @@ export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatu
                   type="button"
                   role="menuitem"
                   disabled
-                  title="Only draft workflows can be deleted"
+                  title="Only draft or inactive workflows can be deleted. Deactivate active workflows first."
                   onClick={(e) => {
                     e.stopPropagation();
                   }}

@@ -104,6 +104,7 @@ export default function WorkflowToolbar({
   const normalizedWorkflowStatus = String(workflowStatus).toLowerCase() === "published"
     ? "active"
     : String(workflowStatus).toLowerCase();
+  const canDeleteWorkflow = normalizedWorkflowStatus === "draft" || normalizedWorkflowStatus === "inactive";
 
   useEffect(() => {
     if (!workflowMenuOpen) return;
@@ -230,7 +231,7 @@ export default function WorkflowToolbar({
               )}
               <button type="button" role="menuitem" onClick={() => { setWorkflowMenuOpen(false); onNavigate?.("/workflows"); }} className="w-full rounded-md px-2.5 py-2 text-left text-[12px] text-[var(--text-secondary)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)]">Back to workflows</button>
               <div className="my-1 border-t border-[var(--border-subtle)]" />
-              <button type="button" role="menuitem" disabled={normalizedWorkflowStatus !== "draft"} title={normalizedWorkflowStatus !== "draft" ? "Only draft workflows can be deleted" : "Delete this workflow"} onClick={() => { setWorkflowMenuOpen(false); setDeleteWorkflowError(""); setShowDeleteConfirm(true); }} className="w-full rounded-md px-2.5 py-2 text-left text-[12px] text-red-500 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40">Delete workflow</button>
+              <button type="button" role="menuitem" disabled={!canDeleteWorkflow} title={!canDeleteWorkflow ? "Only draft or inactive workflows can be deleted. Deactivate active workflows first." : "Delete this workflow"} onClick={() => { setWorkflowMenuOpen(false); setDeleteWorkflowError(""); setShowDeleteConfirm(true); }} className="w-full rounded-md px-2.5 py-2 text-left text-[12px] text-red-500 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40">Delete workflow</button>
             </div>
           )}
         </div>

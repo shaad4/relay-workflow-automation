@@ -121,6 +121,12 @@ async def delete_workflow(
     if workflow is None:
         return False
 
+    if str(workflow.status).lower() not in {"draft", "inactive"}:
+        raise ValueError(
+            "Only draft or inactive workflows can be deleted. "
+            "Deactivate an active workflow first."
+        )
+
     try:
         await session.delete(workflow)
         await session.commit()
@@ -1019,4 +1025,3 @@ async def activate_workflow(
         raise
 
     return workflow
-
