@@ -653,14 +653,17 @@ export default function WorkflowBuilder({
     if (!contextMenu) return;
     const closeMenu = () => setContextMenu(null);
     const onMouseDown = (event) => {
-      if (!event.target.closest("[data-workflow-context-menu]")) closeMenu();
+      const target = event.target;
+      if (target instanceof Element && !target.closest("[data-workflow-context-menu]")) {
+        closeMenu();
+      }
     };
     const onKeyDown = (event) => { if (event.key === "Escape") closeMenu(); };
-    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("pointerdown", onMouseDown);
     window.addEventListener("scroll", closeMenu, true);
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("pointerdown", onMouseDown);
       window.removeEventListener("scroll", closeMenu, true);
       window.removeEventListener("keydown", onKeyDown);
     };
