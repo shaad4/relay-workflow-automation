@@ -46,7 +46,7 @@ def create_access_token(data: dict) -> str:
 def create_refresh_token(data: dict) -> str:
     return create_token(
         data=data,
-        expires_minutes=REFRESH_TOKEN_EXPIRE_DAYS * 24,
+        expires_minutes=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60,
         token_type="refresh",
     )
 

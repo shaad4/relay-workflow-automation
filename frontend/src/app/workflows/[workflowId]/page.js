@@ -68,7 +68,7 @@ function selectVersion(versions, workflow) {
 export default function WorkflowBuilderPage({ params }) {
   const resolvedParams = use(params);
   const workflowId = resolvedParams?.workflowId ?? "";
-  const { accessToken, token: legacyToken } = useAuth();
+  const { accessToken, token: legacyToken, isInitializing } = useAuth();
   const token = accessToken || legacyToken;
 
   const [workflow, setWorkflow] = useState(null);
@@ -89,6 +89,13 @@ export default function WorkflowBuilderPage({ params }) {
     if (!workflowId) {
       setError("Missing workflow ID");
       setIsLoading(false);
+      return;
+    }
+
+    // AuthProvider restores the session asynchronously on page load. Avoid
+    // turning that temporary empty token into a permanent workflow error.
+    if (isInitializing) {
+      setIsLoading(true);
       return;
     }
 
@@ -134,7 +141,7 @@ export default function WorkflowBuilderPage({ params }) {
     } finally {
       setIsLoading(false);
     }
-  }, [token, workflowId]);
+  }, [token, workflowId, isInitializing]);
 
   const selectWorkflowVersion = useCallback(async (versionNumber) => {
     if (!token || !workflowId || Number(versionNumber) === Number(version?.version_number ?? version?.version)) return;
@@ -161,8 +168,9 @@ export default function WorkflowBuilderPage({ params }) {
   }, [token, workflowId, version, versions]);
 
   useEffect(() => {
+    if (isInitializing) return;
     fetchWorkflowData();
-  }, [fetchWorkflowData]);
+  }, [fetchWorkflowData, isInitializing]);
 
   useEffect(() => {
     document.title = workflow?.name ? `${workflow.name} | Workflow Builder | Relay` : "Workflow Builder | Relay";
