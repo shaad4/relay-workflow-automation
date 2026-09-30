@@ -26,6 +26,10 @@ async def get_webhook(request: Request, webhook_id: str):
 async def update_webhook(request: Request, webhook_id: str):
     return await proxy_integration_request(request, webhook_id)
 
+@router.delete("/{webhook_id}/")
+async def delete_webhook(request: Request, webhook_id: str):
+    return await proxy_integration_request(request, webhook_id)
+
 
 async def proxy_integration_request(
     request: Request,

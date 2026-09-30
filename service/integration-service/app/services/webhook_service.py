@@ -125,3 +125,32 @@ async def update_webhook(
         raise
 
     return webhook
+
+
+
+async def delete_webhook(
+    webhook_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    session: AsyncSession,
+) -> bool:
+    result = await session.execute(
+        select(Webhook).where(
+            Webhook.id == webhook_id,
+            Webhook.workspace_id == workspace_id,
+        )
+    )
+
+    webhook = result.scalar_one_or_none()
+
+    if webhook is None:
+        return False
+
+    await session.delete(webhook)
+
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+    return True

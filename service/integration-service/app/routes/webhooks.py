@@ -1,7 +1,7 @@
 import grpc
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
@@ -11,7 +11,8 @@ from app.services.webhook_service import (
     create_webhook,
     list_webhooks,
     get_webhook,
-    update_webhook
+    update_webhook,
+    delete_webhook,
 )
 
 
@@ -159,4 +160,36 @@ async def update_webhook_endpoint(
         )
 
     return webhook
+
+
+@router.delete("/{webhook_id}/", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_webhook_endpoint(
+    webhook_id: str,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        webhook_uuid = uuid.UUID(webhook_id)
+        workspace_id = uuid.UUID(identity["workspace_id"])
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid webhook ID",
+        )
+
+    deleted = await delete_webhook(
+        webhook_id=webhook_uuid,
+        workspace_id=workspace_id,
+        session=session,
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Webhook not found",
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 
