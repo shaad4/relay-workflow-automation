@@ -1,6 +1,8 @@
 import secrets
 import uuid
 
+from pwdlib import PasswordHash
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.grpc.workflow_client import WorkflowGrpcClient
 from app.models.webhook import Webhook
 from app.schemas.webhook import WebhookCreate, WebhookUpdate
+
+password_hash = PasswordHash.recommended()
 
 
 async def validate_workflow_version(
@@ -30,17 +34,27 @@ async def validate_workflow_version(
 def generate_public_token() -> str:
     return secrets.token_urlsafe(32)
 
+def generate_webhook_secret() -> str:
+    return f"rly_whsec_{secrets.token_urlsafe(32)}"
+
 
 async def create_webhook(
     data: WebhookCreate,
     workspace_id: uuid.UUID,
     session: AsyncSession,
-) -> Webhook:
+) -> tuple[Webhook, str | None]:
     await validate_workflow_version(
         workflow_id=data.workflow_id,
         workflow_version_id=data.workflow_version_id,
         workspace_id=workspace_id,
     )
+
+    secret = None
+    secret_hash = None
+
+    if data.authentication_type == "secret":
+        secret = generate_webhook_secret()
+        secret_hash = password_hash.hash(secret)
 
     webhook = Webhook(
         workspace_id=workspace_id,
@@ -51,7 +65,7 @@ async def create_webhook(
         event_name=data.event_name,
         method=data.method,
         authentication_type=data.authentication_type,
-        secret_ref=data.secret_ref,
+        secret_hash=secret_hash,
         is_active=data.is_active,
     )
 
@@ -64,7 +78,7 @@ async def create_webhook(
         await session.rollback()
         raise
 
-    return webhook
+    return webhook, secret
 
 
 async def list_webhooks(

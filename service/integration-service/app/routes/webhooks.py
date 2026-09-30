@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
-from app.schemas.webhook import WebhookCreate, WebhookResponse, WebhookUpdate
+from app.schemas.webhook import WebhookCreate, WebhookResponse, WebhookUpdate, WebhookCreateResponse
 from app.services.webhook_service import (
     create_webhook,
     list_webhooks,
@@ -29,7 +29,7 @@ async def get_db():
 
 @router.post(
     "/",
-    response_model=WebhookResponse,
+    response_model=WebhookCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_webhook_route(
@@ -37,7 +37,6 @@ async def create_webhook_route(
     identity: dict = Depends(get_current_identity),
     session: AsyncSession = Depends(get_db),
 ):
-
     try:
         workspace_id = uuid.UUID(identity["workspace_id"])
     except (ValueError, TypeError):
@@ -47,11 +46,17 @@ async def create_webhook_route(
         )
 
     try:
-        return await create_webhook(
+        webhook, secret = await create_webhook(
             data=data,
             workspace_id=workspace_id,
             session=session,
         )
+
+        response = WebhookCreateResponse.model_validate(webhook)
+        response.secret = secret
+
+        return response
+
     except grpc.aio.AioRpcError as exc:
         if exc.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(
