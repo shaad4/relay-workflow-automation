@@ -30,6 +30,10 @@ async def update_webhook(request: Request, webhook_id: str):
 async def delete_webhook(request: Request, webhook_id: str):
     return await proxy_integration_request(request, webhook_id)
 
+@router.post("/{webhook_id}/regenerate-token/")
+async def regenerate_webhook_token(request: Request, webhook_id: str):
+    return await proxy_integration_request(request, f"{webhook_id}/regenerate-token")
+
 
 async def proxy_integration_request(
     request: Request,
