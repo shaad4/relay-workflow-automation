@@ -79,7 +79,32 @@ services:
     volumes:
       - workflow_postgres_data:/var/lib/postgresql/data
 
+  integration-service:
+    build:
+      context: ./service/integration-service
+    container_name: relay-integration-service
+    ports:
+      - "8003:8000"
+    env_file:
+      - ./service/integration-service/.env
+    depends_on:
+      - workflow-service
+
+  integration-postgres:
+    image: postgres:16
+    container_name: relay-integration-postgres
+    environment:
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: relay
+      POSTGRES_DB: relay_integration
+    ports:
+      - "5435:5432"
+    volumes:
+      - integration_postgres_data:/var/lib/postgresql/data
+
 
 volumes:
   auth_postgres_data:
   workflow_postgres_data:
+  integration_postgres_data:
+
