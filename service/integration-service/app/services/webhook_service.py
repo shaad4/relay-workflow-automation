@@ -1,6 +1,7 @@
 import secrets
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,3 +65,17 @@ async def create_webhook(
         raise
 
     return webhook
+
+
+async def list_webhooks(
+    workspace_id: uuid.UUID,
+    session: AsyncSession,
+) -> list[Webhook]:
+    result = await session.execute(
+        select(Webhook)
+        .where(Webhook.workspace_id == workspace_id)
+        .order_by(Webhook.created_at.desc())
+    )
+
+    return list(result.scalars().all())
+
