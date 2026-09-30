@@ -1,3 +1,4 @@
+import grpc
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -44,8 +45,26 @@ async def create_webhook_route(
             workspace_id=workspace_id,
             session=session,
         )
-    except ValueError as exc:
+    except grpc.aio.AioRpcError as exc:
+        if exc.code() == grpc.StatusCode.NOT_FOUND:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workflow or workflow version not found",
+            ) from exc
+
+        if exc.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Workflow Service request timed out",
+            ) from exc
+
+        if exc.code() == grpc.StatusCode.UNAVAILABLE:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Workflow Service is unavailable",
+            ) from exc
+
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        )
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to validate workflow",
+        ) from exc
