@@ -154,3 +154,32 @@ async def delete_webhook(
         raise
 
     return True
+
+
+async def regenerate_webhook_token(
+    webhook_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    session: AsyncSession,
+) -> Webhook | None:
+    result = await session.execute(
+        select(Webhook).where(
+            Webhook.id == webhook_id,
+            Webhook.workspace_id == workspace_id,
+        )
+    )
+
+    webhook = result.scalar_one_or_none()
+
+    if webhook is None:
+        return None
+
+    webhook.public_token = generate_public_token()
+
+    try:
+        await session.commit()
+        await session.refresh(webhook)
+    except IntegrityError:
+        await session.rollback()
+        raise
+
+    return webhook
