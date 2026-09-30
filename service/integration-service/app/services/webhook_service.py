@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.grpc.workflow_client import WorkflowGrpcClient
 from app.models.webhook import Webhook
-from app.schemas.webhook import WebhookCreate
+from app.schemas.webhook import WebhookCreate, WebhookUpdate
 
 
 async def validate_workflow_version(
@@ -92,3 +92,36 @@ async def get_webhook(
     )
 
     return result.scalar_one_or_none()
+
+
+async def update_webhook(
+    webhook_id: uuid.UUID,
+    data: WebhookUpdate,
+    workspace_id: uuid.UUID,
+    session: AsyncSession,
+) -> Webhook | None:
+    result = await session.execute(
+        select(Webhook).where(
+            Webhook.id == webhook_id,
+            Webhook.workspace_id == workspace_id,
+        )
+    )
+
+    webhook = result.scalar_one_or_none()
+
+    if webhook is None:
+        return None
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(webhook, field, value)
+
+    try:
+        await session.commit()
+        await session.refresh(webhook)
+    except IntegrityError:
+        await session.rollback()
+        raise
+
+    return webhook

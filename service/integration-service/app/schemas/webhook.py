@@ -35,8 +35,6 @@ class WebhookResponse(BaseModel):
 
 
 class WebhookUpdate(BaseModel):
-    workflow_id: UUID | None = None
-    workflow_version_id: UUID | None = None
     name: str | None = Field(
         default=None,
         min_length=1,
