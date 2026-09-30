@@ -35,6 +35,7 @@ async def regenerate_webhook_token(request: Request, webhook_id: str):
     return await proxy_integration_request(request, f"{webhook_id}/regenerate-token")
 
 
+
 async def proxy_integration_request(
     request: Request,
     path: str,
@@ -74,3 +75,5 @@ async def proxy_integration_request(
         status_code=response.status_code,
         headers=dict(response.headers),
     )
+
+
