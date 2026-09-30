@@ -114,6 +114,19 @@ async def get_webhook(
     return result.scalar_one_or_none()
 
 
+async def get_webhook_by_public_token(
+    public_token: str,
+    session: AsyncSession,
+) -> Webhook | None:
+    result = await session.execute(
+        select(Webhook).where(
+            Webhook.public_token == public_token,
+        )
+    )
+
+    return result.scalar_one_or_none()
+
+
 async def update_webhook(
     webhook_id: uuid.UUID,
     data: WebhookUpdate,
