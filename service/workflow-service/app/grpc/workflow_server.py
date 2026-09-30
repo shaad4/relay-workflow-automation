@@ -139,3 +139,46 @@ class WorkflowInternalService(
                 nodes_json=json.dumps(nodes_data),
                 edges_json=json.dumps(edges_data),
             )
+
+
+    async def ValidateWorkflowVersion(self, request, context):
+        async with AsyncSessionLocal() as session:
+            workflow_result = await session.execute(
+                select(Workflow).where(
+                    Workflow.id == request.workflow_id,
+                    Workflow.workspace_id == request.workspace_id,
+                )
+            )
+
+            workflow = workflow_result.scalar_one_or_none()
+
+            if not workflow:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details("Workflow not found")
+                return workflow_pb2.ValidateWorkflowVersionResponse(
+                    valid=False,
+                )
+
+            version_result = await session.execute(
+                select(WorkflowVersion).where(
+                    WorkflowVersion.id == request.version_id,
+                    WorkflowVersion.workflow_id == workflow.id,
+                )
+            )
+
+            version = version_result.scalar_one_or_none()
+
+            if not version:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details("Workflow version not found")
+                return workflow_pb2.ValidateWorkflowVersionResponse(
+                    valid=False,
+                )
+
+            return workflow_pb2.ValidateWorkflowVersionResponse(
+                valid=True,
+                workflow_id=str(workflow.id),
+                version_id=str(version.id),
+                version=version.version,
+                status=version.status,
+            )
