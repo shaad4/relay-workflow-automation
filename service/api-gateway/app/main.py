@@ -9,6 +9,8 @@ from app.routes.auth import router as auth_router
 from app.routes.public_auth import router as public_auth_router
 from app.routes.workflows import router as workflows_router
 
+from app.routes.integration import router as integration_router
+
 load_dotenv()
 
 app = FastAPI(
@@ -57,6 +59,7 @@ async def enforce_cookie_origin(request: Request, call_next):
 app.include_router(auth_router)
 app.include_router(public_auth_router)
 app.include_router(workflows_router)
+app.include_router(integration_router)
 
 
 @app.get("/health")
