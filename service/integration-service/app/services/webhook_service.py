@@ -79,3 +79,16 @@ async def list_webhooks(
 
     return list(result.scalars().all())
 
+async def get_webhook(
+    webhook_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    session: AsyncSession,
+) -> Webhook | None:
+    result = await session.execute(
+        select(Webhook).where(
+            Webhook.id == webhook_id,
+            Webhook.workspace_id == workspace_id,
+        )
+    )
+
+    return result.scalar_one_or_none()
