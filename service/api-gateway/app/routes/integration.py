@@ -11,6 +11,10 @@ INTEGRATION_SERVICE_URL = "http://integration-service:8000"
 async def create_webhook(request: Request):
     return await proxy_integration_request(request, "")
 
+@router.get("/")
+async def list_webhooks(request: Request):
+    return await proxy_integration_request(request, "")
+
 
 async def proxy_integration_request(
     request: Request,

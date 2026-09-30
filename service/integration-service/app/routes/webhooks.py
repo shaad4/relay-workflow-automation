@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
 from app.schemas.webhook import WebhookCreate, WebhookResponse
-from app.services.webhook_service import create_webhook
+from app.services.webhook_service import create_webhook, list_webhooks
 
 
 router = APIRouter(
@@ -68,3 +68,25 @@ async def create_webhook_route(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to validate workflow",
         ) from exc
+
+
+@router.get(
+    "/",
+    response_model=list[WebhookResponse],
+)
+async def list_webhooks_route(
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        workspace_id = uuid.UUID(identity["workspace_id"])
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid workspace identity",
+        )
+
+    return await list_webhooks(
+        workspace_id=workspace_id,
+        session=session,
+    )
