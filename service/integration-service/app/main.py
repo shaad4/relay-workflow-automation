@@ -1,10 +1,14 @@
 from fastapi import FastAPI
 
+from app.routes.webhooks import router as webhook_router
+
+
 
 app = FastAPI(
     title="Relay Integration Service",
 )
 
+app.include_router(webhook_router)
 
 @app.get("/health")
 async def health():
