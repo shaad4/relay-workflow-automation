@@ -37,6 +37,12 @@ def generate_public_token() -> str:
 def generate_webhook_secret() -> str:
     return f"rly_whsec_{secrets.token_urlsafe(32)}"
 
+def verify_webhook_secret(
+    secret: str,
+    secret_hash: str,
+) -> bool:
+    return password_hash.verify(secret, secret_hash)
+
 
 async def create_webhook(
     data: WebhookCreate,
