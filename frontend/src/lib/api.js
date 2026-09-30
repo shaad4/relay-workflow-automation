@@ -46,14 +46,9 @@ export async function refreshAuthTokens() {
     const text = await response.text();
     const data = parseResponse(response, text);
     if (!response.ok) {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
       window.dispatchEvent(new CustomEvent("relay:session-expired"));
       return null;
     }
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    window.dispatchEvent(new CustomEvent("relay:access-token", { detail: true }));
     return data;
   };
   const runRefresh = async () => {

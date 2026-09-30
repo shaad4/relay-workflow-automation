@@ -1,104 +1,87 @@
 import { apiRequest } from "@/lib/api";
 
-function getHeaders() {
-  return {};
-}
-
-export async function getWorkflows(token) {
+export async function getWorkflows() {
   return apiRequest("/workflows/", {
     method: "GET",
-    headers: getHeaders(token),
   });
 }
 
-export async function createWorkflow(token, workflowData) {
+export async function createWorkflow(workflowData) {
   return apiRequest("/workflows/", {
     method: "POST",
-    headers: getHeaders(token),
     body: JSON.stringify(workflowData),
   });
 }
 
-export async function getWorkflow(token, workflowId) {
+export async function getWorkflow(workflowId) {
   return apiRequest(`/workflows/${workflowId}/`, {
     method: "GET",
-    headers: getHeaders(token),
   });
 }
 
-export async function updateWorkflow(token, workflowId, workflowData) {
+export async function updateWorkflow(workflowId, workflowData) {
   return apiRequest(`/workflows/${workflowId}/`, {
     method: "PATCH",
-    headers: getHeaders(token),
     body: JSON.stringify(workflowData),
   });
 }
 
-export async function activateWorkflow(token, workflowId) {
+export async function activateWorkflow(workflowId) {
   return apiRequest(`/workflows/${workflowId}/activate/`, {
     method: "POST",
-    headers: getHeaders(token),
   });
 }
 
-export async function deactivateWorkflow(token, workflowId) {
+export async function deactivateWorkflow(workflowId) {
   return apiRequest(`/workflows/${workflowId}/deactivate/`, {
     method: "POST",
-    headers: getHeaders(token),
   });
 }
 
-export async function deleteWorkflow(token, workflowId) {
+export async function deleteWorkflow(workflowId) {
   return apiRequest(`/workflows/${workflowId}/`, {
     method: "DELETE",
-    headers: getHeaders(token),
   });
 }
 
-export async function getWorkflowVersions(token, workflowId) {
+export async function getWorkflowVersions(workflowId) {
   return apiRequest(`/workflows/${workflowId}/versions/`, {
     method: "GET",
-    headers: getHeaders(token),
   });
 }
 
-export async function getWorkflowVersion(token, workflowId, versionNumber) {
+export async function getWorkflowVersion(workflowId, versionNumber) {
   return apiRequest(`/workflows/${workflowId}/versions/${versionNumber}`, {
     method: "GET",
-    headers: getHeaders(token),
   });
 }
 
-export async function createDraftVersion(token, workflowId) {
+export async function createDraftVersion(workflowId) {
   return apiRequest(`/workflows/${workflowId}/draft/`, {
     method: "POST",
-    headers: getHeaders(token),
   });
 }
 
-export async function getWorkflowNodes(token, workflowId, versionNumber) {
+export async function getWorkflowNodes(workflowId, versionNumber) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/nodes/`,
     {
       method: "GET",
-      headers: getHeaders(token),
     }
   );
 }
 
-export async function createWorkflowNode(token, workflowId, versionNumber, nodeData) {
+export async function createWorkflowNode(workflowId, versionNumber, nodeData) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/nodes/`,
     {
       method: "POST",
-      headers: getHeaders(token),
       body: JSON.stringify(nodeData),
     }
   );
 }
 
 export async function updateWorkflowNode(
-  token,
   workflowId,
   versionNumber,
   nodeId,
@@ -108,14 +91,12 @@ export async function updateWorkflowNode(
     `/workflows/${workflowId}/versions/${versionNumber}/nodes/${nodeId}/`,
     {
       method: "PATCH",
-      headers: getHeaders(token),
       body: JSON.stringify(nodeData),
     }
   );
 }
 
 export async function deleteWorkflowNode(
-  token,
   workflowId,
   versionNumber,
   nodeId
@@ -124,34 +105,30 @@ export async function deleteWorkflowNode(
     `/workflows/${workflowId}/versions/${versionNumber}/nodes/${nodeId}/`,
     {
       method: "DELETE",
-      headers: getHeaders(token),
     }
   );
 }
 
-export async function getWorkflowEdges(token, workflowId, versionNumber) {
+export async function getWorkflowEdges(workflowId, versionNumber) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/edges/`,
     {
       method: "GET",
-      headers: getHeaders(token),
     }
   );
 }
 
-export async function createWorkflowEdge(token, workflowId, versionNumber, edgeData) {
+export async function createWorkflowEdge(workflowId, versionNumber, edgeData) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/edges/`,
     {
       method: "POST",
-      headers: getHeaders(token),
       body: JSON.stringify(edgeData),
     }
   );
 }
 
 export async function updateWorkflowEdge(
-  token,
   workflowId,
   versionNumber,
   edgeId,
@@ -161,14 +138,12 @@ export async function updateWorkflowEdge(
     `/workflows/${workflowId}/versions/${versionNumber}/edges/${edgeId}/`,
     {
       method: "PATCH",
-      headers: getHeaders(token),
       body: JSON.stringify(edgeData),
     }
   );
 }
 
 export async function deleteWorkflowEdge(
-  token,
   workflowId,
   versionNumber,
   edgeId
@@ -177,27 +152,24 @@ export async function deleteWorkflowEdge(
     `/workflows/${workflowId}/versions/${versionNumber}/edges/${edgeId}/`,
     {
       method: "DELETE",
-      headers: getHeaders(token),
     }
   );
 }
 
-export async function validateWorkflow(token, workflowId, versionNumber) {
+export async function validateWorkflow(workflowId, versionNumber) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/validate/`,
     {
       method: "POST",
-      headers: getHeaders(token),
     }
   );
 }
 
-export async function publishWorkflow(token, workflowId, versionNumber) {
+export async function publishWorkflow(workflowId, versionNumber) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/publish/`,
     {
       method: "POST",
-      headers: getHeaders(token),
     }
   );
 }

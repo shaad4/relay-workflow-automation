@@ -68,8 +68,7 @@ function selectVersion(versions, workflow) {
 export default function WorkflowBuilderPage({ params }) {
   const resolvedParams = use(params);
   const workflowId = resolvedParams?.workflowId ?? "";
-  const { accessToken, token: legacyToken, isInitializing } = useAuth();
-  const token = accessToken || legacyToken;
+  const { isInitializing } = useAuth();
 
   const [workflow, setWorkflow] = useState(null);
   const [version, setVersion] = useState(null);
@@ -92,8 +91,7 @@ export default function WorkflowBuilderPage({ params }) {
       return;
     }
 
-    // AuthProvider restores the session asynchronously on page load. Avoid
-    // turning that temporary empty token into a permanent workflow error.
+    // AuthProvider restores the cookie session asynchronously on page load.
     if (isInitializing) {
       setIsLoading(true);
       return;
@@ -104,15 +102,14 @@ export default function WorkflowBuilderPage({ params }) {
 
     try {
       // ── 1. Fetch workflow metadata ────────────────────────────────────────
-      if (!token) throw new Error("Your session has expired. Sign in and try again.");
-      const rawWorkflow = await getWorkflow(token, workflowId);
+      const rawWorkflow = await getWorkflow(workflowId);
       let wfData = rawWorkflow?.data ?? rawWorkflow?.workflow ?? rawWorkflow;
 
       if (!wfData || !wfData.id) throw new Error("Workflow was not found.");
 
       // ── 2. Fetch versions and select best one ─────────────────────────────
       let selectedVersion = null;
-      const rawVersions = await getWorkflowVersions(token, workflowId);
+      const rawVersions = await getWorkflowVersions(workflowId);
       const versionsList = normalizeList(rawVersions, "versions");
       selectedVersion = selectVersion(versionsList, wfData);
 
@@ -122,8 +119,8 @@ export default function WorkflowBuilderPage({ params }) {
       const vn = selectedVersion.version_number ?? selectedVersion.version;
       if (vn == null) throw new Error("The selected workflow version has no version number.");
       const [nodesResponse, edgesResponse] = await Promise.all([
-        getWorkflowNodes(token, workflowId, vn),
-        getWorkflowEdges(token, workflowId, vn),
+        getWorkflowNodes(workflowId, vn),
+        getWorkflowEdges(workflowId, vn),
       ]);
       const nodesData = normalizeList(nodesResponse, "nodes");
       const edgesData = normalizeList(edgesResponse, "edges");
@@ -141,10 +138,10 @@ export default function WorkflowBuilderPage({ params }) {
     } finally {
       setIsLoading(false);
     }
-  }, [token, workflowId, isInitializing]);
+  }, [workflowId, isInitializing]);
 
   const selectWorkflowVersion = useCallback(async (versionNumber) => {
-    if (!token || !workflowId || Number(versionNumber) === Number(version?.version_number ?? version?.version)) return;
+    if (!workflowId || Number(versionNumber) === Number(version?.version_number ?? version?.version)) return;
     setIsLoading(true);
     setError(null);
     try {
@@ -153,8 +150,8 @@ export default function WorkflowBuilderPage({ params }) {
       );
       if (!selectedVersion) throw new Error("Workflow version was not found.");
       const [nodesResponse, edgesResponse] = await Promise.all([
-        getWorkflowNodes(token, workflowId, versionNumber),
-        getWorkflowEdges(token, workflowId, versionNumber),
+        getWorkflowNodes(workflowId, versionNumber),
+        getWorkflowEdges(workflowId, versionNumber),
       ]);
       setVersion(selectedVersion);
       setNodes(normalizeList(nodesResponse, "nodes"));
@@ -165,7 +162,7 @@ export default function WorkflowBuilderPage({ params }) {
     } finally {
       setIsLoading(false);
     }
-  }, [token, workflowId, version, versions]);
+  }, [workflowId, version, versions]);
 
   useEffect(() => {
     if (isInitializing) return;
@@ -259,7 +256,6 @@ export default function WorkflowBuilderPage({ params }) {
             versions={versions}
             initialNodes={nodes}
             initialEdges={edges}
-            token={token}
             onRefresh={fetchWorkflowData}
             onSelectVersion={selectWorkflowVersion}
           />

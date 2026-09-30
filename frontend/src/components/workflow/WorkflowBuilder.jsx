@@ -271,7 +271,6 @@ export default function WorkflowBuilder({
   initialNodes = [],
   initialEdges = [],
   versions = [],
-  token = null,
   onRefresh = () => {},
   onSelectVersion = () => {},
 }) {
@@ -772,7 +771,7 @@ export default function WorkflowBuilder({
     try {
       // ── 1. Create new nodes ──────────────────────────────────────────────
       for (const node of newNodes) {
-        const res = await createWorkflowNode(token, workflowId, versionNumber, {
+        const res = await createWorkflowNode(workflowId, versionNumber, {
           node_id: node.data.nodeId,
           node_type: node.data.typeId,
           label: node.data.label,
@@ -799,7 +798,7 @@ export default function WorkflowBuilder({
       // ── 2. Update changed existing nodes ────────────────────────────────
       for (const node of updatedNodes) {
         const targetNodeId = node.data?.nodeId ?? node.id;
-        await updateWorkflowNode(token, workflowId, versionNumber, targetNodeId, {
+        await updateWorkflowNode(workflowId, versionNumber, targetNodeId, {
           label: node.data.label,
           position_x: Math.round(node.position.x),
           position_y: Math.round(node.position.y),
@@ -820,7 +819,7 @@ export default function WorkflowBuilder({
       // ── 3. Delete removed edges first (FK constraint) ───────────────────
       for (const se of edgesToDelete) {
         if (!se.rfId.startsWith("temp-edge-")) {
-          await deleteWorkflowEdge(token, workflowId, versionNumber, se.rfId);
+          await deleteWorkflowEdge(workflowId, versionNumber, se.rfId);
         }
         serverEdgesRef.current = serverEdgesRef.current.filter(
           (s) => s.rfId !== se.rfId
@@ -829,7 +828,7 @@ export default function WorkflowBuilder({
 
       // ── 4. Delete removed nodes ──────────────────────────────────────────
       for (const sn of deletedNodes) {
-        await deleteWorkflowNode(token, workflowId, versionNumber, sn.nodeId ?? sn.rfId);
+        await deleteWorkflowNode(workflowId, versionNumber, sn.nodeId ?? sn.rfId);
         serverNodesRef.current = serverNodesRef.current.filter(
           (s) => s.rfId !== sn.rfId
         );
@@ -858,7 +857,7 @@ export default function WorkflowBuilder({
         const sourceNodeId = rfIdToNodeId[sourceRfId] ?? rfIdToNodeId[edge.source] ?? sourceRfId;
         const targetNodeId = rfIdToNodeId[targetRfId] ?? rfIdToNodeId[edge.target] ?? targetRfId;
 
-        const res = await createWorkflowEdge(token, workflowId, versionNumber, {
+        const res = await createWorkflowEdge(workflowId, versionNumber, {
           source_node_id: sourceNodeId,
           target_node_id: targetNodeId,
           condition: edge.data?.condition ?? null,
@@ -883,7 +882,7 @@ export default function WorkflowBuilder({
         const targetNode = nodesSnap.find((node) => node.id === edge.target);
         const sourceNodeId = sourceNode?.data?.nodeId ?? edge.source;
         const targetNodeId = targetNode?.data?.nodeId ?? edge.target;
-        await updateWorkflowEdge(token, workflowId, versionNumber, edge.id, {
+        await updateWorkflowEdge(workflowId, versionNumber, edge.id, {
           source_node_id: sourceNodeId,
           target_node_id: targetNodeId,
           condition: edge.data?.condition ?? null,
@@ -959,7 +958,6 @@ export default function WorkflowBuilder({
     saveState,
     nodes,
     edges,
-    token,
     workflowId,
     versionNumber,
     selectedNodeId,
@@ -982,9 +980,9 @@ export default function WorkflowBuilder({
       }
 
       let res = null;
-      if (token && workflowId) {
+      if (workflowId) {
         try {
-          res = await validateWorkflow(token, workflowId, versionNumber);
+          res = await validateWorkflow(workflowId, versionNumber);
         } catch (err) {
           console.warn("API Validate error, falling back to local validation:", err);
         }
@@ -1016,7 +1014,7 @@ export default function WorkflowBuilder({
       setIsValidating(false);
       setValidationOpen(true);
     }
-  }, [saveState, handleSave, nodes, edges, token, workflowId, versionNumber]);
+  }, [saveState, handleSave, nodes, edges, workflowId, versionNumber]);
 
   // ── Publish ───────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async () => {
@@ -1029,8 +1027,8 @@ export default function WorkflowBuilder({
         await handleSave();
         if (priorSaveState === "failed") throw new Error("Save failed. Publish was not started.");
       }
-      if (token && workflowId) {
-        const validation = await validateWorkflow(token, workflowId, versionNumber);
+      if (workflowId) {
+        const validation = await validateWorkflow(workflowId, versionNumber);
         if (!validation.valid) {
           setValidationResult({
             isValid: false,
@@ -1039,7 +1037,7 @@ export default function WorkflowBuilder({
           setValidationOpen(true);
           return;
         }
-        await publishWorkflow(token, workflowId, versionNumber);
+        await publishWorkflow(workflowId, versionNumber);
       }
       setCurrentVersionStatus("published");
       onRefresh();
@@ -1052,7 +1050,7 @@ export default function WorkflowBuilder({
         }];
 
         try {
-          const validation = await validateWorkflow(token, workflowId, versionNumber);
+          const validation = await validateWorkflow(workflowId, versionNumber);
           if (validation.errors?.length) errors = validation.errors;
         } catch (validationError) {
           console.warn("Could not load publish validation details:", validationError);
@@ -1064,21 +1062,21 @@ export default function WorkflowBuilder({
     } finally {
       setIsPublishing(false);
     }
-  }, [isCanvasReadOnly, saveState, handleSave, token, workflowId, versionNumber, onRefresh]);
+  }, [isCanvasReadOnly, saveState, handleSave, workflowId, versionNumber, onRefresh]);
 
   // ── Edit Workflow (create draft from published) ───────────────────────────
   const handleEditWorkflow = useCallback(async () => {
-    if (!token || !workflowId) return;
+    if (!workflowId) return;
     setIsCreatingDraft(true);
     try {
-      await createDraftVersion(token, workflowId);
+      await createDraftVersion(workflowId);
       if (onRefresh) onRefresh();
     } catch (err) {
       console.error("Failed to create draft:", err);
     } finally {
       setIsCreatingDraft(false);
     }
-  }, [token, workflowId, onRefresh]);
+  }, [workflowId, onRefresh]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1126,7 +1124,6 @@ export default function WorkflowBuilder({
         onNavigate={navigateWithGuard}
         workflowDescription={workflow?.description || ""}
         workflowId={workflowId}
-        token={token}
         onWorkflowUpdated={onRefresh}
         onWorkflowStatusChange={(status) => onRefresh({ status })}
         onWorkflowDeleted={() => router.push("/workflows")}

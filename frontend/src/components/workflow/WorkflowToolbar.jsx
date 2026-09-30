@@ -64,7 +64,6 @@ export default function WorkflowToolbar({
   workflowStatus = "draft",
   workflowDescription = "",
   workflowId,
-  token,
   onWorkflowUpdated,
   onWorkflowStatusChange,
   onWorkflowDeleted,
@@ -139,7 +138,7 @@ export default function WorkflowToolbar({
     setIsSavingMetadata(true);
     setMetadataError("");
     try {
-      await updateWorkflow(token, workflowId, {
+      await updateWorkflow(workflowId, {
         name,
         description: descriptionDraft.trim() || null,
       });
@@ -157,7 +156,7 @@ export default function WorkflowToolbar({
     setIsDeletingWorkflow(true);
     setDeleteWorkflowError("");
     try {
-      await deleteWorkflow(token, workflowId);
+      await deleteWorkflow(workflowId);
       setShowDeleteConfirm(false);
       onWorkflowDeleted?.();
     } catch (error) {
@@ -173,8 +172,8 @@ export default function WorkflowToolbar({
     setWorkflowStatusError("");
     try {
       const response = normalizedWorkflowStatus === "active"
-        ? await deactivateWorkflow(token, workflowId)
-        : await activateWorkflow(token, workflowId);
+        ? await deactivateWorkflow(workflowId)
+        : await activateWorkflow(workflowId);
       onWorkflowStatusChange?.(response?.status || (normalizedWorkflowStatus === "active" ? "inactive" : "active"));
       setShowWorkflowStatusConfirm(false);
     } catch (error) {

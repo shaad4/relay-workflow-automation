@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import WorkflowRow from "./WorkflowRow";
-import { useAuth } from "@/context/AuthContext";
 import { deleteWorkflow } from "@/services/workflows";
 
 function AlertTriangleIcon(props) {
@@ -16,7 +15,6 @@ function AlertTriangleIcon(props) {
 }
 
 export default function WorkflowList({ workflows = [], onDeleteSuccess, onWorkflowStatusChange }) {
-  const { accessToken } = useAuth();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -26,7 +24,7 @@ export default function WorkflowList({ workflows = [], onDeleteSuccess, onWorkfl
 
     try {
       setIsDeleting(true);
-      await deleteWorkflow(accessToken, deleteTarget.id);
+      await deleteWorkflow(deleteTarget.id);
       const deletedId = deleteTarget.id;
       setDeleteTarget(null);
       setDeleteError("");

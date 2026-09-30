@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
 import { createWorkflow } from "@/services/workflows";
 
 function XIcon(props) {
@@ -44,7 +43,6 @@ function AlertCircleIcon(props) {
 }
 
 export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
-  const { accessToken } = useAuth();
   const router = useRouter();
 
   const [name, setName] = useState("");
@@ -111,7 +109,7 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
         ...(trimmedDescription ? { description: trimmedDescription } : {}),
       };
 
-      const res = await createWorkflow(accessToken, payload);
+      const res = await createWorkflow(payload);
 
       // Extract generated workflow ID
       const createdId =

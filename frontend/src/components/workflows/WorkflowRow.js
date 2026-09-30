@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
 import { activateWorkflow, deactivateWorkflow } from "@/services/workflows";
 import WorkflowStatus from "./WorkflowStatus";
 
@@ -107,7 +106,6 @@ export function formatDate(dateString) {
 
 export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatusChange }) {
   const router = useRouter();
-  const { accessToken } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
@@ -189,8 +187,8 @@ export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatu
     setStatusError("");
     try {
       const response = isActive
-        ? await deactivateWorkflow(accessToken, workflowId)
-        : await activateWorkflow(accessToken, workflowId);
+        ? await deactivateWorkflow(workflowId)
+        : await activateWorkflow(workflowId);
       onWorkflowStatusChange?.(workflowId, response?.status || (isActive ? "inactive" : "active"));
       setShowStatusConfirm(false);
     } catch (error) {
