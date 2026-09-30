@@ -11,7 +11,6 @@ class WebhookCreate(BaseModel):
     event_name: str = Field(min_length=1, max_length=255)
     method: str = Field(min_length=1, max_length=20)
     authentication_type: str = Field(min_length=1, max_length=100)
-    secret_ref: str | None = None
     is_active: bool = True
 
 
@@ -27,7 +26,6 @@ class WebhookResponse(BaseModel):
     event_name: str
     method: str
     authentication_type: str
-    secret_ref: str | None
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -55,5 +53,8 @@ class WebhookUpdate(BaseModel):
         min_length=1,
         max_length=100,
     )
-    secret_ref: str | None = None
     is_active: bool | None = None
+    
+
+class WebhookCreateResponse(WebhookResponse):
+    secret: str | None = None
