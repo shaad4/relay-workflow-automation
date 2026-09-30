@@ -6,11 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
-from app.schemas.webhook import WebhookCreate, WebhookResponse
+from app.schemas.webhook import WebhookCreate, WebhookResponse, WebhookUpdate
 from app.services.webhook_service import (
     create_webhook,
     list_webhooks,
     get_webhook,
+    update_webhook
 )
 
 
@@ -115,6 +116,38 @@ async def get_webhook_route(
 
     webhook = await get_webhook(
         webhook_id=webhook_id,
+        workspace_id=workspace_id,
+        session=session,
+    )
+
+    if webhook is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Webhook not found",
+        )
+
+    return webhook
+
+
+@router.patch("/{webhook_id}/", response_model=WebhookResponse)
+async def update_webhook_endpoint(
+    webhook_id: str,
+    data: WebhookUpdate,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        webhook_uuid = uuid.UUID(webhook_id)
+        workspace_id = uuid.UUID(identity["workspace_id"])
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid webhook ID",
+        )
+
+    webhook = await update_webhook(
+        webhook_id=webhook_uuid,
+        data=data,
         workspace_id=workspace_id,
         session=session,
     )
