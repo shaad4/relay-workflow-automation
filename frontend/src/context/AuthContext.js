@@ -21,9 +21,6 @@ export function AuthProvider({ children }) {
   const [isInitializing, setIsInitializing] = useState(true);
 
   async function login() {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-
     const currentUser = await getCurrentUser();
 
     setAccessToken(true);
@@ -38,9 +35,6 @@ export function AuthProvider({ children }) {
       setAccessToken(true);
       setUser(currentUser);
     } catch {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-
       setAccessToken(null);
       setUser(null);
     }
@@ -49,8 +43,6 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     async function initializeAuth() {
       try {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
         await restoreSession();
       } finally {
         setIsInitializing(false);
@@ -61,25 +53,19 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const handleAccessToken = () => setAccessToken(true);
     const handleSessionExpired = () => {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
       setAccessToken(null);
       setUser(null);
     };
-    window.addEventListener("relay:access-token", handleAccessToken);
     window.addEventListener("relay:session-expired", handleSessionExpired);
     return () => {
-      window.removeEventListener("relay:access-token", handleAccessToken);
       window.removeEventListener("relay:session-expired", handleSessionExpired);
     };
   }, []);
 
   async function logout() {
-    const token = accessToken;
     try {
-      if (token) await logoutUser();
+      if (accessToken) await logoutUser();
     } catch (error) {
       // Clear the local session even if the server cannot be reached.
       console.error("Server-side logout failed:", error);
@@ -87,8 +73,6 @@ export function AuthProvider({ children }) {
     setAccessToken(null);
     setUser(null);
 
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
   }
 
   return (

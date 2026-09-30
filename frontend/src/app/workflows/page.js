@@ -51,7 +51,7 @@ function RefreshCwIcon(props) {
 }
 
 function WorkflowsContent() {
-  const { accessToken } = useAuth();
+  const { isInitializing } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -75,8 +75,9 @@ function WorkflowsContent() {
     let isSubscribed = true;
 
     async function loadWorkflows() {
+      if (isInitializing) return;
       try {
-        const data = await getWorkflows(accessToken);
+        const data = await getWorkflows();
         if (!isSubscribed) return;
         const items = Array.isArray(data) ? data : data?.workflows || data?.data || [];
         setWorkflows(items);
@@ -97,7 +98,7 @@ function WorkflowsContent() {
     return () => {
       isSubscribed = false;
     };
-  }, [accessToken, reloadKey]);
+  }, [isInitializing, reloadKey]);
 
   // Combined status and query filtering
   const filteredWorkflows = useMemo(() => {
