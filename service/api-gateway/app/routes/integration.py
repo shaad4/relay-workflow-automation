@@ -15,6 +15,13 @@ async def create_webhook(request: Request):
 async def list_webhooks(request: Request):
     return await proxy_integration_request(request, "")
 
+@router.get("/{webhook_id}/")
+async def get_webhook(request: Request, webhook_id: str):
+    return await proxy_integration_request(
+        request,
+        webhook_id,
+    )
+
 
 async def proxy_integration_request(
     request: Request,
