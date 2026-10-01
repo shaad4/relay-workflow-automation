@@ -422,14 +422,12 @@ export default function WorkflowBuilder({
     setSelectedNodeId(node ? node.id : null);
     setSelectedEdgeId(null);
     if (node) setIsInspectorOpen(true);
-    else setIsInspectorOpen(false);
   }, []);
 
   const handleEdgeSelect = useCallback((edge) => {
     setSelectedEdgeId(edge ? edge.id : null);
     setSelectedNodeId(null);
     if (edge) setIsInspectorOpen(true);
-    else setIsInspectorOpen(false);
   }, []);
 
   const handleCanvasContextMenu = useCallback((event, target) => {
@@ -1173,7 +1171,7 @@ export default function WorkflowBuilder({
           {/* Inspector toggle */}
           <button
             type="button"
-            onClick={() => setIsInspectorOpen((v) => !v)}
+            onClick={() => setIsInspectorOpen(true)}
             className={`px-2.5 py-1 rounded-[6px] border text-[12px] font-medium flex items-center gap-1.5 transition-all duration-100 ease-out cursor-pointer ${
               isInspectorOpen
                 ? "bg-[#4F46E5] text-white border-[#4F46E5] shadow-xs"
