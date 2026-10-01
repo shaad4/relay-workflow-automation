@@ -63,15 +63,18 @@ async def proxy_public_webhook_request(
     )
 
 
-@router.api_route(
-    "/{public_token}",
-    methods=["POST"],
-)
-async def receive_public_webhook(
-    public_token: str,
-    request: Request,
-):
+@router.api_route("/{public_token}", methods=["POST"])
+async def receive_public_webhook(public_token: str, request: Request):
     return await proxy_public_webhook_request(
         request=request,
         path=public_token,
     )
+
+
+@router.api_route("/{public_token}/test", methods=["POST"])
+async def test_public_webhook(public_token: str, request: Request):
+    return await proxy_public_webhook_request(
+        request=request,
+        path=f"{public_token}/test",
+    )
+
