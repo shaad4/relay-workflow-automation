@@ -264,5 +264,3 @@ async def regenerate_webhook_token_endpoint(
         )
 
     return webhook
-
-

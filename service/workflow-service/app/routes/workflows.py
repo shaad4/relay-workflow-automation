@@ -31,7 +31,9 @@ from app.services.workflow_service import (
     publish_workflow,
     activate_workflow,
     deactivate_workflow,
+    delete_workflow_version,
 )
+from app.services.webhook_lifecycle import WebhookCleanupError, revoke_workflow_webhooks
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -114,6 +116,27 @@ async def delete_workflow_route(
     identity: dict = Depends(get_current_identity),
     session: AsyncSession = Depends(get_db),
 ):
+    workflow = await get_workflow(
+        workflow_id=workflow_id,
+        workspace_id=identity["workspace_id"],
+        session=session,
+    )
+    if workflow is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    if str(workflow.status).lower() not in {"draft", "inactive"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Only draft or inactive workflows can be deleted. Deactivate an active workflow first.",
+        )
+
+    try:
+        await revoke_workflow_webhooks(workflow_id, identity["workspace_id"])
+    except WebhookCleanupError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Associated webhook endpoints could not be revoked. Workflow deletion was cancelled.",
+        ) from exc
+
     try:
         deleted = await delete_workflow(
             workflow_id=workflow_id,
@@ -129,6 +152,51 @@ async def delete_workflow_route(
             detail="Workflow not found",
         )
 
+    return None
+
+
+@router.delete("/{workflow_id}/versions/{version_number}/", status_code=204)
+async def delete_workflow_version_route(
+    workflow_id: UUID,
+    version_number: int,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    workflow, version = await get_workflow_version(
+        workflow_id=workflow_id,
+        version_number=version_number,
+        workspace_id=identity["workspace_id"],
+        session=session,
+    )
+    if workflow is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    if version is None:
+        raise HTTPException(status_code=404, detail="Workflow version not found")
+    if (
+        str(workflow.status).lower() in {"active", "published"}
+        and workflow.published_version_id == version.id
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Deactivate the workflow before deleting its active published version.",
+        )
+
+    try:
+        await revoke_workflow_webhooks(workflow_id, identity["workspace_id"], version.id)
+    except WebhookCleanupError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Webhook endpoints for this version could not be revoked. Version deletion was cancelled.",
+        ) from exc
+
+    deleted = await delete_workflow_version(
+        workflow_id=workflow_id,
+        version_number=version_number,
+        workspace_id=identity["workspace_id"],
+        session=session,
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Workflow version not found")
     return None
 
 

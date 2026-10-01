@@ -1,7 +1,7 @@
 from uuid import UUID
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Workflow, WorkflowVersion, WorkflowEdge, WorkflowNode
@@ -128,7 +128,64 @@ async def delete_workflow(
         )
 
     try:
+        # Break the workflow -> published version reference before deleting its
+        # versions so the database foreign key remains valid.
+        workflow.published_version_id = None
+        await session.flush()
+
+        version_ids = select(WorkflowVersion.id).where(
+            WorkflowVersion.workflow_id == workflow_id,
+        )
+        await session.execute(
+            delete(WorkflowNode).where(WorkflowNode.workflow_version_id.in_(version_ids))
+        )
+        await session.execute(
+            delete(WorkflowEdge).where(WorkflowEdge.workflow_version_id.in_(version_ids))
+        )
+        await session.execute(
+            delete(WorkflowVersion).where(WorkflowVersion.workflow_id == workflow_id)
+        )
         await session.delete(workflow)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+    return True
+
+
+async def delete_workflow_version(
+    workflow_id: UUID,
+    version_number: int,
+    workspace_id: str,
+    session: AsyncSession,
+) -> bool:
+    workflow, version = await get_workflow_version(
+        workflow_id=workflow_id,
+        version_number=version_number,
+        workspace_id=workspace_id,
+        session=session,
+    )
+    if workflow is None or version is None:
+        return False
+
+    if (
+        str(workflow.status).lower() in {"active", "published"}
+        and workflow.published_version_id == version.id
+    ):
+        raise ValueError("Deactivate the workflow before deleting its active published version.")
+
+    try:
+        await session.execute(
+            delete(WorkflowNode).where(WorkflowNode.workflow_version_id == version.id)
+        )
+        await session.execute(
+            delete(WorkflowEdge).where(WorkflowEdge.workflow_version_id == version.id)
+        )
+        if workflow.published_version_id == version.id:
+            workflow.published_version_id = None
+            await session.flush()
+        await session.delete(version)
         await session.commit()
     except Exception:
         await session.rollback()

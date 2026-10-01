@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package relay.integration;
+
+message DeleteWorkflowWebhooksRequest {
+  string workflow_id = 1;
+  string workspace_id = 2;
+  // Empty removes hooks from every version in the workflow.
+  string workflow_version_id = 3;
+}
+
+message DeleteWorkflowWebhooksResponse {
+  uint32 deleted_count = 1;
+}
+
+service IntegrationInternalService {
+  rpc DeleteWorkflowWebhooks(DeleteWorkflowWebhooksRequest)
+      returns (DeleteWorkflowWebhooksResponse);
+}

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import WorkflowStatus from "../workflows/WorkflowStatus";
-import { activateWorkflow, deactivateWorkflow, deleteWorkflow, updateWorkflow } from "@/services/workflows";
+import { activateWorkflow, deactivateWorkflow, deleteWorkflow, deleteWorkflowVersion, updateWorkflow } from "@/services/workflows";
 
 function CheckIcon(props) {
   return (
@@ -70,6 +70,7 @@ export default function WorkflowToolbar({
   onNavigate,
   versionNumber = 1,
   versions = [],
+  publishedVersionId,
   onSelectVersion,
   saveState = "saved", // 'saved' | 'unsaved' | 'saving' | 'failed'
   saveError = null,
@@ -98,12 +99,24 @@ export default function WorkflowToolbar({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingWorkflow, setIsDeletingWorkflow] = useState(false);
   const [deleteWorkflowError, setDeleteWorkflowError] = useState("");
+  const [versionMenuOpen, setVersionMenuOpen] = useState(false);
+  const [versionToDelete, setVersionToDelete] = useState(null);
+  const [isDeletingVersion, setIsDeletingVersion] = useState(false);
+  const [deleteVersionError, setDeleteVersionError] = useState("");
   const workflowMenuRef = useRef(null);
+  const versionMenuRef = useRef(null);
   // Older workflow payloads may expose "published"; the workflow-level state is active.
   const normalizedWorkflowStatus = String(workflowStatus).toLowerCase() === "published"
     ? "active"
     : String(workflowStatus).toLowerCase();
   const canDeleteWorkflow = normalizedWorkflowStatus === "draft" || normalizedWorkflowStatus === "inactive";
+  const sortedVersions = [...versions].sort((a, b) =>
+    Number(b.version_number ?? b.version) - Number(a.version_number ?? a.version)
+  );
+  const currentVersion = sortedVersions.find(
+    (item) => Number(item.version_number ?? item.version) === Number(versionNumber)
+  );
+  const hasDraftVersion = sortedVersions.some((item) => String(item.status).toLowerCase() === "draft");
 
   useEffect(() => {
     if (!workflowMenuOpen) return;
@@ -120,6 +133,22 @@ export default function WorkflowToolbar({
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [workflowMenuOpen]);
+
+  useEffect(() => {
+    if (!versionMenuOpen) return;
+    const closeOnOutsideClick = (event) => {
+      if (!versionMenuRef.current?.contains(event.target)) setVersionMenuOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setVersionMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [versionMenuOpen]);
 
   const startMetadataEdit = () => {
     setNameDraft(workflowName);
@@ -163,6 +192,22 @@ export default function WorkflowToolbar({
       setDeleteWorkflowError(error?.message || "Unable to delete workflow.");
     } finally {
       setIsDeletingWorkflow(false);
+    }
+  };
+
+  const confirmDeleteVersion = async () => {
+    if (!versionToDelete || isDeletingVersion) return;
+    setIsDeletingVersion(true);
+    setDeleteVersionError("");
+    try {
+      await deleteWorkflowVersion(workflowId, versionToDelete.version_number ?? versionToDelete.version);
+      setVersionToDelete(null);
+      setVersionMenuOpen(false);
+      await onWorkflowUpdated?.();
+    } catch (error) {
+      setDeleteVersionError(error?.message || "Unable to delete this workflow version.");
+    } finally {
+      setIsDeletingVersion(false);
     }
   };
 
@@ -258,22 +303,87 @@ export default function WorkflowToolbar({
           {workflowStatusError && <span role="alert" className="max-w-48 text-[11px] text-red-500">{workflowStatusError}</span>}
         </div>
 
-        <div className="flex items-center gap-1.5 pl-2 border-l border-[var(--border-subtle)]">
-          <label className="relative flex items-center">
-            <select
-              value={versionNumber}
-              onChange={(event) => onSelectVersion?.(Number(event.target.value))}
-              className="appearance-none text-[11px] font-mono font-medium text-[var(--text-secondary)] bg-[var(--elevated)] pl-2 pr-6 py-1 rounded-[4px] border border-[var(--border-subtle)] cursor-pointer focus:outline-none focus:border-[var(--accent)]"
-              aria-label="Select workflow version"
-            >
-              {[...versions].sort((a, b) => Number(b.version_number ?? b.version) - Number(a.version_number ?? a.version)).map((item) => {
-                const number = item.version_number ?? item.version;
-                return <option key={item.id ?? number} value={number}>v{number} · {item.status}</option>;
-              })}
-              {versions.length === 0 && <option value={versionNumber}>v{versionNumber}</option>}
-            </select>
-            <span className="pointer-events-none absolute right-2 text-[var(--text-tertiary)]">⌄</span>
-          </label>
+        <div ref={versionMenuRef} className="relative flex items-center gap-1.5 pl-2 border-l border-[var(--border-subtle)]">
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={versionMenuOpen}
+            aria-label="Select or manage workflow versions"
+            onClick={() => setVersionMenuOpen((open) => !open)}
+            className={`inline-flex h-7 items-center gap-2 rounded-md border px-2.5 font-mono text-[11px] font-medium transition ${versionMenuOpen ? "border-[var(--accent)] text-[var(--text-primary)]" : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:bg-[var(--elevated)]"}`}
+          >
+            <span>v{versionNumber}</span>
+            <span className="text-[var(--text-tertiary)]">·</span>
+            <span className="max-w-16 truncate font-sans text-[10px] text-[var(--text-tertiary)]">{currentVersion?.status || "version"}</span>
+            <span aria-hidden="true" className={`text-[var(--text-tertiary)] transition-transform ${versionMenuOpen ? "rotate-180" : ""}`}>⌄</span>
+          </button>
+          {versionMenuOpen && (
+            <div role="menu" aria-label="Workflow versions" className="absolute left-2 top-full z-[70] mt-2 w-[292px] overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--surface)] text-[var(--text-primary)] shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex items-start justify-between border-b border-[var(--border-subtle)] px-3.5 py-3">
+                <div>
+                  <p className="text-[12px] font-semibold">Workflow versions</p>
+                  <p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">Switch versions or manage their lifecycle.</p>
+                </div>
+                <span className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--text-tertiary)]">{versions.length}</span>
+              </div>
+              <div className="max-h-72 overflow-y-auto p-1.5">
+                {sortedVersions.map((item) => {
+                  const number = item.version_number ?? item.version;
+                  const selected = Number(number) === Number(versionNumber);
+                  const status = String(item.status || "draft").toLowerCase();
+                  const isPublishedVersion = Boolean(publishedVersionId && item.id && String(item.id) === String(publishedVersionId));
+                  const isActivePublishedVersion = normalizedWorkflowStatus === "active" && isPublishedVersion;
+                  const cannotDelete = versions.length <= 1 || isActivePublishedVersion;
+                  const statusStyle = status === "published" || status === "active"
+                    ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
+                    : status === "draft"
+                      ? "border-amber-500/25 bg-amber-500/5 text-amber-600 dark:text-amber-400"
+                      : "border-[var(--border-subtle)] text-[var(--text-tertiary)]";
+                  return (
+                    <div key={item.id ?? number} className={`group flex items-center gap-1 rounded-lg p-1 ${selected ? "bg-[var(--elevated)]" : "hover:bg-[var(--elevated)]"}`}>
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        onClick={() => { onSelectVersion?.(Number(number)); setVersionMenuOpen(false); }}
+                        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2 text-left focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                      >
+                        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md border font-mono text-[10px] ${selected ? "border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border-subtle)] text-[var(--text-secondary)]"}`}>v{number}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-medium">Version {number}</span>
+                            {isPublishedVersion && <span className="text-[9px] text-[var(--text-tertiary)]">Published</span>}
+                          </span>
+                          <span className="mt-0.5 block truncate text-[9px] text-[var(--text-tertiary)]">{item.description || (selected ? "Currently open" : "Workflow snapshot")}</span>
+                        </span>
+                        <span className={`rounded border px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wide ${statusStyle}`}>{status}</span>
+                        {selected && <CheckIcon className="h-3.5 w-3.5 shrink-0 stroke-[2] text-[var(--accent)]" />}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete version ${number}`}
+                        title={versions.length <= 1 ? "Keep at least one workflow version" : isActivePublishedVersion ? "Deactivate the workflow before deleting its active version" : `Delete version ${number}`}
+                        disabled={cannotDelete || isDeletingVersion}
+                        onClick={() => { setDeleteVersionError(""); setVersionToDelete(item); setVersionMenuOpen(false); }}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[12px] text-[var(--text-tertiary)] opacity-60 transition hover:bg-red-500/10 hover:text-red-500 focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-red-500/50 md:opacity-0 md:group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-3.5 w-3.5" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m3 0-.9 14H5.9L5 6m4 4v6m6-6v6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      </button>
+                    </div>
+                  );
+                })}
+                {versions.length === 0 && <p className="px-3 py-5 text-center text-[11px] text-[var(--text-tertiary)]">No versions found.</p>}
+              </div>
+              {isReadOnly && !hasDraftVersion && (
+                <div className="border-t border-[var(--border-subtle)] p-2">
+                  <button type="button" disabled={isCreatingDraft} onClick={() => { setVersionMenuOpen(false); onEditWorkflow?.(); }} className="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-[var(--accent)]/30 bg-[var(--accent)]/5 text-[11px] font-medium text-[var(--accent)] transition hover:bg-[var(--accent)]/10 disabled:opacity-50">
+                    {isCreatingDraft ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <span aria-hidden="true">＋</span>}
+                    {isCreatingDraft ? "Creating draft…" : "Create draft version"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {isReadOnly && (
             <span className="text-[10px] font-mono text-[var(--text-tertiary)] bg-[var(--elevated)] border border-[var(--border-subtle)] px-1.5 py-0.5 rounded-[4px]">
               READ ONLY
@@ -343,6 +453,28 @@ export default function WorkflowToolbar({
               <button type="button" disabled={isDeletingWorkflow} onClick={confirmDeleteWorkflow} className="inline-flex h-8 items-center gap-2 rounded-lg bg-red-600 px-3 text-[12px] font-medium text-white hover:bg-red-700 disabled:opacity-50">
                 {isDeletingWorkflow && <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
                 {isDeletingWorkflow ? "Deleting..." : "Delete workflow"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {versionToDelete && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isDeletingVersion) setVersionToDelete(null); }}>
+          <section role="alertdialog" aria-modal="true" aria-labelledby="workflow-version-delete-title" className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-5 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-red-500/25 bg-red-500/10 font-mono text-[15px] text-red-500">!</span>
+              <div>
+                <h2 id="workflow-version-delete-title" className="text-[15px] font-semibold text-[var(--text-primary)]">Delete version {versionToDelete.version_number ?? versionToDelete.version}?</h2>
+                <p className="mt-1.5 text-[12px] leading-5 text-[var(--text-secondary)]">This permanently removes this version’s nodes and connections. Its webhook endpoints and credentials will also be revoked. Other versions are not affected.</p>
+              </div>
+            </div>
+            {deleteVersionError && <p role="alert" className="mt-3 rounded-lg border border-red-500/25 bg-red-500/5 p-2.5 text-[11px] text-red-500">{deleteVersionError}</p>}
+            <div className="mt-5 flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-3">
+              <button type="button" disabled={isDeletingVersion} onClick={() => setVersionToDelete(null)} className="h-8 rounded-lg border border-[var(--border-default)] px-3 text-[11px] font-medium text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={isDeletingVersion} onClick={confirmDeleteVersion} className="inline-flex h-8 items-center gap-2 rounded-lg bg-red-600 px-3 text-[11px] font-medium text-white hover:bg-red-700 disabled:opacity-50">
+                {isDeletingVersion && <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+                {isDeletingVersion ? "Deleting version…" : "Delete version"}
               </button>
             </div>
           </section>
