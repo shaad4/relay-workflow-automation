@@ -17,6 +17,7 @@ from app.services.webhook_service import (
     get_webhook_by_public_token,
     verify_webhook_secret,
 )
+from app.services.webhook_test_sessions import create_session, get_session
 
 
 router = APIRouter(
@@ -138,6 +139,38 @@ async def get_webhook_route(
     return webhook
 
 
+@router.post("/{webhook_id}/test-sessions/")
+async def start_webhook_test_session(
+    webhook_id: uuid.UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        workspace_id = uuid.UUID(identity["workspace_id"])
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid workspace identity")
+    webhook = await get_webhook(webhook_id=webhook_id, workspace_id=workspace_id, session=session)
+    if webhook is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+    return await create_session(str(webhook.id), str(workspace_id))
+
+
+@router.get("/{webhook_id}/test-sessions/{session_id}/")
+async def get_webhook_test_session(
+    webhook_id: uuid.UUID,
+    session_id: uuid.UUID,
+    identity: dict = Depends(get_current_identity),
+):
+    try:
+        workspace_id = str(uuid.UUID(identity["workspace_id"]))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid workspace identity")
+    result = await get_session(str(session_id), str(webhook_id), workspace_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook test session expired")
+    return result
+
+
 @router.patch("/{webhook_id}/", response_model=WebhookResponse)
 async def update_webhook_endpoint(
     webhook_id: str,
@@ -231,6 +264,5 @@ async def regenerate_webhook_token_endpoint(
         )
 
     return webhook
-
 
 

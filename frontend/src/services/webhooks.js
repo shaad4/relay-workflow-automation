@@ -11,3 +11,15 @@ export function getWebhookEndpoint(token) {
   const base = process.env.NEXT_PUBLIC_AUTH_API_URL?.replace(/\/$/, "") || "";
   return `${base}/hooks/${token}`;
 }
+
+export function getWebhookTestEndpoint(token) {
+  return `${getWebhookEndpoint(token)}/test`;
+}
+
+export function startWebhookTestSession(webhookId) {
+  return apiRequest(`/webhooks/${webhookId}/test-sessions/`, { method: "POST" });
+}
+
+export function getWebhookTestSession(webhookId, sessionId) {
+  return apiRequest(`/webhooks/${webhookId}/test-sessions/${sessionId}/`, { method: "GET" });
+}

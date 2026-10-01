@@ -34,6 +34,14 @@ async def delete_webhook(request: Request, webhook_id: str):
 async def regenerate_webhook_token(request: Request, webhook_id: str):
     return await proxy_integration_request(request, f"{webhook_id}/regenerate-token")
 
+@router.post("/{webhook_id}/test-sessions/")
+async def start_webhook_test_session(request: Request, webhook_id: str):
+    return await proxy_integration_request(request, f"{webhook_id}/test-sessions")
+
+@router.get("/{webhook_id}/test-sessions/{session_id}/")
+async def get_webhook_test_session(request: Request, webhook_id: str, session_id: str):
+    return await proxy_integration_request(request, f"{webhook_id}/test-sessions/{session_id}")
+
 
 
 async def proxy_integration_request(
@@ -75,5 +83,4 @@ async def proxy_integration_request(
         status_code=response.status_code,
         headers=dict(response.headers),
     )
-
 
