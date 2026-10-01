@@ -1,6 +1,9 @@
+import json
 import os
 
 from aiokafka import AIOKafkaProducer
+
+from app.schemas.events import WorkflowTriggeredEvent
 
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv(
@@ -29,3 +32,16 @@ async def stop_producer():
         await producer.stop()
         producer = None
 
+
+async def publish_workflow_triggered(
+    event: WorkflowTriggeredEvent,
+):
+    if producer is None:
+        raise RuntimeError("Kafka producer is not started")
+
+    message = event.model_dump(mode="json")
+
+    await producer.send_and_wait(
+        "workflow.triggered",
+        json.dumps(message).encode("utf-8"),
+    )
