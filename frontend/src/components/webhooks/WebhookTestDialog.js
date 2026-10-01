@@ -70,13 +70,6 @@ export default function WebhookTestDialog({ open, webhook, onClose }) {
     return () => { cancelled = true; generation.current += 1; };
   }, [isOpen, webhook?.id, attempt]);
 
-  useEffect(() => {
-    if (!isOpen) return undefined;
-    const handleKey = (event) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [isOpen, onClose]);
-
   if (!isOpen) return null;
   const copy = async (value, label) => {
     try { await navigator.clipboard.writeText(value); setCopied(label); setError(""); window.setTimeout(() => setCopied(""), 1800); }
@@ -96,7 +89,7 @@ export default function WebhookTestDialog({ open, webhook, onClose }) {
       ? { frame: "border-red-500/35 bg-red-500/[0.05]", icon: "border-red-500/30 bg-red-500/10 text-red-500", dot: "bg-red-500", label: stage === "timeout" ? "Timed out" : "Failed" }
       : { frame: "border-[var(--border-default)] bg-[var(--elevated)]", icon: "border-[var(--border-default)] bg-[var(--surface)] text-[var(--text-secondary)]", dot: "bg-[var(--accent)]", label: stage === "starting" ? "Preparing" : stage === "setup-error" ? "Unavailable" : "Listening" };
 
-  return <div className="fixed inset-0 z-[115] flex justify-end bg-black/60 backdrop-blur-[2px]" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+  return <div className="fixed inset-0 z-[115] flex justify-end bg-black/60 backdrop-blur-[2px]">
     <aside role="dialog" aria-modal="true" aria-labelledby="webhook-test-title" className="flex h-full w-full max-w-[500px] flex-col border-l border-[var(--border-default)] bg-[var(--surface)] shadow-2xl animate-in slide-in-from-right duration-300">
       <header className="border-b border-[var(--border-subtle)] px-5 py-4"><div className="flex items-start justify-between gap-4"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-[7px] border border-[var(--border-default)] bg-[var(--elevated)] font-mono text-[15px] text-[var(--accent)]" aria-hidden="true">↗</span><div><p className="font-mono text-[9px] uppercase tracking-[.16em] text-[var(--text-tertiary)]">Webhook / Diagnostics</p><h2 id="webhook-test-title" className="mt-1 text-[17px] font-semibold tracking-tight text-[var(--text-primary)]">Test environment</h2><p className="mt-1 text-[11px] leading-4 text-[var(--text-secondary)]">{webhook.name || "Webhook"}<span className="mx-1.5 text-[var(--text-disabled)]">·</span><span className="font-mono">{webhook.method || "POST"}</span></p></div></div><button type="button" aria-label="Close test environment" onClick={onClose} className="grid h-8 w-8 shrink-0 place-items-center rounded-[6px] border border-[var(--border-subtle)] text-[16px] text-[var(--text-tertiary)] transition hover:bg-[var(--elevated)] hover:text-[var(--text-primary)]">×</button></div></header>
       <div className="flex-1 space-y-4 overflow-y-auto p-5">
