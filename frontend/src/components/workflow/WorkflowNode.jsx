@@ -23,7 +23,7 @@ function WorkflowNode({ data, selected }) {
   const isCondition = typeId === "logic.condition";
 
   const getConfigSummary = () => {
-    if (typeId === "trigger.webhook") return `${config.method || "POST"}  ${config.path || "/hooks/..."}`;
+    if (typeId === "trigger.webhook") return `${config.method || "POST"}  ${config.event_name || (config.webhook_id ? "Webhook configured" : "Not configured")}`;
     if (typeId === "trigger.schedule") return `${config.cron || "0 0 * * *"}  ·  ${config.timezone || "UTC"}`;
     if (typeId === "trigger.manual") return "Manual trigger";
     if (typeId === "action.http_request") return `${config.method || "POST"}  ${config.url || "https://..."}`;
