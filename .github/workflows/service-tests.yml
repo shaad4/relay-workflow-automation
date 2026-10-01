@@ -22,6 +22,7 @@ jobs:
           - service/api-gateway
           - service/auth-service
           - service/workflow-service
+          - service/integration-service
     defaults:
       run:
         working-directory: ${{ matrix.service }}
@@ -49,4 +50,10 @@ jobs:
           python -m pip install --only-binary=:all: pytest==9.1.1 pytest-cov==7.1.0 httpx==0.28.1
 
       - name: Run tests with coverage
-        run: python -m pytest --cov=app --cov-report=term-missing
+        run: |
+          if [ "${{ matrix.service }}" = "service/integration-service" ]; then
+            python -m coverage run --source=app --omit='*/grpc/generated/*' -m pytest
+            python -m coverage report --show-missing --fail-under=80
+          else
+            python -m pytest --cov=app --cov-report=term-missing
+          fi

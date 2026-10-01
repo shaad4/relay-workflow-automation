@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,6 +9,9 @@ from app.services.webhook_service import (
     verify_webhook_secret,
 )
 from app.services.webhook_test_sessions import publish_result, publish_session_result
+from app.kafka.producer import publish_workflow_triggered
+from app.schemas.events import WorkflowTriggeredEvent
+
 
 router = APIRouter(
     prefix="/hooks",
@@ -14,9 +19,10 @@ router = APIRouter(
 )
 
 
-@router.post("/{public_token}")
+@router.post("/{public_token}", status_code=status.HTTP_202_ACCEPTED)
 async def receive_webhook(
     public_token: str,
+    request: Request,
     x_relay_secret: str | None = Header(default=None),
     session: AsyncSession = Depends(get_db),
 ):
@@ -63,10 +69,33 @@ async def receive_webhook(
                 detail="Invalid webhook secret",
             )
 
-    # 4. Webhook authentication succeeded
+    # 4. Read the incoming webhook payload
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request body must be valid JSON",
+        )
+
+    # 5. Create workflow.triggered event
+    event = WorkflowTriggeredEvent(
+        event_id=uuid4(),
+        workspace_id=webhook.workspace_id,
+        workflow_id=webhook.workflow_id,
+        workflow_version_id=webhook.workflow_version_id,
+        webhook_id=webhook.id,
+        payload=payload,
+    )
+
+    # 6. Publish event to Kafka
+    await publish_workflow_triggered(event)
+
+    # 7. Webhook accepted
     return {
-        "message": "Webhook authenticated successfully",
+        "message": "Webhook accepted",
         "webhook_id": str(webhook.id),
+        "event_id": str(event.event_id),
     }
 
 

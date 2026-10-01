@@ -8,3 +8,6 @@ grpcio
 grpcio-tools
 pwdlib[argon2]
 aiokafka
+pytest
+pytest-cov
+httpx
