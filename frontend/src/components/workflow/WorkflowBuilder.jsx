@@ -1292,6 +1292,7 @@ export default function WorkflowBuilder({
           />
         ) : isInspectorOpen && (
           <NodeInspector
+            key={version?.id || "workflow-version"}
             selectedNode={selectedNode}
             onUpdateNode={handleUpdateNodeData}
             onDeleteNode={handleDeleteNode}

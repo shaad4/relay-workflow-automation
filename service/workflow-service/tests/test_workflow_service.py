@@ -151,6 +151,64 @@ def test_create_draft_version_copies_nodes_and_edges():
     assert copied_edge.condition == "ok"
 
 
+def test_create_draft_version_requires_new_webhook_without_mutating_source():
+    import asyncio
+
+    latest = SimpleNamespace(id=VERSION_ID, version=1, description="Published setup")
+    source_webhook_config = {
+        "webhook_id": "v1-webhook-id",
+        "public_token": "v1-public-token",
+        "secret": "v1-secret",
+        "endpoint": "https://relay.example/hooks/v1-token",
+        "path": "/hooks/v1-token",
+        "event_name": "orders.created",
+        "authentication_type": "secret",
+        "method": "POST",
+        "custom_option": "keep this node setting",
+    }
+    webhook_node = SimpleNamespace(
+        node_id="webhook-trigger",
+        node_type="trigger.webhook",
+        label="Order trigger",
+        position_x=12,
+        position_y=24,
+        configuration=source_webhook_config,
+    )
+    action_node = SimpleNamespace(
+        node_id="send-email",
+        node_type="action.email",
+        label="Send email",
+        position_x=200,
+        position_y=24,
+        configuration={"to": "ops@example.com", "subject": "New order"},
+    )
+    session = FakeSession(
+        [
+            Result(scalar=SimpleNamespace(id=WORKFLOW_ID)),
+            Result(scalars=[latest]),
+            Result(scalars=[webhook_node, action_node]),
+            Result(scalars=[]),
+        ]
+    )
+
+    new_version = asyncio.run(service.create_draft_version(WORKFLOW_ID, WORKSPACE_ID, session))
+    copied_webhook, copied_action = session.added[1:]
+
+    assert new_version.version == 2
+    assert copied_webhook.workflow_version_id == new_version.id
+    assert copied_webhook.node_type == "trigger.webhook"
+    assert copied_webhook.label == webhook_node.label
+    assert copied_webhook.position_x == webhook_node.position_x
+    assert copied_webhook.configuration == {
+        "method": "POST",
+        "setup_required": True,
+    }
+    assert copied_action.configuration == action_node.configuration
+    assert source_webhook_config["webhook_id"] == "v1-webhook-id"
+    assert source_webhook_config["public_token"] == "v1-public-token"
+    assert source_webhook_config["secret"] == "v1-secret"
+
+
 def test_update_node_rejects_duplicate_id():
     import asyncio
 

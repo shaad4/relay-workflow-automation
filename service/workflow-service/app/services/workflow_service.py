@@ -244,6 +244,10 @@ async def create_draft_version(
         source_nodes = node_result.scalars().all()
 
         for node in source_nodes:
+            configuration = node.configuration
+            if node.node_type == "trigger.webhook":
+                configuration = {"method": "POST", "setup_required": True}
+
             session.add(
                 WorkflowNode(
                     workflow_version_id=new_version.id,
@@ -252,7 +256,7 @@ async def create_draft_version(
                     label=node.label,
                     position_x=node.position_x,
                     position_y=node.position_y,
-                    configuration=node.configuration,
+                    configuration=configuration,
                 )
             )
 
