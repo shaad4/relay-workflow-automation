@@ -46,6 +46,18 @@ async def get_workflow_version(
         f"{workflow_id}/versions/{version_number}",
     )
 
+
+@router.delete("/{workflow_id}/versions/{version_number}")
+async def delete_workflow_version(
+    request: Request,
+    workflow_id: str,
+    version_number: int,
+):
+    return await proxy_workflow_request(
+        request,
+        f"{workflow_id}/versions/{version_number}",
+    )
+
 @router.post("/{workflow_id}/draft/")
 async def create_workflow_draft(
     request: Request,

@@ -3,7 +3,7 @@ import uuid
 
 from pwdlib import PasswordHash
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -187,6 +187,29 @@ async def delete_webhook(
         raise
 
     return True
+
+
+async def delete_workflow_webhooks(
+    workflow_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    session: AsyncSession,
+    workflow_version_id: uuid.UUID | None = None,
+) -> int:
+    """Revoke all webhook resources owned by a workflow or one version."""
+    statement = delete(Webhook).where(
+        Webhook.workflow_id == workflow_id,
+        Webhook.workspace_id == workspace_id,
+    )
+    if workflow_version_id is not None:
+        statement = statement.where(Webhook.workflow_version_id == workflow_version_id)
+
+    try:
+        result = await session.execute(statement)
+        await session.commit()
+        return result.rowcount or 0
+    except Exception:
+        await session.rollback()
+        raise
 
 
 async def regenerate_webhook_token(

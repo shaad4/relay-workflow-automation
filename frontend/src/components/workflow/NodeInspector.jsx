@@ -107,10 +107,15 @@ function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOn
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [secretVisible, setSecretVisible] = useState(false);
+  const [oneTimeSecret, setOneTimeSecret] = useState("");
   const [testOpen, setTestOpen] = useState(false);
   const [form, setForm] = useState({ name: "", event_name: "", authentication_type: "secret", is_active: true });
 
   const load = async () => {
+    // The create response is the only source of plaintext credentials. A list
+    // reload deliberately omits them, so don't replace the live creation
+    // result while its one-time secret is being shown.
+    if (dialog === "secret" && oneTimeSecret) return;
     if (!workflowId) { setLoading(false); setError("Workflow context is unavailable."); return; }
     setLoading(true); setError(""); setWebhook(null);
     try {
@@ -123,25 +128,33 @@ function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOn
         String(item.workflow_id) === String(workflowId) &&
         String(item.workflow_version_id) === String(workflowVersionId)
       );
-      const match = forVersion.find((item) => String(item.id) === String(config.webhook_id)) || null;
+      const linked = forVersion.find((item) => String(item.id) === String(config.webhook_id));
+      // Older nodes may not have persisted webhook_id even though their
+      // version already owns a webhook. Associate automatically only when
+      // there is exactly one candidate for this exact version; never guess
+      // between multiple endpoints or cross into another version.
+      const match = linked || (forVersion.length === 1 ? forVersion[0] : null);
       setWebhook(match);
-      if (match && match.id !== config.webhook_id) onAssociate(match);
+      if (match && String(match.id) !== String(config.webhook_id)) onAssociate(match);
       else if (!match && config.webhook_id) onAssociate(null);
     } catch { setError("Unable to load webhook configuration."); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflowId, workflowVersionId, nodeId]);
+  }, [workflowId, workflowVersionId, nodeId, config.webhook_id]);
   useEffect(() => {
     if (!dialog) return undefined;
     const onKeyDown = (event) => {
       if (event.key !== "Escape" || saving) return;
-      if (dialog === "secret") setWebhook((current) => {
-        if (!current) return current;
-        const safe = { ...current };
-        delete safe.secret;
-        return safe;
-      });
+      if (dialog === "secret") {
+        setOneTimeSecret("");
+        setWebhook((current) => {
+          if (!current) return current;
+          const safe = { ...current };
+          delete safe.secret;
+          return safe;
+        });
+      }
       setDialog("");
     };
     window.addEventListener("keydown", onKeyDown);
@@ -163,7 +176,7 @@ function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOn
         const version = versions.find((item) => item.id === workflowVersionId);
         if (!version) throw new Error("The current workflow version is unavailable.");
         const created = await createWebhook({ workflow_id: workflowId, workflow_version_id: workflowVersionId, name: form.name.trim(), event_name: form.event_name.trim(), method: "POST", authentication_type: form.authentication_type, is_active: form.is_active });
-        setWebhook(created); onAssociate(created); setSecretVisible(false); setCopied(false); setDialog(created.secret ? "secret" : "");
+        setWebhook(created); onAssociate(created); setOneTimeSecret(created.secret || ""); setSecretVisible(false); setCopied(false); setDialog(created.secret ? "secret" : "");
       } else {
         const patch = {};
         for (const key of ["name", "event_name", "authentication_type", "is_active"]) if (form[key] !== webhook[key]) patch[key] = form[key];
@@ -189,10 +202,14 @@ function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOn
   const inputClass = "w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none";
   const closeDialog = () => {
     if (saving) return;
-    if (dialog === "secret" && webhook) {
-      const safe = { ...webhook };
-      delete safe.secret;
-      setWebhook(safe);
+    if (dialog === "secret") {
+      setOneTimeSecret("");
+      setWebhook((current) => {
+        if (!current) return current;
+        const safe = { ...current };
+        delete safe.secret;
+        return safe;
+      });
     }
     setDialog("");
   };
@@ -209,7 +226,7 @@ function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOn
     {error && webhook && <p role="alert" className="text-[10px] text-red-500">{error}</p>}
     {dialog && <div className="fixed inset-0 z-[110] flex justify-end bg-black/55"><section role="dialog" aria-modal="true" aria-labelledby="webhook-trigger-dialog-title" className="flex h-full w-full max-w-[480px] flex-col overflow-y-auto border-l border-[var(--border-default)] bg-[var(--surface)] shadow-2xl animate-in slide-in-from-right duration-200"><div className="sticky top-0 z-10 border-b border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><div className="flex items-start justify-between gap-4"><div><p className="text-[9px] font-mono uppercase tracking-[.16em] text-[var(--text-tertiary)]">Webhook trigger · {dialog === "create" ? "New endpoint" : dialog === "edit" ? "Endpoint settings" : dialog === "secret" ? "Credentials" : dialog === "delete" ? "Destructive action" : "Security"}</p><h3 id="webhook-trigger-dialog-title" className="mt-1.5 text-[17px] font-semibold tracking-tight text-[var(--text-primary)]">{dialog === "create" ? "Configure webhook" : dialog === "edit" ? "Edit webhook" : dialog === "secret" ? "Webhook created" : dialog === "delete" ? "Delete webhook?" : "Regenerate endpoint URL?"}</h3><p className="mt-1 text-[11px] leading-4 text-[var(--text-secondary)]">{dialog === "create" ? "Set the endpoint details and trigger destination." : dialog === "edit" ? "Update this workflow's webhook settings." : dialog === "secret" ? "Copy and store the secret before closing." : dialog === "delete" ? "This permanently removes the endpoint." : "This change immediately invalidates the current URL."}</p></div><div className="flex shrink-0 items-center gap-2">{(dialog === "create" || dialog === "edit") && <button type="button" onClick={onOpenGuide} className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-[var(--border-default)] px-2.5 text-[10px] font-medium text-[var(--text-secondary)] transition hover:bg-[var(--elevated)]" aria-label="Open webhook usage guide"><span className="grid h-4 w-4 place-items-center rounded-full border border-current font-mono text-[9px]">?</span>Guide</button>}<button type="button" disabled={saving} onClick={closeDialog} aria-label="Close webhook configuration" className="grid h-8 w-8 shrink-0 place-items-center rounded-[6px] border border-[var(--border-subtle)] text-[16px] text-[var(--text-tertiary)] hover:bg-[var(--elevated)]">×</button></div></div></div>
       {(dialog === "create" || dialog === "edit") && <div role="group" aria-label="Webhook configuration" onKeyDown={(event) => { if (event.key === "Enter" && event.target.tagName !== "BUTTON") { event.preventDefault(); submit(); } }} className="flex-1 space-y-5 p-5"><section className="space-y-3"><div className="border-b border-[var(--border-subtle)] pb-2 text-[9px] font-mono uppercase tracking-[.14em] text-[var(--text-tertiary)]">Endpoint identity</div><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Webhook name<input required maxLength={255} value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} className={`${inputClass} mt-1`} placeholder="Order Created Webhook"/></label><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Event name<input required maxLength={255} value={form.event_name} onChange={(e)=>setForm({...form,event_name:e.target.value})} className={`${inputClass} mt-1 font-mono`} placeholder="orders.created"/></label></section><section className="space-y-3"><div className="border-b border-[var(--border-subtle)] pb-2 text-[9px] font-mono uppercase tracking-[.14em] text-[var(--text-tertiary)]">Request security</div><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Method<select value="POST" disabled className={`${inputClass} mt-1 opacity-70`}><option>POST</option></select></label><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Authentication<select value={form.authentication_type} onChange={(e)=>setForm({...form,authentication_type:e.target.value})} className={`${inputClass} mt-1`}><option value="secret">Secret</option><option value="none">None</option></select></label><label className="flex items-center justify-between rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[11px] text-[var(--text-secondary)]"><span><span className="block font-medium text-[var(--text-primary)]">Active</span><span className="mt-0.5 block text-[10px] text-[var(--text-tertiary)]">{form.is_active ? "Endpoint will accept requests" : "Endpoint will be paused"}</span></span><button type="button" role="switch" aria-checked={Boolean(form.is_active)} aria-label="Webhook active" onClick={()=>setForm({...form,is_active:!form.is_active})} className={`relative inline-flex h-5 w-9 items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/50 ${form.is_active ? "border-emerald-600 bg-emerald-600" : "border-[var(--border-strong)] bg-[var(--surface)]"}`}><span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${form.is_active ? "translate-x-[17px]" : "translate-x-[3px]"}`}/></button></label></section>{dialog === "edit" && <section className="border-t border-[var(--border-subtle)] pt-4"><p className="text-[10px] font-medium text-[var(--text-primary)]">Danger zone</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Permanently remove this webhook and invalidate its endpoint.</p><button type="button" onClick={()=>{setError("");setDialog("delete");}} className="mt-2 h-8 rounded-[6px] border border-red-500/30 px-3 text-[10px] text-red-600 hover:bg-red-500/5 dark:text-red-400">Delete webhook</button></section>}{dialog === "create" && <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[10px] leading-4 text-[var(--text-secondary)]">{form.authentication_type === "secret" ? "Relay generates the secret automatically. It is displayed once after creation." : "Requests to this endpoint will not require a shared secret."}</div>}{error&&<p role="alert" className="rounded-[6px] border border-red-500/30 bg-red-500/5 p-2 text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><button type="button" onClick={closeDialog} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px] text-[var(--text-secondary)]">Cancel</button><button type="button" onClick={() => submit()} disabled={saving} className="h-8 rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white">{saving ? (dialog === "create" ? "Creating…" : "Saving…") : (dialog === "create" ? "Create webhook" : "Save changes")}</button></div></div>}
-      {dialog === "secret" && <div className="flex-1 space-y-5 p-5"><div className="rounded-[6px] border border-amber-500/30 bg-amber-500/5 p-4"><div className="flex items-start gap-3"><span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded border border-amber-500/30 font-semibold text-amber-600 dark:text-amber-400">!</span><div><p className="text-[12px] font-semibold text-[var(--text-primary)]">Copy this secret now</p><p className="mt-1 text-[11px] leading-5 text-[var(--text-secondary)]">This is the only time Relay will show it. If you close this drawer without saving it, you’ll need to create a new webhook to get another secret.</p></div></div></div><section><div className="mb-2 flex items-center justify-between"><FieldLabel>Signing secret</FieldLabel><span className="font-mono text-[9px] uppercase tracking-wide text-[var(--text-tertiary)]">Sensitive</span></div><div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-3"><code className="block min-h-5 break-all font-mono text-[12px] leading-5 text-[var(--text-primary)]" aria-label={secretVisible?"Signing secret":"Masked signing secret"}>{secretVisible ? webhook?.secret : `${String(webhook?.secret || "").slice(0, 10)}${"•".repeat(Math.max(12, String(webhook?.secret || "").length - 10))}`}</code><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={async()=>{try{await navigator.clipboard.writeText(webhook.secret);setCopied(true);setError("");}catch{setError("Unable to copy secret. Select and copy it manually.");}}} className={`h-8 rounded-[6px] px-3 text-[11px] font-medium ${copied?"border border-emerald-600/40 text-emerald-600 dark:text-emerald-400":"bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"}`}>{copied?"✓ Copied":"Copy secret"}</button><button type="button" onClick={()=>setSecretVisible((value)=>!value)} aria-pressed={secretVisible} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--elevated)]">{secretVisible?"Hide":"Reveal"}</button></div></div></section><div className="rounded-[6px] border border-[var(--border-subtle)] p-3"><p className="text-[10px] font-medium text-[var(--text-primary)]">Store it in your secrets manager</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Use this value in the external service that calls your webhook. It is never included in the endpoint URL or shown again after this drawer closes.</p></div>{error&&<p role="alert" className="text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><button type="button" onClick={closeDialog} className="h-8 rounded-[6px] bg-[var(--accent)] px-4 text-[11px] font-medium text-white">Done, secret saved</button></div></div>}
+      {dialog === "secret" && <div className="flex-1 space-y-5 p-5"><div className="rounded-[6px] border border-amber-500/30 bg-amber-500/5 p-4"><div className="flex items-start gap-3"><span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded border border-amber-500/30 font-semibold text-amber-600 dark:text-amber-400">!</span><div><p className="text-[12px] font-semibold text-[var(--text-primary)]">Copy this secret now</p><p className="mt-1 text-[11px] leading-5 text-[var(--text-secondary)]">This is the only time Relay will show it. If you close this drawer without saving it, you’ll need to create a new webhook to get another secret.</p></div></div></div><section><div className="mb-2 flex items-center justify-between"><FieldLabel>Signing secret</FieldLabel><span className="font-mono text-[9px] uppercase tracking-wide text-[var(--text-tertiary)]">Sensitive</span></div><div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-3"><code className="block min-h-5 break-all font-mono text-[12px] leading-5 text-[var(--text-primary)]" aria-label={secretVisible?"Signing secret":"Masked signing secret"}>{secretVisible ? oneTimeSecret : `${String(oneTimeSecret || "").slice(0, 10)}${"•".repeat(Math.max(12, String(oneTimeSecret || "").length - 10))}`}</code><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={async()=>{if(!oneTimeSecret){setError("Relay did not return the signing secret. Create a new webhook to receive a new secret.");return;}try{await navigator.clipboard.writeText(oneTimeSecret);setCopied(true);setError("");}catch{setError("Unable to copy secret. Select and copy it manually.");}}} className={`h-8 rounded-[6px] px-3 text-[11px] font-medium ${copied?"border border-emerald-600/40 text-emerald-600 dark:text-emerald-400":"bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"}`}>{copied?"✓ Copied":"Copy secret"}</button><button type="button" onClick={()=>setSecretVisible((value)=>!value)} aria-pressed={secretVisible} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--elevated)]">{secretVisible?"Hide":"Reveal"}</button></div></div></section><div className="rounded-[6px] border border-[var(--border-subtle)] p-3"><p className="text-[10px] font-medium text-[var(--text-primary)]">Store it in your secrets manager</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Use this value in the external service that calls your webhook. It is never included in the endpoint URL or shown again after this drawer closes.</p></div>{error&&<p role="alert" className="text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><button type="button" onClick={closeDialog} className="h-8 rounded-[6px] bg-[var(--accent)] px-4 text-[11px] font-medium text-white">Done, secret saved</button></div></div>}
       {dialog === "delete" && <div className="flex-1 space-y-4 p-5"><div className="rounded-[6px] border border-red-500/30 bg-red-500/5 p-3"><p className="text-[11px] font-semibold text-[var(--text-primary)]">{webhook?.name}</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">Deleting this webhook immediately disables its endpoint. External services using it will stop triggering this workflow. This cannot be undone.</p></div>{error&&<p role="alert" className="text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><button type="button" disabled={saving} onClick={closeDialog} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px]">Cancel</button><button type="button" disabled={saving} onClick={removeWebhook} className="h-8 rounded-[6px] bg-red-600 px-3 text-[11px] font-medium text-white hover:bg-red-700">{saving?"Deleting…":"Delete webhook"}</button></div></div>}
       {dialog === "regenerate" && <div className="flex-1 space-y-4 p-5"><div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--elevated)] p-3"><p className="text-[11px] font-medium text-[var(--text-primary)]">Current endpoint will be invalidated</p><code className="mt-2 block break-all font-mono text-[10px] leading-4 text-[var(--text-secondary)]">{`${endpoint.split("/hooks/")[0]}/hooks/••••••••${String(webhook.public_token || "").slice(-4)}`}</code></div><p className="text-[11px] leading-5 text-[var(--text-secondary)]">The current webhook URL will stop working after the token is regenerated. External services using it will need to be updated.</p>{error&&<p role="alert" className="text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><button type="button" onClick={closeDialog} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px]">Cancel</button><button type="button" disabled={saving} onClick={regenerate} className="h-8 rounded-[6px] bg-[var(--text-primary)] px-3 text-[11px] text-[var(--canvas)]">{saving?"Regenerating…":"Regenerate token"}</button></div></div>}
     </section></div>}
@@ -582,6 +599,7 @@ export default function NodeInspector({
     switch (typeId) {
       case "trigger.webhook":
         return <WebhookConfig config={formData} workflowId={workflowId} workflowVersionId={workflowVersionId} nodeId={selectedNode.id} isReadOnly={isReadOnly} onOpenGuide={() => setWebhookGuideOpen(true)} onAssociate={(webhook) => {
+          if (isReadOnly) return;
           const nextConfig = webhook
             ? { ...formData, webhook_id: webhook.id, method: webhook.method || "POST", event_name: webhook.event_name || "", setup_required: false }
             : { ...formData, webhook_id: undefined, method: "POST", event_name: "", setup_required: true };

@@ -63,6 +63,7 @@ services:
     depends_on:
       - auth-service
       - workflow-postgres
+      - integration-service
 
   workflow-postgres:
     image: postgres:16
@@ -87,8 +88,6 @@ services:
       - "8003:8000"
     env_file:
       - ./service/integration-service/.env
-    depends_on:
-      - workflow-service
 
   integration-postgres:
     image: postgres:16

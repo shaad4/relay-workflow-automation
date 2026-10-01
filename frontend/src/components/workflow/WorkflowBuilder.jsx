@@ -1127,6 +1127,7 @@ export default function WorkflowBuilder({
         onWorkflowDeleted={() => router.push("/workflows")}
         versionNumber={versionNumber}
         versions={versions}
+        publishedVersionId={workflow?.published_version_id}
         onSelectVersion={(nextVersion) => {
           if (saveState !== "saved") {
             setSaveError("Save or discard your changes before switching versions.");
