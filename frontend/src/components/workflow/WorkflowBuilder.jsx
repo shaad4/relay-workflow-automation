@@ -312,6 +312,7 @@ export default function WorkflowBuilder({
   // saveState: 'saved' | 'unsaved' | 'saving' | 'failed'
   const [saveState, setSaveState] = useState("saved");
   const [saveError, setSaveError] = useState(null);
+  const [builderNotice, setBuilderNotice] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
@@ -321,6 +322,12 @@ export default function WorkflowBuilder({
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isCanvasReadOnly = currentVersionStatus === "published";
+
+  const showBuilderNotice = useCallback((message) => {
+    setBuilderNotice(message);
+    window.clearTimeout(showBuilderNotice.timeoutId);
+    showBuilderNotice.timeoutId = window.setTimeout(() => setBuilderNotice(""), 4500);
+  }, []);
 
   const selectedNode = useMemo(
     () => (selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) ?? null : null),
@@ -502,6 +509,10 @@ export default function WorkflowBuilder({
   const handleDropNode = useCallback(
     (nodeDef, position) => {
       if (isCanvasReadOnly) return;
+      if (nodeDef.typeId?.startsWith("trigger.") && nodes.some((node) => node.data?.typeId?.startsWith("trigger."))) {
+        showBuilderNotice("A workflow can only have one trigger. Remove the existing trigger before adding another.");
+        return;
+      }
       recordHistory();
       const logicalId = getNextNodeId(nodeDef.typeId);
       const tempId = `temp-node-${globalThis.crypto.randomUUID()}`;
@@ -528,7 +539,7 @@ export default function WorkflowBuilder({
       markUnsaved();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isCanvasReadOnly, markUnsaved, recordHistory]
+    [isCanvasReadOnly, markUnsaved, nodes, recordHistory, showBuilderNotice]
   );
 
   // Quick-add via sub-bar buttons
@@ -630,6 +641,10 @@ export default function WorkflowBuilder({
     if (!original) return;
     recordHistory();
     const typeId = original.data?.typeId || "action.http_request";
+    if (typeId.startsWith("trigger.") && nodes.some((node) => node.id !== id && node.data?.typeId?.startsWith("trigger."))) {
+      showBuilderNotice("A workflow can only have one trigger. Remove the existing trigger before duplicating it.");
+      return;
+    }
     const definition = getNodeDefinition(typeId);
     const duplicate = {
       ...original,
@@ -644,7 +659,7 @@ export default function WorkflowBuilder({
     setIsInspectorOpen(true);
     setContextMenu(null);
     markUnsaved();
-  }, [isCanvasReadOnly, nodes, recordHistory, setNodes, markUnsaved]);
+  }, [isCanvasReadOnly, nodes, recordHistory, setNodes, markUnsaved, showBuilderNotice]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -1115,6 +1130,7 @@ export default function WorkflowBuilder({
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full w-full bg-[var(--canvas)] select-none overflow-hidden font-sans">
+      {builderNotice && <div role="alert" className="fixed left-1/2 top-4 z-[140] flex -translate-x-1/2 items-center gap-2 rounded-lg border border-amber-500/30 bg-[var(--surface)] px-4 py-3 text-[12px] text-[var(--text-primary)] shadow-xl"><span className="grid h-5 w-5 place-items-center rounded-full border border-amber-500/40 text-amber-500">!</span><span>{builderNotice}</span><button type="button" onClick={() => setBuilderNotice("")} aria-label="Dismiss notification" className="ml-2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">×</button></div>}
       {/* ── 1. Top Toolbar ─────────────────────────────────────────────────── */}
       <WorkflowToolbar
         workflowName={workflow?.name || "Workflow"}
@@ -1211,7 +1227,7 @@ export default function WorkflowBuilder({
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
         {/* Left: Node Library */}
         {isLibraryOpen && !isCanvasReadOnly && (
-          <NodeLibrary onClose={() => setIsLibraryOpen(false)} />
+          <NodeLibrary onClose={() => setIsLibraryOpen(false)} onAddNode={(nodeDef) => handleDropNode(nodeDef, getViewportCenter?.(248, 84) ?? { x: 0, y: 0 })} />
         )}
 
         {/* Center: Canvas */}
