@@ -90,7 +90,7 @@ export default function DashboardSidebar({
   ];
 
   const resourceNavItems = [
-    { label: "Connections", href: "/dashboard/connections", icon: ConnectionsIcon },
+    { label: "Connections", href: "/connections/webhooks", icon: ConnectionsIcon },
     { label: "Knowledge Bases", href: "/dashboard/knowledge-bases", icon: KnowledgeBasesIcon },
   ];
 
@@ -184,17 +184,17 @@ export default function DashboardSidebar({
           )}
           <nav aria-label="Resource Navigation" className="space-y-1">
             {resourceNavItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
+              const isActive = pathname.startsWith("/connections/") || pathname === item.href;
+              const isConnections = item.label === "Connections";
               return (
-                <SidebarNavItem
-                  key={item.href}
-                  href={item.href}
-                  label={item.label}
-                  icon={item.icon}
-                  active={isActive}
-                  collapsed={isCollapsed}
-                  onClick={onMobileClose}
-                />
+                <div key={item.href}>
+                  <SidebarNavItem href={item.href} label={item.label} icon={item.icon} active={isActive && !(isConnections && pathname === "/connections/webhooks")} collapsed={isCollapsed} onClick={onMobileClose} />
+                  {isConnections && isActive && !isCollapsed && (
+                    <Link href="/connections/webhooks" onClick={onMobileClose} className={`ml-9 mt-1 flex h-8 items-center border-l pl-3 text-[12px] transition-colors ${pathname === "/connections/webhooks" ? "border-[var(--accent)] text-[var(--text-primary)]" : "border-[var(--border-default)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"}`}>
+                      Webhooks
+                    </Link>
+                  )}
+                </div>
               );
             })}
           </nav>
