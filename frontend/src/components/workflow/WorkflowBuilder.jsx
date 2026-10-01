@@ -1299,6 +1299,8 @@ export default function WorkflowBuilder({
             onDeleteNode={handleDeleteNode}
             onClose={() => setIsInspectorOpen(false)}
             isReadOnly={isCanvasReadOnly}
+            workflowId={workflowId}
+            workflowVersionId={version?.id}
           />
         )}
       </div>
