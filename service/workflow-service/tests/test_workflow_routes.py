@@ -185,20 +185,70 @@ def test_delete_workflow(client, monkeypatch):
     async def delete_workflow(workflow_id, workspace_id, session):
         return True
 
+    async def get_workflow(workflow_id, workspace_id, session):
+        return workflow
+
+    async def revoke_workflow_webhooks(workflow_id, workspace_id):
+        return None
+
     monkeypatch.setattr(workflows, "delete_workflow", delete_workflow)
+    monkeypatch.setattr(workflows, "get_workflow", get_workflow)
+    monkeypatch.setattr(workflows, "revoke_workflow_webhooks", revoke_workflow_webhooks)
     response = client.delete(f"/workflows/{WORKFLOW_ID}/")
     assert response.status_code == 204
 
 
 def test_delete_workflow_returns_conflict_for_active_status(client, monkeypatch):
-    async def delete_workflow(workflow_id, workspace_id, session):
-        raise ValueError("Only draft or inactive workflows can be deleted")
+    active_workflow = SimpleNamespace(**{**workflow.__dict__, "status": "active"})
 
-    monkeypatch.setattr(workflows, "delete_workflow", delete_workflow)
+    async def get_workflow(workflow_id, workspace_id, session):
+        return active_workflow
+
+    monkeypatch.setattr(workflows, "get_workflow", get_workflow)
     response = client.delete(f"/workflows/{WORKFLOW_ID}/")
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Only draft or inactive workflows can be deleted"
+    assert response.json()["detail"].startswith("Only draft or inactive workflows can be deleted")
+
+
+def test_delete_workflow_returns_conflict_if_status_changes_during_delete(client, monkeypatch):
+    async def get_workflow(workflow_id, workspace_id, session):
+        return workflow
+
+    async def revoke_workflow_webhooks(workflow_id, workspace_id):
+        return None
+
+    async def delete_workflow(workflow_id, workspace_id, session):
+        raise ValueError("Workflow status changed before deletion")
+
+    monkeypatch.setattr(workflows, "get_workflow", get_workflow)
+    monkeypatch.setattr(workflows, "revoke_workflow_webhooks", revoke_workflow_webhooks)
+    monkeypatch.setattr(workflows, "delete_workflow", delete_workflow)
+
+    response = client.delete(f"/workflows/{WORKFLOW_ID}/")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Workflow status changed before deletion"
+
+
+def test_delete_workflow_cancels_if_webhook_revocation_fails(client, monkeypatch):
+    async def get_workflow(workflow_id, workspace_id, session):
+        return workflow
+
+    async def revoke_workflow_webhooks(workflow_id, workspace_id):
+        raise workflows.WebhookCleanupError("Integration Service unavailable")
+
+    async def delete_workflow(workflow_id, workspace_id, session):
+        pytest.fail("Workflow deletion must not run when webhook cleanup fails")
+
+    monkeypatch.setattr(workflows, "get_workflow", get_workflow)
+    monkeypatch.setattr(workflows, "revoke_workflow_webhooks", revoke_workflow_webhooks)
+    monkeypatch.setattr(workflows, "delete_workflow", delete_workflow)
+
+    response = client.delete(f"/workflows/{WORKFLOW_ID}/")
+
+    assert response.status_code == 503
+    assert "webhook endpoints could not be revoked" in response.json()["detail"]
 
 
 def test_workflow_versions(client, monkeypatch):

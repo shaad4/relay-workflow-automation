@@ -322,7 +322,7 @@ def test_delete_workflow_returns_false_when_missing_and_deletes_when_found():
     ) is False
 
     found = SimpleNamespace(id=WORKFLOW_ID, status="draft")
-    session = FakeSession([Result(scalar=found)])
+    session = FakeSession([Result(scalar=found), Result(), Result(), Result(), Result()])
     assert asyncio.run(
         service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, session)
     ) is True
@@ -333,13 +333,34 @@ def test_delete_workflow_returns_false_when_missing_and_deletes_when_found():
 @pytest.mark.parametrize("status", ["draft", "inactive"])
 def test_delete_workflow_accepts_draft_and_inactive(status):
     workflow = SimpleNamespace(id=WORKFLOW_ID, status=status)
-    session = FakeSession([Result(scalar=workflow)])
+    session = FakeSession([Result(scalar=workflow), Result(), Result(), Result(), Result()])
 
     assert asyncio.run(
         service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, session)
     ) is True
     assert session.deleted == [workflow]
     assert session.commits == 1
+
+
+def test_delete_workflow_rolls_back_if_cascade_delete_fails():
+    workflow = SimpleNamespace(id=WORKFLOW_ID, status="draft")
+    session = FakeSession([Result(scalar=workflow)], fail_commit=False)
+    # The initial lookup succeeds; a subsequent dependent-row delete fails.
+    calls = 0
+
+    async def execute(statement):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return Result(scalar=workflow)
+        raise RuntimeError("cascade delete failed")
+
+    session.execute = execute
+    with pytest.raises(RuntimeError, match="cascade delete failed"):
+        asyncio.run(service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, session))
+
+    assert session.rollbacks == 1
+    assert session.commits == 0
 
 
 @pytest.mark.parametrize("status", ["active", "published"])
