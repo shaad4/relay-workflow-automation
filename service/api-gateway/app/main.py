@@ -12,6 +12,7 @@ from app.routes.workflows import router as workflows_router
 from app.routes.integration import router as integration_router
 from app.routes.public_webhooks import router as public_webhooks_router
 
+from app.routes.connections import router as connections_router
 
 load_dotenv()
 
@@ -63,6 +64,7 @@ app.include_router(public_auth_router)
 app.include_router(workflows_router)
 app.include_router(integration_router)
 app.include_router(public_webhooks_router)
+app.include_router(connections_router)
 
 
 @app.get("/health")

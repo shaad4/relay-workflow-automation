@@ -110,6 +110,12 @@ services:
     ports:
       - "8004:8000"
 
+    env_file:
+      - ./service/action-service/.env
+
+    depends_on:
+      - action-postgres
+
   action-postgres:
     image: postgres:16
     container_name: relay-action-postgres
