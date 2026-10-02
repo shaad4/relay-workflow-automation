@@ -9,6 +9,7 @@ from app.schemas.connection import ConnectionCreate, ConnectionResponse
 from app.services.connection_service import(
     create_connection,
     get_connections,
+    get_connection,
 ) 
 
 
@@ -80,4 +81,43 @@ async def get_connections_route(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch connections",
+        ) from exc
+
+
+@router.get(
+    "/{connection_id}/",
+    response_model=ConnectionResponse,
+)
+async def get_connection_route(
+    connection_id: uuid.UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        workspace_id = uuid.UUID(identity["workspace_id"])
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid workspace identity",
+        )
+
+    try:
+        connection = await get_connection(
+            connection_id=connection_id,
+            workspace_id=workspace_id,
+            session=session,
+        )
+
+        if connection is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Connection not found",
+            )
+
+        return connection
+
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch connection",
         ) from exc

@@ -20,6 +20,9 @@ async def create_connection(request: Request):
 async def get_connections(request: Request):
     return await proxy_action_request(request, "")
 
+@router.get("/{connection_id}/")
+async def get_connection(connection_id: str, request: Request):
+    return await proxy_action_request(request, connection_id)
 
 async def proxy_action_request(
     request: Request,

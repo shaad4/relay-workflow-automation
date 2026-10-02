@@ -46,3 +46,18 @@ async def get_connections(
     )
 
     return list(result.scalars().all())
+
+
+async def get_connection(
+    connection_id: UUID,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> Connection | None:
+    result = await session.execute(
+        select(Connection).where(
+            Connection.id == connection_id,
+            Connection.workspace_id == workspace_id,
+        )
+    )
+
+    return result.scalar_one_or_none()
