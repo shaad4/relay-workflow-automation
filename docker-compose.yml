@@ -101,6 +101,30 @@ services:
     volumes:
       - integration_postgres_data:/var/lib/postgresql/data
 
+  action-service:
+    build:
+      context: ./service/action-service
+
+    container_name: relay-action-service
+
+    ports:
+      - "8004:8000"
+
+  action-postgres:
+    image: postgres:16
+    container_name: relay-action-postgres
+
+    environment:
+      POSTGRES_DB: relay_action
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: relay
+
+    ports:
+      - "5436:5432"
+
+    volumes:
+      - action_postgres_data:/var/lib/postgresql/data
+
   kafka:
     image: apache/kafka:4.0.1
     container_name: relay-kafka
@@ -134,4 +158,5 @@ volumes:
   auth_postgres_data:
   workflow_postgres_data:
   integration_postgres_data:
+  action_postgres_data:
   kafka_data:
