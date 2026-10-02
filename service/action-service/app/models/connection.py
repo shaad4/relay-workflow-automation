@@ -39,7 +39,7 @@ class Connection(Base):
         nullable=False,
     )
 
-    credential_ref: Mapped[str | None] = mapped_column(
+    credential: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
     )
