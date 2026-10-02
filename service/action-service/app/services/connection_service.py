@@ -153,9 +153,13 @@ async def test_connection(
 
     elif connection.auth_type == "bearer":
         if not connection.credential:
-            raise ValueError("Credential is required for bearer authentication")
+            raise ValueError(
+                "Credential is required for bearer authentication"
+            )
 
-        headers["Authorization"] = f"Bearer {connection.credential}"
+        headers["Authorization"] = (
+            f"Bearer {connection.credential}"
+        )
 
     elif connection.auth_type == "api_key_header":
         if not connection.credential:
@@ -209,13 +213,25 @@ async def test_connection(
             message="Failed to connect to the test endpoint",
         )
 
+    try:
+        response_payload = response.json()
+    except ValueError:
+        response_payload = response.text
+
     if 200 <= response.status_code < 300:
         return ConnectionTestResponse(
             success=True,
+            status_code=response.status_code,
             message="Connection test successful",
+            response=response_payload,
         )
 
     return ConnectionTestResponse(
         success=False,
-        message=f"Connection test failed with status code {response.status_code}",
+        status_code=response.status_code,
+        message=(
+            f"Connection test failed with status code "
+            f"{response.status_code}"
+        ),
+        response=response_payload,
     )

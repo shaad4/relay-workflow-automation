@@ -80,4 +80,6 @@ class ConnectionUpdate(BaseModel):
 
 class ConnectionTestResponse(BaseModel):
     success: bool
+    status_code: int | None = None
     message: str
+    response: Any | None = None
