@@ -53,6 +53,38 @@ async def test_connection(connection_id: str, request: Request):
         f"{connection_id}/test",
     )
 
+@router.get("/gmail/oauth/start")
+async def start_gmail_oauth(request: Request):
+    url = f"{ACTION_SERVICE_URL}/connections/gmail/oauth/start"
+
+    headers = {
+        key: value
+        for key, value in request.headers.items()
+        if key.lower() not in HOP_BY_HOP_HEADERS
+    }
+
+    async with httpx.AsyncClient(
+        follow_redirects=False,
+    ) as client:
+        response = await client.get(
+            url=url,
+            headers=headers,
+            params=request.query_params,
+        )
+
+    return Response(
+        content=response.content,
+        status_code=response.status_code,
+        headers={
+            key: value
+            for key, value in response.headers.items()
+            if key.lower() not in HOP_BY_HOP_HEADERS
+        },
+        media_type=response.headers.get("content-type"),
+    )
+
+
+
 async def proxy_action_request(
     request: Request,
     path: str,
