@@ -107,6 +107,18 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Keep scrolling available while removing visible scrollbar chrome throughout the app. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 /* Relay public home and animated refund workflow hero. */
 .relay-home { --home-bg:#050505; --home-card:#0d0d0f; --home-line:#26262b; --home-text:#f1f1f2; --home-muted:#96969e; --home-indigo:#756dff; min-height:100vh; overflow:hidden; color:var(--home-text); background:var(--home-bg); }
 .home-nav { height:72px; padding:0 clamp(24px,5vw,82px); display:flex; align-items:center; border-bottom:1px solid #ffffff14; }
