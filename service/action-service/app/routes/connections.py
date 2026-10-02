@@ -11,6 +11,7 @@ from app.services.connection_service import(
     get_connections,
     get_connection,
     update_connection,
+    delete_connection,
 ) 
 
 
@@ -162,4 +163,42 @@ async def update_connection_route(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update connection",
+        ) from exc
+
+
+
+@router.delete(
+    "/{connection_id}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_connection_route(
+    connection_id: uuid.UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        workspace_id = uuid.UUID(identity["workspace_id"])
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid workspace identity",
+        )
+
+    try:
+        deleted = await delete_connection(
+            connection_id=connection_id,
+            workspace_id=workspace_id,
+            session=session,
+        )
+
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Connection not found",
+            )
+
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete connection",
         ) from exc

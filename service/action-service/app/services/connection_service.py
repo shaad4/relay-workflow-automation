@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,3 +93,24 @@ async def update_connection(
     await session.commit()
 
     return connection
+
+
+async def delete_connection(
+    connection_id: UUID,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> bool:
+    result = await session.execute(
+        delete(Connection).where(
+            Connection.id == connection_id,
+            Connection.workspace_id == workspace_id,
+        )
+    )
+
+    if result.rowcount == 0:
+        await session.rollback()
+        return False
+
+    await session.commit()
+
+    return True
