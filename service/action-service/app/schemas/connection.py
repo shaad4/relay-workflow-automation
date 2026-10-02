@@ -24,3 +24,23 @@ class ConnectionResponse(BaseModel):
     credential_ref: str | None
     config: dict[str, Any] | None
     created_at: Any
+
+
+class ConnectionUpdate(BaseModel):
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+    provider: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+    auth_type: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+    credential_ref: str | None = None
+    config: dict[str, Any] | None = None
