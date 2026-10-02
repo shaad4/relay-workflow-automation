@@ -21,7 +21,6 @@ class ConnectionResponse(BaseModel):
     name: str
     provider: str
     auth_type: str
-    credential: str | None
     config: dict[str, Any] | None
     created_at: Any
 

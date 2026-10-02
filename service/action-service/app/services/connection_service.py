@@ -18,7 +18,7 @@ async def create_connection(
         name=data.name,
         provider=data.provider,
         auth_type=data.auth_type,
-        credential_ref=data.credential_ref,
+        credential=data.credential,
         config=data.config,
     )
 
