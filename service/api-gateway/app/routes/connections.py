@@ -32,6 +32,13 @@ async def update_connection(connection_id: str, request: Request):
 async def delete_connection(connection_id: str, request: Request):
     return await proxy_action_request(request, connection_id)
 
+@router.post("/{connection_id}/test/")
+async def test_connection(connection_id: str, request: Request):
+    return await proxy_action_request(
+        request,
+        f"{connection_id}/test",
+    )
+
 async def proxy_action_request(
     request: Request,
     path: str,

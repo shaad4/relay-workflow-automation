@@ -5,13 +5,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_identity, get_db
-from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate
+from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate, ConnectionTestResponse
 from app.services.connection_service import(
     create_connection,
     get_connections,
     get_connection,
     update_connection,
     delete_connection,
+    test_connection,
 ) 
 
 
@@ -201,4 +202,47 @@ async def delete_connection_route(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete connection",
+        ) from exc
+
+
+@router.post(
+    "/{connection_id}/test/",
+    response_model=ConnectionTestResponse,
+)
+async def test_connection_route(
+    connection_id: uuid.UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        workspace_id = uuid.UUID(identity["workspace_id"])
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid workspace identity",
+        )
+
+    try:
+        return await test_connection(
+            connection_id=connection_id,
+            workspace_id=workspace_id,
+            session=session,
+        )
+
+    except ValueError as exc:
+        if str(exc) == "Connection not found":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Connection not found",
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to test connection",
         ) from exc
