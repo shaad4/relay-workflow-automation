@@ -24,6 +24,10 @@ async def get_connections(request: Request):
 async def get_connection(connection_id: str, request: Request):
     return await proxy_action_request(request, connection_id)
 
+@router.patch("/{connection_id}/")
+async def update_connection(connection_id: str, request: Request):
+    return await proxy_action_request(request, connection_id)
+
 async def proxy_action_request(
     request: Request,
     path: str,

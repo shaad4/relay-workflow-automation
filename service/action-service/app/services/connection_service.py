@@ -1,11 +1,11 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.connection import Connection
-from app.schemas.connection import ConnectionCreate
+from app.schemas.connection import ConnectionCreate, ConnectionUpdate
 
 
 async def create_connection(
@@ -61,3 +61,35 @@ async def get_connection(
     )
 
     return result.scalar_one_or_none()
+
+
+async def update_connection(
+    connection_id: UUID,
+    workspace_id: UUID,
+    data: ConnectionUpdate,
+    session: AsyncSession,
+) -> Connection | None:
+    update_data = data.model_dump(exclude_unset=True)
+
+    if not update_data:
+        return None
+
+    result = await session.execute(
+        update(Connection)
+        .where(
+            Connection.id == connection_id,
+            Connection.workspace_id == workspace_id,
+        )
+        .values(**update_data)
+        .returning(Connection)
+    )
+
+    connection = result.scalar_one_or_none()
+
+    if connection is None:
+        await session.rollback()
+        return None
+
+    await session.commit()
+
+    return connection

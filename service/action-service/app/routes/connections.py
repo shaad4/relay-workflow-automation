@@ -5,11 +5,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_identity, get_db
-from app.schemas.connection import ConnectionCreate, ConnectionResponse
+from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate
 from app.services.connection_service import(
     create_connection,
     get_connections,
     get_connection,
+    update_connection,
 ) 
 
 
@@ -120,4 +121,45 @@ async def get_connection_route(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch connection",
+        ) from exc
+
+
+@router.patch(
+    "/{connection_id}/",
+    response_model=ConnectionResponse,
+)
+async def update_connection_route(
+    connection_id: uuid.UUID,
+    data: ConnectionUpdate,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        workspace_id = uuid.UUID(identity["workspace_id"])
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid workspace identity",
+        )
+
+    try:
+        connection = await update_connection(
+            connection_id=connection_id,
+            workspace_id=workspace_id,
+            data=data,
+            session=session,
+        )
+
+        if connection is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Connection not found",
+            )
+
+        return connection
+
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update connection",
         ) from exc
