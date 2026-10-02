@@ -90,7 +90,7 @@ export default function DashboardSidebar({
   ];
 
   const resourceNavItems = [
-    { label: "Connections", href: "/connections/webhooks", icon: ConnectionsIcon },
+    { label: "Connections", href: "/connections", icon: ConnectionsIcon },
     { label: "Knowledge Bases", href: "/dashboard/knowledge-bases", icon: KnowledgeBasesIcon },
   ];
 
@@ -184,15 +184,16 @@ export default function DashboardSidebar({
           )}
           <nav aria-label="Resource Navigation" className="space-y-1">
             {resourceNavItems.map((item) => {
-              const isActive = pathname.startsWith("/connections/") || pathname === item.href;
+              const isActive = pathname === item.href || pathname.startsWith("/connections/");
               const isConnections = item.label === "Connections";
               return (
                 <div key={item.href}>
                   <SidebarNavItem href={item.href} label={item.label} icon={item.icon} active={isActive && !(isConnections && pathname === "/connections/webhooks")} collapsed={isCollapsed} onClick={onMobileClose} />
                   {isConnections && isActive && !isCollapsed && (
-                    <Link href="/connections/webhooks" onClick={onMobileClose} className={`ml-9 mt-1 flex h-8 items-center border-l pl-3 text-[12px] transition-colors ${pathname === "/connections/webhooks" ? "border-[var(--accent)] text-[var(--text-primary)]" : "border-[var(--border-default)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"}`}>
-                      Webhooks
-                    </Link>
+                    <div className="ml-9 mt-1 space-y-0.5 border-l border-[var(--border-default)] pl-3">
+                      <Link href="/connections" onClick={onMobileClose} aria-current={pathname === "/connections" ? "page" : undefined} className={`flex h-8 items-center text-[12px] transition-colors ${pathname === "/connections" ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"}`}>Connections</Link>
+                      <Link href="/connections/webhooks" onClick={onMobileClose} aria-current={pathname === "/connections/webhooks" ? "page" : undefined} className={`flex h-8 items-center text-[12px] transition-colors ${pathname === "/connections/webhooks" ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"}`}>Webhooks</Link>
+                    </div>
                   )}
                 </div>
               );

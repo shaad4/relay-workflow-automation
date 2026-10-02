@@ -11,6 +11,20 @@ router = APIRouter(
 
 ACTION_SERVICE_URL = "http://action-service:8000"
 
+HOP_BY_HOP_HEADERS = {
+    "host",
+    "content-length",
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+}
+
+
 
 @router.post("/")
 async def create_connection(request: Request):
@@ -68,5 +82,10 @@ async def proxy_action_request(
     return Response(
         content=response.content,
         status_code=response.status_code,
-        headers=dict(response.headers),
+        headers={
+            key: value
+            for key, value in response.headers.items()
+            if key.lower() not in HOP_BY_HOP_HEADERS
+        },
+        media_type=response.headers.get("content-type"),
     )
