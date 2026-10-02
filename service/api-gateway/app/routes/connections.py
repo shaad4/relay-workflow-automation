@@ -16,6 +16,10 @@ ACTION_SERVICE_URL = "http://action-service:8000"
 async def create_connection(request: Request):
     return await proxy_action_request(request, "")
 
+@router.get("/")
+async def get_connections(request: Request):
+    return await proxy_action_request(request, "")
+
 
 async def proxy_action_request(
     request: Request,

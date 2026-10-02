@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,3 +33,16 @@ async def create_connection(
     except SQLAlchemyError:
         await session.rollback()
         raise
+
+
+async def get_connections(
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> list[Connection]:
+    result = await session.execute(
+        select(Connection)
+        .where(Connection.workspace_id == workspace_id)
+        .order_by(Connection.created_at.desc())
+    )
+
+    return list(result.scalars().all())
