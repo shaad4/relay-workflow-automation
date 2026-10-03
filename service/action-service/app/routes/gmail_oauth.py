@@ -4,18 +4,14 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
+from sqlalchemy import select
 
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
+from app.models.connection import Connection
 from app.models.oauth_state import OAuthState
-
-from datetime import datetime, timedelta, timezone
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
-
 
 
 router = APIRouter(
@@ -26,6 +22,7 @@ router = APIRouter(
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
 
 async def exchange_google_code(code: str) -> dict:
@@ -64,6 +61,31 @@ async def exchange_google_code(code: str) -> dict:
         )
 
     return response.json()
+
+
+async def get_google_user_email(access_token: str) -> str:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(
+            GOOGLE_USERINFO_URL,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+            },
+        )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Google user info request failed: {response.text}"
+        )
+
+    data = response.json()
+    email = data.get("email")
+
+    if not email:
+        raise RuntimeError(
+            "Google account email was not returned"
+        )
+
+    return email
 
 
 @router.get("/start")
@@ -172,10 +194,48 @@ async def gmail_oauth_callback(
 
         workspace_id = oauth_state.workspace_id
 
-    tokens = await exchange_google_code(code)
+        tokens = await exchange_google_code(code)
+
+        access_token = tokens.get("access_token")
+        refresh_token = tokens.get("refresh_token")
+
+        if not access_token:
+            raise HTTPException(
+                status_code=400,
+                detail="Google access token was not returned",
+            )
+
+        if not refresh_token:
+            raise HTTPException(
+                status_code=400,
+                detail="Google refresh token was not returned",
+            )
+
+        email = await get_google_user_email(access_token)
+
+        connection = Connection(
+            workspace_id=workspace_id,
+            name=f"Gmail - {email}",
+            provider="gmail",
+            auth_type="oauth2",
+            credential=refresh_token,
+            config={
+                "email": email,
+                "token_type": tokens.get("token_type", "Bearer"),
+            },
+        )
+
+        session.add(connection)
+
+        # OAuth state is single-use.
+        await session.delete(oauth_state)
+
+        await session.commit()
+
+        await session.refresh(connection)
 
     return {
-        "message": "Google OAuth callback successful",
-        "workspace_id": str(workspace_id),
-        "token_received": bool(tokens.get("access_token")),
+        "message": "Gmail connected successfully",
+        "connection_id": str(connection.id),
+        "email": email,
     }
