@@ -1,6 +1,7 @@
 from app.connectors.base import Connector
 from app.connectors.http import HTTPConnector
 from app.connectors.gmail import GmailConnector
+from app.connectors.mock_payment import MockPaymentConnector
 
 
 class ConnectorRegistry:
@@ -23,3 +24,4 @@ connector_registry = ConnectorRegistry()
 
 connector_registry.register("http", HTTPConnector())
 connector_registry.register("gmail", GmailConnector())
+connector_registry.register("mock_payment", MockPaymentConnector())
