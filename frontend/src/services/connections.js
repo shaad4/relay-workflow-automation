@@ -4,6 +4,12 @@ export function listConnections() {
   return apiRequest("/connections/", { method: "GET" });
 }
 
+export function startGmailOAuth() {
+  const baseUrl = process.env.NEXT_PUBLIC_AUTH_API_URL?.replace(/\/$/, "");
+  if (!baseUrl) throw new Error("API URL is not configured");
+  return `${baseUrl}/connections/gmail/oauth/start`;
+}
+
 export function createConnection(data) {
   return apiRequest("/connections/", { method: "POST", body: JSON.stringify(data) });
 }

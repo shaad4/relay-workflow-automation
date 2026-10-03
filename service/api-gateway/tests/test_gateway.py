@@ -93,6 +93,55 @@ def test_health_and_cors(gateway_client):
     assert "http://localhost:3000" in cors.headers["access-control-allow-origin"]
 
 
+
+def test_gmail_oauth_start_preserves_google_redirect(gateway_client, monkeypatch):
+    location = "https://accounts.google.com/o/oauth2/v2/auth?state=test"
+    fake_upstream(
+        monkeypatch,
+        status_code=302,
+        headers={"location": location},
+        content=b"",
+    )
+
+    response = gateway_client.get("/connections/gmail/oauth/start", follow_redirects=False)
+
+    assert response.status_code == 302
+    assert response.headers["location"] == location
+
+
+def test_gmail_oauth_callback_redirects_to_connections(gateway_client, monkeypatch):
+    fake_upstream(
+        monkeypatch,
+        status_code=200,
+        headers={"content-type": "application/json"},
+        content=b'{"message":"Gmail connected successfully"}',
+    )
+
+    response = gateway_client.get(
+        "/connections/gmail/oauth/callback?code=auth-code&state=oauth-state",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:3000/connections?gmail=connected"
+
+
+def test_gmail_oauth_callback_reports_failure(gateway_client, monkeypatch):
+    fake_upstream(
+        monkeypatch,
+        status_code=400,
+        headers={"content-type": "application/json"},
+        content=b'{"detail":"authorization failed"}',
+    )
+
+    response = gateway_client.get(
+        "/connections/gmail/oauth/callback?error=access_denied",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:3000/connections?gmail=error"
+
 def test_auth_me_validates_token_and_calls_auth_service(gateway_client, monkeypatch):
     token = access_token(monkeypatch)
     monkeypatch.setattr(

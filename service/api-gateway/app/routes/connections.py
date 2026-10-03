@@ -1,7 +1,9 @@
 import httpx
+import json
 
 from fastapi import APIRouter, Request
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
+import os
 
 
 router = APIRouter(
@@ -93,6 +95,8 @@ async def gmail_oauth_callback(request: Request):
         if key.lower() not in HOP_BY_HOP_HEADERS
     }
 
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
     async with httpx.AsyncClient(
         follow_redirects=False,
     ) as client:
@@ -102,16 +106,16 @@ async def gmail_oauth_callback(request: Request):
             params=request.query_params,
         )
 
-    return Response(
-        content=response.content,
-        status_code=response.status_code,
-        headers={
-            key: value
-            for key, value in response.headers.items()
-            if key.lower() not in HOP_BY_HOP_HEADERS
-        },
-        media_type=response.headers.get("content-type"),
-    )
+    callback_data = {}
+    try:
+        callback_data = response.json()
+    except (ValueError, json.JSONDecodeError):
+        pass
+
+    if response.status_code >= 400 or callback_data.get("message") != "Gmail connected successfully":
+        return RedirectResponse(url=f"{frontend_url}/connections?gmail=error", status_code=303)
+
+    return RedirectResponse(url=f"{frontend_url}/connections?gmail=connected", status_code=303)
 
 
 
