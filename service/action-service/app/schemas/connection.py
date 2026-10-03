@@ -3,12 +3,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 SUPPORTED_AUTH_TYPES = {
     "none",
     "bearer",
     "api_key_header",
     "api_key_query",
+    "oauth2",
 }
 
 

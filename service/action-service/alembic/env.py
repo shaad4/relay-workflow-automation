@@ -8,7 +8,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.db.base import Base
-
+from app.models.oauth_state import OAuthState
 
 # Alembic Config object
 config = context.config
