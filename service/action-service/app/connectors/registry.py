@@ -1,4 +1,6 @@
 from app.connectors.base import Connector
+from app.connectors.http import HTTPConnector
+from app.connectors.gmail import GmailConnector
 
 
 class ConnectorRegistry:
@@ -15,3 +17,9 @@ class ConnectorRegistry:
             raise ValueError(f"Connector not found: {provider}")
 
         return connector
+
+
+connector_registry = ConnectorRegistry()
+
+connector_registry.register("http", HTTPConnector())
+connector_registry.register("gmail", GmailConnector())
