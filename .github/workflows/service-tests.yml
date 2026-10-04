@@ -23,6 +23,7 @@ jobs:
           - service/auth-service
           - service/workflow-service
           - service/integration-service
+          - service/action-service
     defaults:
       run:
         working-directory: ${{ matrix.service }}
@@ -47,11 +48,11 @@ jobs:
       - name: Install service and test dependencies
         run: |
           python -m pip install --only-binary=:all: -r requirements.txt
-          python -m pip install --only-binary=:all: pytest==9.1.1 pytest-cov==7.1.0 httpx==0.28.1
+          python -m pip install --only-binary=:all: pytest==9.1.1 pytest-cov==7.1.0
 
       - name: Run tests with coverage
         run: |
-          if [ "${{ matrix.service }}" = "service/integration-service" ] || [ "${{ matrix.service }}" = "service/workflow-service" ]; then
+          if [ "${{ matrix.service }}" = "service/integration-service" ] || [ "${{ matrix.service }}" = "service/workflow-service" ] || [ "${{ matrix.service }}" = "service/action-service" ]; then
             python -m coverage run --source=app --omit='*/grpc/generated/*' -m pytest
             python -m coverage report --show-missing --fail-under=80
           else
