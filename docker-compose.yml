@@ -131,6 +131,38 @@ services:
     volumes:
       - action_postgres_data:/var/lib/postgresql/data
 
+  execution-service:
+    build:
+      context: ./service/execution-service
+
+    container_name: relay-execution-service
+
+    ports:
+      - "8005:8000"
+
+    env_file:
+      - ./service/execution-service/.env
+
+    depends_on:
+      - action-service
+      - kafka
+
+  execution-postgres:
+    image: postgres:16
+
+    container_name: relay-execution-postgres
+
+    environment:
+      POSTGRES_DB: relay_execution
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: relay
+
+    ports:
+      - "5437:5432"
+
+    volumes:
+      - execution_postgres_data:/var/lib/postgresql/data
+
   kafka:
     image: apache/kafka:4.0.1
     container_name: relay-kafka
