@@ -40,10 +40,13 @@ async def stop_consumer():
 
 
 async def consume_workflow_triggered():
+
     if consumer is None:
         raise RuntimeError("Kafka consumer is not started")
 
+
     async for message in consumer:
+
         try:
             event = json.loads(
                 message.value.decode("utf-8")
@@ -54,10 +57,11 @@ async def consume_workflow_triggered():
             print(
                 "Execution created:",
                 execution.id,
+                flush=True,
             )
 
         except Exception as exc:
             print(
                 "Failed to process workflow.triggered event:",
-                exc,
+                repr(exc),
             )
