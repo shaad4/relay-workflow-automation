@@ -48,3 +48,12 @@ class SequentialExecutor:
                 )
 
         return execution_order
+
+    def get_action_nodes(self) -> list[dict]:
+        execution_order = self.get_execution_order()
+
+        return [
+            node
+            for node in execution_order
+            if node.get("node_type", "").startswith("action.")
+        ]
