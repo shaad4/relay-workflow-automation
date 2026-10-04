@@ -197,4 +197,5 @@ volumes:
   workflow_postgres_data:
   integration_postgres_data:
   action_postgres_data:
+  execution_postgres_data:
   kafka_data:
