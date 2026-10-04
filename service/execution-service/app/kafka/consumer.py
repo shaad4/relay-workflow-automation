@@ -3,6 +3,8 @@ import os
 
 from aiokafka import AIOKafkaConsumer
 
+from app.services.execution_service import create_execution
+
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv(
     "KAFKA_BOOTSTRAP_SERVERS",
@@ -11,7 +13,6 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv(
 
 KAFKA_TOPIC = "workflow.triggered"
 KAFKA_GROUP_ID = "execution-service"
-
 
 consumer: AIOKafkaConsumer | None = None
 
@@ -43,9 +44,20 @@ async def consume_workflow_triggered():
         raise RuntimeError("Kafka consumer is not started")
 
     async for message in consumer:
-        event = json.loads(message.value.decode("utf-8"))
+        try:
+            event = json.loads(
+                message.value.decode("utf-8")
+            )
 
-        print(
-            "Received workflow.triggered event:",
-            event,
-        )
+            execution = await create_execution(event)
+
+            print(
+                "Execution created:",
+                execution.id,
+            )
+
+        except Exception as exc:
+            print(
+                "Failed to process workflow.triggered event:",
+                exc,
+            )
