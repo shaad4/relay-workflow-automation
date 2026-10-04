@@ -41,3 +41,10 @@ class ExecutionGraph:
         node_id: str,
     ) -> list[GraphEdge]:
         return self.edges.get(node_id, [])
+
+    def get_start_node(self) -> dict | None:
+        for node in self.nodes.values():
+            if node.get("node_type", "").startswith("trigger."):
+                return node
+
+        return None
