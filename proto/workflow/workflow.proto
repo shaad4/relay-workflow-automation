@@ -52,4 +52,5 @@ message ValidateWorkflowVersionResponse {
   string version_id = 3;
   int32 version = 4;
   string status = 5;
+  string workflow_status = 6;
 }

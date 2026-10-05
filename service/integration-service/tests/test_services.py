@@ -81,6 +81,7 @@ def test_validate_workflow_version_closes_client(monkeypatch):
     class WorkflowClient:
         async def validate_workflow_version(self, **kwargs):
             calls.append(("validate", kwargs))
+            return SimpleNamespace(valid=True, status="published", workflow_status="active")
 
         async def close(self):
             calls.append(("close",))
@@ -107,6 +108,35 @@ def test_validate_workflow_version_closes_client_after_error(monkeypatch):
     with pytest.raises(RuntimeError, match="upstream error"):
         asyncio.run(service.validate_workflow_version(WORKFLOW_ID, VERSION_ID, WORKSPACE_ID))
     assert closed == [True]
+
+
+def test_validate_workflow_version_rejects_unpublished_and_closes_client(monkeypatch):
+    closed = []
+
+    class WorkflowClient:
+        async def validate_workflow_version(self, **_kwargs):
+            return SimpleNamespace(valid=True, status="draft", workflow_status="active")
+
+        async def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(service, "WorkflowGrpcClient", WorkflowClient)
+    with pytest.raises(service.UnpublishedWorkflowVersionError):
+        asyncio.run(service.validate_workflow_version(WORKFLOW_ID, VERSION_ID, WORKSPACE_ID))
+    assert closed == [True]
+
+
+def test_validate_workflow_version_rejects_inactive_workflow(monkeypatch):
+    class WorkflowClient:
+        async def validate_workflow_version(self, **_kwargs):
+            return SimpleNamespace(valid=True, status="published", workflow_status="inactive")
+
+        async def close(self):
+            return None
+
+    monkeypatch.setattr(service, "WorkflowGrpcClient", WorkflowClient)
+    with pytest.raises(service.InactiveWorkflowError):
+        asyncio.run(service.validate_workflow_version(WORKFLOW_ID, VERSION_ID, WORKSPACE_ID))
 
 
 def test_token_and_secret_generation_and_verification(monkeypatch):
@@ -151,6 +181,18 @@ def test_create_webhook_with_secret_and_without(monkeypatch):
     assert no_secret is None
 
 
+def test_create_webhook_requires_published_version_before_persisting(monkeypatch):
+    async def validate(**_kwargs):
+        raise service.UnpublishedWorkflowVersionError("Webhook workflow version must be published")
+
+    monkeypatch.setattr(service, "validate_workflow_version", validate)
+    session = FakeSession()
+    with pytest.raises(service.UnpublishedWorkflowVersionError):
+        asyncio.run(service.create_webhook(create_data(), WORKSPACE_ID, session))
+    assert session.added == []
+    assert session.commits == 0
+
+
 def test_create_webhook_rolls_back_integrity_error(monkeypatch):
     async def validate(**_kwargs):
         return None
@@ -187,6 +229,34 @@ def test_update_webhook_integrity_error_rolls_back():
     with pytest.raises(IntegrityError):
         asyncio.run(service.update_webhook(WEBHOOK_ID, WebhookUpdate(name="After"), WORKSPACE_ID, session))
     assert session.rollbacks == 1
+
+
+def test_update_webhook_rejects_unpublished_version_without_mutating(monkeypatch):
+    current = SimpleNamespace(
+        workflow_id=WORKFLOW_ID,
+        workflow_version_id=VERSION_ID,
+        name="Before",
+        is_active=True,
+    )
+    calls = []
+
+    async def validate(**kwargs):
+        calls.append(kwargs)
+        raise service.UnpublishedWorkflowVersionError("Webhook workflow version must be published")
+
+    monkeypatch.setattr(service, "validate_workflow_version", validate)
+    session = FakeSession([Result(scalar=current)])
+    with pytest.raises(service.UnpublishedWorkflowVersionError):
+        asyncio.run(service.update_webhook(
+            WEBHOOK_ID,
+            WebhookUpdate(workflow_version_id=uuid4()),
+            WORKSPACE_ID,
+            session,
+        ))
+    assert current.workflow_version_id == VERSION_ID
+    assert session.commits == 0
+    assert calls[0]["workflow_id"] == WORKFLOW_ID
+    assert calls[0]["workspace_id"] == WORKSPACE_ID
 
 
 def test_delete_webhook_and_rollback_on_failure():

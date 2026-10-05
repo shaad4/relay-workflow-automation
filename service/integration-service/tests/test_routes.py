@@ -147,6 +147,34 @@ def test_create_webhook_maps_workflow_service_errors(client, monkeypatch, except
     assert response.status_code == expected
 
 
+def test_create_webhook_rejects_unpublished_version(client, monkeypatch):
+    from app.services.webhook_service import UnpublishedWorkflowVersionError
+
+    async def fail(*_args, **_kwargs):
+        raise UnpublishedWorkflowVersionError("Webhook workflow version must be published")
+
+    monkeypatch.setattr(webhooks, "create_webhook", fail)
+    response = client.post("/webhooks/", json={
+        "workflow_id": str(WORKFLOW_ID), "workflow_version_id": str(VERSION_ID),
+        "name": "Orders", "event_name": "order.created", "method": "POST", "authentication_type": "none",
+    })
+    assert response.status_code == 409
+
+
+def test_create_webhook_rejects_inactive_workflow(client, monkeypatch):
+    from app.services.webhook_service import InactiveWorkflowError
+
+    async def fail(*_args, **_kwargs):
+        raise InactiveWorkflowError("Workflow is inactive")
+
+    monkeypatch.setattr(webhooks, "create_webhook", fail)
+    response = client.post("/webhooks/", json={
+        "workflow_id": str(WORKFLOW_ID), "workflow_version_id": str(VERSION_ID),
+        "name": "Orders", "event_name": "order.created", "method": "POST", "authentication_type": "none",
+    })
+    assert response.status_code == 409
+
+
 def test_list_get_and_not_found_webhooks(client, monkeypatch):
     monkeypatch.setattr(webhooks, "list_webhooks", async_return([webhook()]))
     monkeypatch.setattr(webhooks, "get_webhook", async_return(webhook()))
@@ -180,6 +208,17 @@ def test_update_delete_and_regenerate_routes(client, monkeypatch):
     assert response.status_code == 200 and response.json()["public_token"] == "fresh-token"
     monkeypatch.setattr(webhooks, "regenerate_webhook_token", async_return(None))
     assert client.post(f"/webhooks/{WEBHOOK_ID}/regenerate-token/").status_code == 404
+
+
+def test_update_webhook_rejects_unpublished_version(client, monkeypatch):
+    from app.services.webhook_service import UnpublishedWorkflowVersionError
+
+    async def fail(*_args, **_kwargs):
+        raise UnpublishedWorkflowVersionError("Webhook workflow version must be published")
+
+    monkeypatch.setattr(webhooks, "update_webhook", fail)
+    response = client.patch(f"/webhooks/{WEBHOOK_ID}/", json={"workflow_version_id": str(uuid4())})
+    assert response.status_code == 409
 
 
 def test_webhook_update_delete_regenerate_reject_malformed_ids(client):
@@ -245,6 +284,7 @@ def test_public_webhook_validates_secret_configuration_and_json(client, monkeypa
 
     valid = webhook(authentication_type="secret", secret_hash="hash")
     monkeypatch.setattr(public_webhooks, "get_webhook_by_public_token", async_return(valid))
+    monkeypatch.setattr(public_webhooks, "validate_workflow_version", async_return(None))
     monkeypatch.setattr(public_webhooks, "verify_webhook_secret", lambda **_kwargs: True)
     invalid_json = client.post("/hooks/public-token", content="bad json", headers={"X-Relay-Secret": "secret", "Content-Type": "application/json"})
     invalid_test_json = client.post("/hooks/public-token/test", content="bad json", headers={"X-Relay-Secret": "secret", "Content-Type": "application/json"})
@@ -254,6 +294,7 @@ def test_public_webhook_validates_secret_configuration_and_json(client, monkeypa
 def test_public_webhook_accepts_and_publishes_workflow_event(client, monkeypatch):
     target = webhook()
     monkeypatch.setattr(public_webhooks, "get_webhook_by_public_token", async_return(target))
+    monkeypatch.setattr(public_webhooks, "validate_workflow_version", async_return(None))
     events = []
 
     async def publish(event):
@@ -266,6 +307,47 @@ def test_public_webhook_accepts_and_publishes_workflow_event(client, monkeypatch
     assert len(events) == 1
     assert events[0].payload == {"order_id": "ORD-1"}
     assert events[0].workflow_id == WORKFLOW_ID
+
+
+def test_public_webhook_rejects_legacy_unpublished_version_before_kafka(client, monkeypatch):
+    from app.services.webhook_service import UnpublishedWorkflowVersionError
+
+    target = webhook()
+    monkeypatch.setattr(public_webhooks, "get_webhook_by_public_token", async_return(target))
+
+    async def reject(**_kwargs):
+        raise UnpublishedWorkflowVersionError("Webhook workflow version must be published")
+
+    events = []
+    async def publish(event):
+        events.append(event)
+
+    monkeypatch.setattr(public_webhooks, "validate_workflow_version", reject)
+    monkeypatch.setattr(public_webhooks, "publish_workflow_triggered", publish)
+    response = client.post("/hooks/public-token", json={"order_id": "ORD-1"})
+    assert response.status_code == 409
+    assert events == []
+
+
+def test_public_webhook_rejects_inactive_workflow_before_kafka(client, monkeypatch):
+    from app.services.webhook_service import InactiveWorkflowError
+
+    target = webhook()
+    monkeypatch.setattr(public_webhooks, "get_webhook_by_public_token", async_return(target))
+
+    async def reject(**_kwargs):
+        raise InactiveWorkflowError("Workflow is inactive")
+
+    events = []
+
+    async def publish(event):
+        events.append(event)
+
+    monkeypatch.setattr(public_webhooks, "validate_workflow_version", reject)
+    monkeypatch.setattr(public_webhooks, "publish_workflow_triggered", publish)
+    response = client.post("/hooks/public-token", json={"order_id": "ORD-1"})
+    assert response.status_code == 409
+    assert events == []
 
 
 def test_public_test_webhook_returns_payload_and_updates_session(client, monkeypatch):

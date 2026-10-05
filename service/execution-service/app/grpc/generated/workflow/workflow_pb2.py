@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17workflow/workflow.proto\x12\x0erelay.workflow\"G\n\x1aGetPublishedVersionRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x02 \x01(\t\"g\n\x1bGetPublishedVersionResponse\x12\x12\n\nversion_id\x18\x01 \x01(\t\x12\x13\n\x0bworkflow_id\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\x05\x12\x0e\n\x06status\x18\x04 \x01(\t\"]\n\x1cGetWorkflowDefinitionRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x12\n\nversion_id\x18\x02 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x03 \x01(\t\"\x91\x01\n\x1dGetWorkflowDefinitionResponse\x12\x12\n\nversion_id\x18\x01 \x01(\t\x12\x13\n\x0bworkflow_id\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\x05\x12\x0e\n\x06status\x18\x04 \x01(\t\x12\x12\n\nnodes_json\x18\x05 \x01(\t\x12\x12\n\nedges_json\x18\x06 \x01(\t\"_\n\x1eValidateWorkflowVersionRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x12\n\nversion_id\x18\x02 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x03 \x01(\t\"z\n\x1fValidateWorkflowVersionResponse\x12\r\n\x05valid\x18\x01 \x01(\x08\x12\x13\n\x0bworkflow_id\x18\x02 \x01(\t\x12\x12\n\nversion_id\x18\x03 \x01(\t\x12\x0f\n\x07version\x18\x04 \x01(\x05\x12\x0e\n\x06status\x18\x05 \x01(\t2\xfb\x02\n\x17WorkflowInternalService\x12n\n\x13GetPublishedVersion\x12*.relay.workflow.GetPublishedVersionRequest\x1a+.relay.workflow.GetPublishedVersionResponse\x12t\n\x15GetWorkflowDefinition\x12,.relay.workflow.GetWorkflowDefinitionRequest\x1a-.relay.workflow.GetWorkflowDefinitionResponse\x12z\n\x17ValidateWorkflowVersion\x12..relay.workflow.ValidateWorkflowVersionRequest\x1a/.relay.workflow.ValidateWorkflowVersionResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17workflow/workflow.proto\x12\x0erelay.workflow\"G\n\x1aGetPublishedVersionRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x02 \x01(\t\"g\n\x1bGetPublishedVersionResponse\x12\x12\n\nversion_id\x18\x01 \x01(\t\x12\x13\n\x0bworkflow_id\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\x05\x12\x0e\n\x06status\x18\x04 \x01(\t\"]\n\x1cGetWorkflowDefinitionRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x12\n\nversion_id\x18\x02 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x03 \x01(\t\"\x91\x01\n\x1dGetWorkflowDefinitionResponse\x12\x12\n\nversion_id\x18\x01 \x01(\t\x12\x13\n\x0bworkflow_id\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\x05\x12\x0e\n\x06status\x18\x04 \x01(\t\x12\x12\n\nnodes_json\x18\x05 \x01(\t\x12\x12\n\nedges_json\x18\x06 \x01(\t\"_\n\x1eValidateWorkflowVersionRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x12\n\nversion_id\x18\x02 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x03 \x01(\t\"\x93\x01\n\x1fValidateWorkflowVersionResponse\x12\r\n\x05valid\x18\x01 \x01(\x08\x12\x13\n\x0bworkflow_id\x18\x02 \x01(\t\x12\x12\n\nversion_id\x18\x03 \x01(\t\x12\x0f\n\x07version\x18\x04 \x01(\x05\x12\x0e\n\x06status\x18\x05 \x01(\t\x12\x17\n\x0fworkflow_status\x18\x06 \x01(\t2\xfb\x02\n\x17WorkflowInternalService\x12n\n\x13GetPublishedVersion\x12*.relay.workflow.GetPublishedVersionRequest\x1a+.relay.workflow.GetPublishedVersionResponse\x12t\n\x15GetWorkflowDefinition\x12,.relay.workflow.GetWorkflowDefinitionRequest\x1a-.relay.workflow.GetWorkflowDefinitionResponse\x12z\n\x17ValidateWorkflowVersion\x12..relay.workflow.ValidateWorkflowVersionRequest\x1a/.relay.workflow.ValidateWorkflowVersionResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -41,8 +41,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETWORKFLOWDEFINITIONRESPONSE']._serialized_end=462
   _globals['_VALIDATEWORKFLOWVERSIONREQUEST']._serialized_start=464
   _globals['_VALIDATEWORKFLOWVERSIONREQUEST']._serialized_end=559
-  _globals['_VALIDATEWORKFLOWVERSIONRESPONSE']._serialized_start=561
-  _globals['_VALIDATEWORKFLOWVERSIONRESPONSE']._serialized_end=683
-  _globals['_WORKFLOWINTERNALSERVICE']._serialized_start=686
-  _globals['_WORKFLOWINTERNALSERVICE']._serialized_end=1065
+  _globals['_VALIDATEWORKFLOWVERSIONRESPONSE']._serialized_start=562
+  _globals['_VALIDATEWORKFLOWVERSIONRESPONSE']._serialized_end=709
+  _globals['_WORKFLOWINTERNALSERVICE']._serialized_start=712
+  _globals['_WORKFLOWINTERNALSERVICE']._serialized_end=1091
 # @@protoc_insertion_point(module_scope)

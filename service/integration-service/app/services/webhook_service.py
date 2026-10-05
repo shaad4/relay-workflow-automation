@@ -14,6 +14,18 @@ from app.schemas.webhook import WebhookCreate, WebhookUpdate
 password_hash = PasswordHash.recommended()
 
 
+class WorkflowVersionNotFoundError(ValueError):
+    pass
+
+
+class UnpublishedWorkflowVersionError(ValueError):
+    pass
+
+
+class InactiveWorkflowError(ValueError):
+    pass
+
+
 async def validate_workflow_version(
     workflow_id: uuid.UUID,
     workflow_version_id: uuid.UUID,
@@ -22,13 +34,20 @@ async def validate_workflow_version(
     client = WorkflowGrpcClient()
 
     try:
-        await client.validate_workflow_version(
+        validation = await client.validate_workflow_version(
             workflow_id=str(workflow_id),
             version_id=str(workflow_version_id),
             workspace_id=str(workspace_id),
         )
     finally:
         await client.close()
+
+    if not validation.valid:
+        raise WorkflowVersionNotFoundError("Workflow or workflow version not found")
+    if validation.status.lower() != "published":
+        raise UnpublishedWorkflowVersionError("Webhook workflow version must be published")
+    if validation.workflow_status.lower() != "active":
+        raise InactiveWorkflowError("Workflow is inactive")
 
 
 def generate_public_token() -> str:
@@ -146,6 +165,21 @@ async def update_webhook(
         return None
 
     update_data = data.model_dump(exclude_unset=True)
+
+    if (
+        "workflow_id" in update_data
+        or "workflow_version_id" in update_data
+        or update_data.get("is_active") is True
+    ):
+        target_workflow_id = update_data.get("workflow_id", webhook.workflow_id)
+        target_version_id = update_data.get("workflow_version_id", webhook.workflow_version_id)
+        if target_workflow_id is None or target_version_id is None:
+            raise WorkflowVersionNotFoundError("Workflow and workflow version are required")
+        await validate_workflow_version(
+            workflow_id=target_workflow_id,
+            workflow_version_id=target_version_id,
+            workspace_id=workspace_id,
+        )
 
     for field, value in update_data.items():
         setattr(webhook, field, value)

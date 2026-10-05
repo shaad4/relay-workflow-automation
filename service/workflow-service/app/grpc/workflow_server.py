@@ -90,6 +90,16 @@ class WorkflowInternalService(
                 context.set_details("Workflow version not found")
                 return workflow_pb2.GetWorkflowDefinitionResponse()
 
+            if version.status.lower() != "published":
+                context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+                context.set_details("Workflow version is not published")
+                return workflow_pb2.GetWorkflowDefinitionResponse()
+
+            if workflow.status.lower() != "active":
+                context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+                context.set_details("Workflow is inactive")
+                return workflow_pb2.GetWorkflowDefinitionResponse()
+
             nodes_result = await session.execute(
                 select(WorkflowNode).where(
                     WorkflowNode.workflow_version_id == version.id,
@@ -181,4 +191,5 @@ class WorkflowInternalService(
                 version_id=str(version.id),
                 version=version.version,
                 status=version.status,
+                workflow_status=workflow.status,
             )

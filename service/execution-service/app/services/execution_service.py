@@ -3,10 +3,28 @@ from uuid import UUID
 
 from app.db.database import AsyncSessionLocal
 from app.engine.runner import run_execution
+from app.grpc.workflow_client import WorkflowClient
 from app.models.execution import Execution
 
 
 async def create_execution(event: dict) -> Execution:
+    workflow_client = WorkflowClient()
+    try:
+        validation = await workflow_client.validate_workflow_version(
+            workflow_id=event["workflow_id"],
+            version_id=event["workflow_version_id"],
+            workspace_id=event["workspace_id"],
+        )
+    finally:
+        await workflow_client.close()
+
+    if not validation.valid:
+        raise ValueError("Workflow or workflow version not found")
+    if validation.status.lower() != "published":
+        raise ValueError("Workflow version is not published")
+    if validation.workflow_status.lower() != "active":
+        raise ValueError("Workflow is inactive")
+
     async with AsyncSessionLocal() as session:
         try:
             execution = Execution(

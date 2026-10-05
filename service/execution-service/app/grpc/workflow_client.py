@@ -36,5 +36,19 @@ class WorkflowClient:
             request
         )
 
+    async def validate_workflow_version(
+        self,
+        workflow_id: str,
+        version_id: str,
+        workspace_id: str,
+    ):
+        request = workflow_pb2.ValidateWorkflowVersionRequest(
+            workflow_id=workflow_id,
+            version_id=version_id,
+            workspace_id=workspace_id,
+        )
+
+        return await self.stub.ValidateWorkflowVersion(request)
+
     async def close(self):
         await self.channel.close()

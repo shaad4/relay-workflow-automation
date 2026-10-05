@@ -2,10 +2,15 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
+import grpc
 
 from .webhooks import get_db
 from app.services.webhook_service import (
+    InactiveWorkflowError,
+    UnpublishedWorkflowVersionError,
+    WorkflowVersionNotFoundError,
     get_webhook_by_public_token,
+    validate_workflow_version,
     verify_webhook_secret,
 )
 from app.services.webhook_test_sessions import publish_result, publish_session_result
@@ -68,6 +73,30 @@ async def receive_webhook(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid webhook secret",
             )
+
+    # Validate legacy webhook rows as well as newly configured ones. This
+    # happens before producing Kafka events so a draft version cannot start
+    # an execution.
+    try:
+        await validate_workflow_version(
+            workflow_id=webhook.workflow_id,
+            workflow_version_id=webhook.workflow_version_id,
+            workspace_id=webhook.workspace_id,
+        )
+    except UnpublishedWorkflowVersionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except InactiveWorkflowError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except WorkflowVersionNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except grpc.aio.AioRpcError as exc:
+        if exc.code() == grpc.StatusCode.NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow or workflow version not found") from exc
+        if exc.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Workflow Service request timed out") from exc
+        if exc.code() == grpc.StatusCode.UNAVAILABLE:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Workflow Service is unavailable") from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to validate workflow") from exc
 
     # 4. Read the incoming webhook payload
     try:

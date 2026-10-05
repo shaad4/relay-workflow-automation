@@ -113,6 +113,38 @@ def test_get_published_version_row_not_found(monkeypatch):
     assert context.details == "Published workflow version not found"
 
 
+def test_validate_workflow_version_checks_workspace_and_returns_version_status(monkeypatch):
+    workflow = SimpleNamespace(id="workflow-id", status="active")
+    version = SimpleNamespace(id="version-id", workflow_id="workflow-id", version=4, status="draft")
+    install_session_factory(monkeypatch, FakeResult(workflow), FakeResult(version))
+    response = asyncio.run(
+        WorkflowInternalService().ValidateWorkflowVersion(
+            workflow_pb2.ValidateWorkflowVersionRequest(
+                workflow_id="workflow-id", version_id="version-id", workspace_id="workspace-id"
+            ),
+            FakeContext(),
+        )
+    )
+    assert response.valid is True
+    assert response.status == "draft"
+    assert response.workflow_status == "active"
+
+
+def test_validate_workflow_version_rejects_wrong_workspace(monkeypatch):
+    install_session_factory(monkeypatch, FakeResult())
+    context = FakeContext()
+    response = asyncio.run(
+        WorkflowInternalService().ValidateWorkflowVersion(
+            workflow_pb2.ValidateWorkflowVersionRequest(
+                workflow_id="workflow-id", version_id="version-id", workspace_id="wrong-workspace"
+            ),
+            context,
+        )
+    )
+    assert response.valid is False
+    assert context.code == grpc.StatusCode.NOT_FOUND
+
+
 def test_get_workflow_definition_not_found(monkeypatch):
     install_session_factory(monkeypatch, FakeResult())
     context = FakeContext()
@@ -130,7 +162,7 @@ def test_get_workflow_definition_not_found(monkeypatch):
 
 
 def test_get_workflow_definition_version_not_found(monkeypatch):
-    workflow = SimpleNamespace(id="workflow-id")
+    workflow = SimpleNamespace(id="workflow-id", status="active")
     install_session_factory(monkeypatch, FakeResult(workflow), FakeResult())
     context = FakeContext()
     response = asyncio.run(
@@ -146,8 +178,26 @@ def test_get_workflow_definition_version_not_found(monkeypatch):
     assert context.details == "Workflow version not found"
 
 
+def test_get_workflow_definition_rejects_draft_version(monkeypatch):
+    workflow = SimpleNamespace(id="workflow-id", status="active")
+    version = SimpleNamespace(id="version-id", workflow_id="workflow-id", status="draft")
+    install_session_factory(monkeypatch, FakeResult(workflow), FakeResult(version))
+    context = FakeContext()
+    response = asyncio.run(
+        WorkflowInternalService().GetWorkflowDefinition(
+            workflow_pb2.GetWorkflowDefinitionRequest(
+                workflow_id="workflow-id", version_id="version-id", workspace_id="workspace"
+            ),
+            context,
+        )
+    )
+    assert response.version_id == ""
+    assert context.code == grpc.StatusCode.FAILED_PRECONDITION
+    assert context.details == "Workflow version is not published"
+
+
 def test_get_workflow_definition_serializes_nodes_and_edges(monkeypatch):
-    workflow = SimpleNamespace(id="workflow-id")
+    workflow = SimpleNamespace(id="workflow-id", status="active")
     version = SimpleNamespace(
         id="version-id", workflow_id="workflow-id", version=3, status="published"
     )
@@ -178,6 +228,26 @@ def test_get_workflow_definition_serializes_nodes_and_edges(monkeypatch):
     assert (response.version, response.status) == (3, "published")
     assert json.loads(response.nodes_json)[0]["configuration"] == {"key": "value"}
     assert json.loads(response.edges_json)[0]["condition"] == "ok"
+
+
+def test_get_workflow_definition_rejects_inactive_workflow(monkeypatch):
+    workflow = SimpleNamespace(id="workflow-id", status="inactive")
+    version = SimpleNamespace(
+        id="version-id", workflow_id="workflow-id", version=3, status="published"
+    )
+    install_session_factory(monkeypatch, FakeResult(workflow), FakeResult(version))
+    context = FakeContext()
+    response = asyncio.run(
+        WorkflowInternalService().GetWorkflowDefinition(
+            workflow_pb2.GetWorkflowDefinitionRequest(
+                workflow_id="workflow-id", version_id="version-id", workspace_id="workspace"
+            ),
+            context,
+        )
+    )
+    assert response.version_id == ""
+    assert context.code == grpc.StatusCode.FAILED_PRECONDITION
+    assert context.details == "Workflow is inactive"
 
 
 def test_start_grpc_server_registers_service_and_starts(monkeypatch):
