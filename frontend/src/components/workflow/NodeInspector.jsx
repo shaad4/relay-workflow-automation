@@ -421,8 +421,55 @@ function HttpRequestConfig({ config, onChange }) {
 }
 
 function EmailConfig({ config, onChange }) {
+  const [connections, setConnections] = useState([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const [connectionsError, setConnectionsError] = useState(false);
+
+  const loadGmailConnections = async () => {
+    setConnectionsLoading(true);
+    setConnectionsError(false);
+    try {
+      const result = await listConnections();
+      setConnections(connectionRowsOf(result).filter((connection) => connection.provider === "gmail"));
+    } catch {
+      setConnectionsError(true);
+    } finally {
+      setConnectionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    listConnections().then((result) => {
+      if (active) setConnections(connectionRowsOf(result).filter((connection) => connection.provider === "gmail"));
+    }).catch(() => {
+      if (active) setConnectionsError(true);
+    }).finally(() => {
+      if (active) setConnectionsLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const selectedGmail = connections.find((connection) => String(connection.id) === String(config.connection_id));
+
   return (
     <div className="space-y-3">
+      <section className="overflow-hidden rounded-[8px] border border-[var(--border-default)] bg-[var(--surface)]">
+        <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-3 py-2.5">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[6px] border border-red-500/20 bg-red-500/[0.06] text-red-500" aria-hidden="true">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>
+          </span>
+          <div className="min-w-0 flex-1"><p className="text-[11px] font-semibold text-[var(--text-primary)]">Gmail account</p><p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">Choose the connected account that sends this email.</p></div>
+          <Link href="/connections" className="shrink-0 rounded-[5px] border border-[var(--border-subtle)] px-2 py-1 text-[10px] font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)]">＋ Add</Link>
+        </div>
+        {connectionsLoading ? <div className="space-y-2 p-3" aria-label="Loading Gmail accounts"><div className="h-3 w-24 animate-pulse rounded bg-[var(--elevated)]"/><div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]"/></div> : connectionsError ? (
+          <div className="m-3 flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2.5"><p role="alert" className="text-[10px] text-red-500">Unable to load Gmail accounts.</p><button type="button" onClick={loadGmailConnections} className="rounded px-2 py-1 text-[10px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface)]">Retry</button></div>
+        ) : connections.length === 0 ? (
+          <div className="flex items-center gap-3 p-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--elevated)] text-[var(--text-tertiary)]" aria-hidden="true">＋</span><div className="min-w-0 flex-1"><p className="text-[11px] font-medium text-[var(--text-primary)]">No Gmail accounts connected</p><p className="mt-0.5 text-[10px] leading-4 text-[var(--text-tertiary)]">Connect Gmail to send email from this workflow.</p></div><Link href="/connections" className="shrink-0 text-[10px] font-semibold text-[var(--accent)] hover:underline">Connect</Link></div>
+        ) : (
+          <div className="space-y-2.5 p-3"><FieldLabel>Connected accounts</FieldLabel><select aria-label="Gmail sending account" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-10 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-3 text-[12px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20"><option value="">Select a Gmail account</option>{connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.config?.email || connection.name}</option>)}</select>{config.connection_id && !selectedGmail && <p className="text-[10px] text-amber-600 dark:text-amber-400">This Gmail account is unavailable. Choose another account.</p>}{selectedGmail && <div className="flex items-center gap-2 rounded-[5px] bg-[var(--elevated)] px-2.5 py-2"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true"/><p className="truncate text-[10px] text-[var(--text-secondary)]">Connected · {selectedGmail.config?.email || selectedGmail.name}</p></div>}</div>
+        )}
+      </section>
       <div>
         <FieldLabel>To Email</FieldLabel>
         <TextInput

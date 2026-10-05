@@ -60,8 +60,9 @@ async def run_execution(
 
         for node in action_nodes:
             configuration = node.get("configuration", {})
+            node_type = node.get("node_type", "")
 
-            if isinstance(configuration.get("headers"), str):
+            if node_type == "action.http_request" and isinstance(configuration.get("headers"), str):
                 headers = {}
 
                 for line in configuration["headers"].splitlines():
@@ -85,13 +86,20 @@ async def run_execution(
                     f"Action node {node['node_id']} has no connection_id configured"
                 )
 
+            if node_type == "action.http_request":
+                provider, action = "http", "request"
+            elif node_type == "action.email":
+                provider, action = "gmail", "send_email"
+            else:
+                raise ValueError(f"Unsupported action node type: {node_type}")
+
             print(
                 "Action request:",
                 {
                     "workspace_id": workspace_id,
                     "connection_id": connection_id,
-                    "provider": "http",
-                    "action": "request",
+                    "provider": provider,
+                    "action": action,
                 },
                 flush=True,
             )
@@ -99,8 +107,8 @@ async def run_execution(
             response = await action_client.execute_action(
                 workspace_id=workspace_id,
                 connection_id=connection_id,
-                provider="http",
-                action="request",
+                provider=provider,
+                action=action,
                 config_json=json.dumps({}),
                 input_data_json=json.dumps(configuration),
             )
