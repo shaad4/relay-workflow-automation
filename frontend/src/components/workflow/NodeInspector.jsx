@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { getNodeDefinition } from "./nodeDefinitions";
 import { createWebhook, deleteWebhook, getWebhookEndpoint, listWebhooks, regenerateWebhookToken, updateWebhook } from "@/services/webhooks";
 import { getWorkflowVersions } from "@/services/workflows";
+import { listConnections } from "@/services/connections";
+import Link from "next/link";
 import WebhookTestDialog from "@/components/webhooks/WebhookTestDialog";
 import WebhookUsageGuide from "@/components/webhooks/WebhookUsageGuide";
 
@@ -269,9 +271,100 @@ function ManualConfig() {
   );
 }
 
+const connectionRowsOf = (data) => Array.isArray(data) ? data : data?.connections || data?.results || data?.data || [];
+
 function HttpRequestConfig({ config, onChange }) {
+  const [connections, setConnections] = useState([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const [connectionsError, setConnectionsError] = useState(false);
+
+  const loadConnections = async () => {
+    setConnectionsLoading(true);
+    setConnectionsError(false);
+    try {
+      const result = await listConnections();
+      setConnections(connectionRowsOf(result));
+    } catch {
+      setConnectionsError(true);
+    } finally {
+      setConnectionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    setConnectionsLoading(true);
+    setConnectionsError(false);
+    listConnections().then((result) => {
+      if (active) setConnections(connectionRowsOf(result));
+    }).catch(() => {
+      if (active) setConnectionsError(true);
+    }).finally(() => {
+      if (active) setConnectionsLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const httpConnections = connections.filter((connection) => connection.provider === "http");
+  const selectedConnection = httpConnections.find((connection) => String(connection.id) === String(config.connection_id));
+  const connectionBaseUrl = selectedConnection?.config?.base_url?.trim().replace(/\/+$/, "") || "";
+  const configuredUrl = config.url || "";
+  const requestPath = connectionBaseUrl && configuredUrl.startsWith(connectionBaseUrl)
+    ? configuredUrl.slice(connectionBaseUrl.length) || "/"
+    : configuredUrl;
+  const handlePathChange = (path) => {
+    const normalizedPath = path.trim();
+    const composedUrl = connectionBaseUrl
+      ? `${connectionBaseUrl}${normalizedPath ? (normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`) : ""}`
+      : path;
+    onChange("url", composedUrl);
+  };
+
   return (
     <div className="space-y-3">
+      <section className="overflow-hidden rounded-[8px] border border-[var(--border-default)] bg-[var(--surface)]">
+        <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-3 py-2.5">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[6px] border border-sky-500/20 bg-sky-500/[0.07] text-sky-500" aria-hidden="true">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18"/></svg>
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold text-[var(--text-primary)]">HTTP connection</p>
+            <p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">Optional · adds a base URL and saved authentication</p>
+          </div>
+          <Link href="/connections" className="shrink-0 rounded-[5px] border border-[var(--border-subtle)] px-2 py-1 text-[10px] font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)]">＋ Add</Link>
+        </div>
+        {connectionsLoading ? (
+          <div className="space-y-2 p-3" aria-label="Loading HTTP connections"><div className="h-3 w-28 animate-pulse rounded bg-[var(--elevated)]"/><div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]"/></div>
+        ) : connectionsError ? (
+          <div className="m-3 flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2.5">
+            <p role="alert" className="text-[10px] text-red-500">Unable to load HTTP connections.</p>
+            <button type="button" onClick={loadConnections} className="rounded px-2 py-1 text-[10px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]">Retry</button>
+          </div>
+        ) : httpConnections.length === 0 ? (
+          <div className="flex items-center gap-3 p-3">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--elevated)] text-[var(--text-tertiary)]" aria-hidden="true">＋</span>
+            <div className="min-w-0 flex-1"><p className="text-[11px] font-medium text-[var(--text-primary)]">No HTTP connections yet</p><p className="mt-0.5 text-[10px] leading-4 text-[var(--text-tertiary)]">Add one to reuse its endpoint and authentication.</p></div>
+            <Link href="/connections" className="shrink-0 text-[10px] font-semibold text-[var(--accent)] hover:underline">Create</Link>
+          </div>
+        ) : (
+          <div className="space-y-2.5 p-3">
+            <FieldLabel>Saved connections</FieldLabel>
+            <select
+              aria-label="HTTP request connection"
+              value={config.connection_id ?? ""}
+              onChange={(event) => onChange("connection_id", event.target.value || undefined)}
+              className="w-full h-10 px-3 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 focus:outline-none transition-colors"
+            >
+              <option value="">No connection</option>
+              {httpConnections.map((connection) => (
+                <option key={connection.id} value={connection.id}>{connection.name}</option>
+              ))}
+            </select>
+            {config.connection_id && !selectedConnection && <p className="mt-1.5 text-[10px] text-amber-600 dark:text-amber-400">The saved connection is unavailable. Choose another connection or clear the selection.</p>}
+            {selectedConnection && <div className="flex min-w-0 items-center gap-2 rounded-[5px] bg-[var(--elevated)] px-2.5 py-2"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true"/><div className="min-w-0"><p className="truncate text-[10px] font-medium text-[var(--text-secondary)]">{selectedConnection.config?.base_url || "HTTP API"}</p><p className="mt-0.5 text-[9px] text-[var(--text-tertiary)]">{selectedConnection.auth_type === "none" ? "No authentication" : "Authentication configured"}</p></div></div>}
+          </div>
+        )}
+      </section>
       <div>
         <FieldLabel>Method</FieldLabel>
         <SelectInput
@@ -287,16 +380,23 @@ function HttpRequestConfig({ config, onChange }) {
         />
       </div>
       <div>
-        <FieldLabel>URL</FieldLabel>
-        <TextInput
-          value={config.url}
-          onChange={(v) => onChange("url", v)}
-          placeholder="https://api.example.com/endpoint"
-          mono
-        />
+        <FieldLabel>{selectedConnection ? "Request path" : "URL"}</FieldLabel>
+        {selectedConnection && <div className="mb-1.5 flex min-w-0 items-center overflow-hidden rounded-[5px] border border-[var(--border-subtle)] bg-[var(--elevated)] font-mono text-[10px] leading-4"><span className="shrink-0 border-r border-[var(--border-subtle)] px-2 py-1.5 text-[var(--text-tertiary)]">BASE</span><span className="truncate px-2 py-1.5 text-[var(--text-secondary)]" title={connectionBaseUrl}>{connectionBaseUrl || "Base URL is not configured"}</span></div>}
+        <div className="flex h-8 overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)]">
+          {selectedConnection && <span className="flex shrink-0 items-center border-r border-[var(--border-default)] px-2 text-[11px] font-mono text-[var(--text-tertiary)]">/</span>}
+          <input
+            type="text"
+            value={selectedConnection ? requestPath.replace(/^\/+/, "") : config.url ?? ""}
+            onChange={(event) => selectedConnection ? handlePathChange(event.target.value) : onChange("url", event.target.value)}
+            placeholder={selectedConnection ? "v1/orders" : "https://api.example.com/endpoint"}
+            aria-label={selectedConnection ? "HTTP request path" : "HTTP request URL"}
+            className="h-full min-w-0 flex-1 bg-transparent px-2.5 text-[12px] font-mono text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none"
+          />
+        </div>
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">{selectedConnection ? "The saved connection supplies the base URL and authentication." : "Select a saved connection to reuse its base URL and authentication."}</p>
       </div>
       <div>
-        <FieldLabel>Headers</FieldLabel>
+        <FieldLabel>Additional headers</FieldLabel>
         <TextareaInput
           value={config.headers}
           onChange={(v) => onChange("headers", v)}
@@ -304,7 +404,7 @@ function HttpRequestConfig({ config, onChange }) {
           rows={2}
           mono
         />
-        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">One header per line: Name: Value</p>
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">One per line: Name: Value. Connection authentication is added separately.</p>
       </div>
       <div>
         <FieldLabel>Body</FieldLabel>
@@ -528,6 +628,7 @@ export default function NodeInspector({
   isReadOnly = false,
   workflowId,
   workflowVersionId,
+  className = "",
 }) {
   const [formData, setFormData] = useState({});
   const [nodeName, setNodeName] = useState("");
@@ -652,7 +753,7 @@ export default function NodeInspector({
   };
 
   return (
-    <div className="w-80 bg-[var(--surface)] border-l border-[var(--border-subtle)] flex flex-col h-full select-none shrink-0 font-sans z-20 animate-in slide-in-from-right duration-150">
+    <div className={`w-80 bg-[var(--surface)] border-l border-[var(--border-subtle)] flex flex-col h-full min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain select-none shrink-0 font-sans z-20 animate-in slide-in-from-right duration-150 ${className}`}>
       {/* Header */}
       <div className="px-3 py-2.5 border-b border-[var(--border-subtle)] space-y-2">
         <div className="flex items-center justify-between">
@@ -699,7 +800,8 @@ export default function NodeInspector({
       </div>
 
       {/* Config form */}
-      <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-3 space-y-3">
+      <form onSubmit={handleSave} className="shrink-0 p-3">
+        <div className="space-y-3">
         {/* Node label */}
         {typeId !== "trigger.webhook" && <div>
           <FieldLabel>Node Label</FieldLabel>
@@ -729,9 +831,11 @@ export default function NodeInspector({
           )}
         </div>
 
-        {/* Action buttons */}
+        </div>
+
+        {/* Actions follow the configuration in the inspector's single scroll area. */}
         {!isReadOnly && (
-          <div className={`sticky bottom-0 border-t border-[var(--border-subtle)] bg-[var(--surface)] pt-3 ${typeId === "trigger.webhook" ? "-mx-3 px-3 pb-1 space-y-2" : "space-y-2"}`}>
+          <div className="mt-3 space-y-2 border-t border-[var(--border-subtle)] pt-3">
             <button
               type="submit"
               className={`w-full h-8 px-3 rounded-[6px] font-medium text-[12px] transition-all duration-100 ease-out flex items-center justify-center gap-1.5 cursor-pointer shadow-none ${

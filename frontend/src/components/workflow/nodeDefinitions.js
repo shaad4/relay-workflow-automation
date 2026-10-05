@@ -51,7 +51,7 @@ export const NODE_CATEGORIES = [
         description: "Make an outbound HTTP API request",
         defaultConfig: {
           method: "POST",
-          url: "https://api.example.com",
+          url: "",
           headers: "Content-Type: application/json",
           body: "{}",
         },

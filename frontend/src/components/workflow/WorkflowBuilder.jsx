@@ -1308,16 +1308,18 @@ export default function WorkflowBuilder({
             onClose={() => { setIsInspectorOpen(false); setSelectedEdgeId(null); }}
           />
         ) : isInspectorOpen && (
-          <NodeInspector
-            key={version?.id || "workflow-version"}
-            selectedNode={selectedNode}
-            onUpdateNode={handleUpdateNodeData}
-            onDeleteNode={handleDeleteNode}
-            onClose={() => setIsInspectorOpen(false)}
-            isReadOnly={isCanvasReadOnly}
-            workflowId={workflowId}
-            workflowVersionId={version?.id}
-          />
+          <div className="flex h-full min-h-0 shrink-0">
+            <NodeInspector
+              key={version?.id || "workflow-version"}
+              selectedNode={selectedNode}
+              onUpdateNode={handleUpdateNodeData}
+              onDeleteNode={handleDeleteNode}
+              onClose={() => setIsInspectorOpen(false)}
+              isReadOnly={isCanvasReadOnly}
+              workflowId={workflowId}
+              workflowVersionId={version?.id}
+            />
+          </div>
         )}
       </div>
 
