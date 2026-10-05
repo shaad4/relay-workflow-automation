@@ -52,8 +52,8 @@ export const NODE_CATEGORIES = [
         defaultConfig: {
           method: "POST",
           url: "",
-          headers: "Content-Type: application/json",
-          body: "{}",
+          headers: "",
+          body: "",
         },
       },
       {
@@ -63,9 +63,9 @@ export const NODE_CATEGORIES = [
         icon: "✉",
         description: "Send an automated notification email",
         defaultConfig: {
-          to: "user@example.com",
-          subject: "Workflow Alert",
-          body: "Your workflow step completed.",
+          to: "",
+          subject: "",
+          body: "",
         },
       },
       {
@@ -75,7 +75,7 @@ export const NODE_CATEGORIES = [
         icon: "💳",
         description: "Process a payment refund",
         defaultConfig: {
-          charge_id: "ch_12345",
+          charge_id: "",
           reason: "requested_by_customer",
         },
       },
@@ -92,7 +92,7 @@ export const NODE_CATEGORIES = [
         icon: "🧠",
         description: "Classify inputs or route logic using AI",
         defaultConfig: {
-          prompt: "Classify incoming customer request priority",
+          prompt: "",
           model: "gemini-2.5-flash",
         },
       },
@@ -103,8 +103,8 @@ export const NODE_CATEGORIES = [
         icon: "🔍",
         description: "Search connected vector knowledge bases",
         defaultConfig: {
-          knowledge_base: "kb_customer_docs",
-          query: "{{input.message}}",
+          knowledge_base: "",
+          query: "",
           top_k: 5,
         },
       },
@@ -115,7 +115,7 @@ export const NODE_CATEGORIES = [
         icon: "✨",
         description: "Generate structured text response using AI",
         defaultConfig: {
-          prompt: "Generate summary of customer ticket",
+          prompt: "",
           model: "gemini-2.5-flash",
         },
       },
@@ -132,9 +132,9 @@ export const NODE_CATEGORIES = [
         icon: "🔀",
         description: "Branch execution based on boolean condition",
         defaultConfig: {
-          field: "status_code",
+          field: "",
           operator: "equals",
-          value: "200",
+          value: "",
         },
       },
       {
@@ -144,14 +144,43 @@ export const NODE_CATEGORIES = [
         icon: "👤",
         description: "Pause workflow for human reviewer approval",
         defaultConfig: {
-          approver: "admin@company.com",
+          approver: "",
           timeout_hours: 24,
-          message: "Please approve refund request",
+          message: "",
         },
       },
     ],
   },
 ];
+
+const exampleValuesByType = {
+  "action.http_request": { headers: "Content-Type: application/json", body: "{}" },
+  "action.email": {
+    to: "user@example.com",
+    subject: "Workflow Alert",
+    body: "Your workflow step completed.",
+  },
+  "action.refund": { charge_id: "ch_12345" },
+  "ai.decision": { prompt: "Classify incoming customer request priority" },
+  "ai.rag_search": { knowledge_base: "kb_customer_docs", query: "{{input.message}}" },
+  "ai.generate": { prompt: "Generate summary of customer ticket" },
+  "logic.condition": { field: "status_code", value: "200" },
+  "human.approval": { approver: "admin@company.com", message: "Please approve refund request" },
+};
+
+export function clearExampleNodeConfig(typeId, config) {
+  const examples = exampleValuesByType[typeId];
+  if (!examples || !config || typeof config !== "object") return config;
+
+  let cleaned = config;
+  for (const [key, example] of Object.entries(examples)) {
+    if (config[key] === example) {
+      if (cleaned === config) cleaned = { ...config };
+      cleaned[key] = "";
+    }
+  }
+  return cleaned;
+}
 
 export function getNodeDefinition(typeId) {
   for (const cat of NODE_CATEGORIES) {

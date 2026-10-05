@@ -26,13 +26,13 @@ function WorkflowNode({ data, selected }) {
     if (typeId === "trigger.webhook") return `${config.method || "POST"}  ${config.event_name || (config.webhook_id ? "Webhook configured" : config.setup_required ? "Setup required" : "Not configured")}`;
     if (typeId === "trigger.schedule") return `${config.cron || "0 0 * * *"}  ·  ${config.timezone || "UTC"}`;
     if (typeId === "trigger.manual") return "Manual trigger";
-    if (typeId === "action.http_request") return `${config.method || "POST"}  ${config.url || "https://..."}`;
-    if (typeId === "action.email") return `To  ${config.to || "user@..."}`;
-    if (typeId === "action.refund") return `Charge  ${config.charge_id || "ch_..."}`;
+    if (typeId === "action.http_request") return `${config.method || "POST"}  ${config.url || "Request URL not set"}`;
+    if (typeId === "action.email") return `To  ${config.to || "Recipient not set"}`;
+    if (typeId === "action.refund") return `Charge  ${config.charge_id || "Not configured"}`;
     if (typeId === "ai.decision" || typeId === "ai.generate") return config.model || "gemini-2.5-flash";
-    if (typeId === "ai.rag_search") return `Index  ${config.knowledge_base || "default"}`;
-    if (typeId === "logic.condition") return `${config.field || "field"}  ${config.operator || "=="}  ${config.value || "value"}`;
-    if (typeId === "human.approval") return `Approver  ${config.approver || "admin@..."}`;
+    if (typeId === "ai.rag_search") return `Index  ${config.knowledge_base || "Not configured"}`;
+    if (typeId === "logic.condition") return `${config.field || "Field not set"}  ${config.operator || "=="}  ${config.value || "Value not set"}`;
+    if (typeId === "human.approval") return `Approver  ${config.approver || "Not configured"}`;
     return "Configured";
   };
 

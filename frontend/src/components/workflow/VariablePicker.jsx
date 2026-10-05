@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const outputsByType = {
   "action.http_request": ["status_code", "body", "headers", "success"],
@@ -43,6 +44,9 @@ export default function VariablePicker({ nodes, edges, currentNode, onInsert }) 
   const [triggerPath, setTriggerPath] = useState("");
   const [expandedNode, setExpandedNode] = useState(null);
   const [search, setSearch] = useState("");
+  const [menuPosition, setMenuPosition] = useState(null);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
   const previousNodes = useMemo(
     () => previousNodesFor(nodes, edges, currentNode?.id),
     [nodes, edges, currentNode?.id]
@@ -51,6 +55,49 @@ export default function VariablePicker({ nodes, edges, currentNode, onInsert }) 
     const query = search.trim().toLowerCase();
     return !query || `${node.data?.label || node.data?.name || ""} ${node.data?.nodeId || ""} ${(outputsByType[node.data?.typeId] || []).join(" ")}`.toLowerCase().includes(query);
   });
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const positionMenu = () => {
+      const anchor = buttonRef.current?.getBoundingClientRect();
+      const menu = menuRef.current;
+      if (!anchor || !menu) return;
+
+      const margin = 12;
+      const gap = 8;
+      const width = Math.min(320, window.innerWidth - margin * 2);
+      const spaceAbove = anchor.top - margin;
+      const spaceBelow = window.innerHeight - anchor.bottom - margin;
+      const placeBelow = spaceBelow >= Math.min(menu.scrollHeight, 280) || spaceBelow >= spaceAbove;
+      const availableHeight = Math.max(160, Math.min(420, (placeBelow ? spaceBelow : spaceAbove) - gap));
+      const height = Math.min(menu.scrollHeight, availableHeight);
+      const left = Math.max(margin, Math.min(anchor.right - width, window.innerWidth - width - margin));
+      const top = placeBelow ? anchor.bottom + gap : Math.max(margin, anchor.top - height - gap);
+
+      setMenuPosition({ left, top, width, maxHeight: availableHeight });
+    };
+
+    const frame = window.requestAnimationFrame(positionMenu);
+    const closeOnOutsidePointer = (event) => {
+      if (!menuRef.current?.contains(event.target) && !buttonRef.current?.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+    };
+  }, [open, expandedNode, matchingNodes.length, search, triggerPath]);
 
   const insert = (expression) => {
     onInsert(expression);
@@ -67,13 +114,13 @@ export default function VariablePicker({ nodes, edges, currentNode, onInsert }) 
 
   return (
     <div className="relative inline-flex">
-      <button type="button" aria-label="Insert variable" title="Insert variable" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={`inline-flex h-6 items-center gap-1 rounded-[5px] border px-1.5 font-mono text-[9px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/40 ${open ? "border-sky-500/40 bg-sky-500/10 text-sky-400" : "border-sky-500/20 text-sky-400 hover:border-sky-500/40 hover:bg-sky-500/5"}`}><span aria-hidden="true">{`{{ }}`}</span><span className="font-sans font-medium">Variable</span></button>
-      {open && <div className="absolute bottom-[calc(100%+6px)] right-0 z-[100] w-[min(280px,calc(100vw-24px))] overflow-hidden rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl" role="dialog" aria-label="Variable picker">
+      <button ref={buttonRef} type="button" aria-label="Insert variable" title="Insert variable" aria-expanded={open} onClick={() => { setMenuPosition(null); setOpen((value) => !value); }} className={`inline-flex h-6 items-center gap-1 rounded-[5px] border px-1.5 font-mono text-[9px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/40 ${open ? "border-sky-500/40 bg-sky-500/10 text-sky-400" : "border-sky-500/20 text-sky-400 hover:border-sky-500/40 hover:bg-sky-500/5"}`}><span aria-hidden="true">{`{{ }}`}</span><span className="font-sans font-medium">Variable</span></button>
+      {open && typeof document !== "undefined" && createPortal(<div ref={menuRef} style={{ left: menuPosition?.left ?? -10000, top: menuPosition?.top ?? -10000, width: menuPosition?.width ?? 320, maxHeight: menuPosition?.maxHeight ?? 420 }} className="fixed z-[150] flex flex-col overflow-hidden rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl" role="dialog" aria-label="Variable picker">
         <div className="border-b border-[var(--border-subtle)] p-2.5">
           <div className="flex items-center justify-between gap-2"><div><p className="text-[11px] font-semibold text-[var(--text-primary)]">Variables</p><p className="mt-0.5 text-[9px] text-[var(--text-tertiary)]">Select a token to insert it into this value.</p></div><button type="button" onClick={() => setOpen(false)} aria-label="Close variable picker" className="grid h-6 w-6 place-items-center rounded text-[14px] text-[var(--text-tertiary)] hover:bg-[var(--elevated)]">×</button></div>
           <div className="mt-2 flex h-8 items-center gap-2 rounded-[5px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2"><span className="text-[var(--text-tertiary)]" aria-hidden="true">⌕</span><input aria-label="Search previous node variables" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search previous node outputs" className="min-w-0 flex-1 bg-transparent text-[10px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]" /></div>
         </div>
-        <div className="max-h-[min(340px,55vh)] overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
           <section className="pb-2">
             <p className="px-1.5 pb-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Trigger <span className="font-normal normal-case tracking-normal">/ Data</span></p>
             <div className="flex gap-1.5 px-1"><input aria-label="Trigger data path" value={triggerPath} onChange={(event) => setTriggerPath(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); insertTriggerPath(); } }} placeholder="field.path" className="h-8 min-w-0 flex-1 rounded-[5px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2 font-mono text-[10px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)] focus:border-[var(--accent)]"/><button type="button" onClick={insertTriggerPath} disabled={!triggerPath.trim()} className="h-8 rounded-[5px] bg-[var(--accent)] px-2.5 text-[10px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40">Insert</button></div>
@@ -95,7 +142,7 @@ export default function VariablePicker({ nodes, edges, currentNode, onInsert }) 
             })}</div>}
           </section>
         </div>
-      </div>}
+      </div>, document.body)}
     </div>
   );
 }

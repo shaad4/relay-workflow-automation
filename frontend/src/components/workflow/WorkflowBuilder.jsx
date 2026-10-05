@@ -13,7 +13,7 @@ import NodeLibrary from "./NodeLibrary";
 import WorkflowCanvas from "./WorkflowCanvas";
 import NodeInspector from "./NodeInspector";
 import WorkflowValidation from "./WorkflowValidation";
-import { getNodeDefinition } from "./nodeDefinitions";
+import { clearExampleNodeConfig, getNodeDefinition } from "./nodeDefinitions";
 import {
   createWorkflowNode,
   updateWorkflowNode,
@@ -102,6 +102,39 @@ function EdgeInspector({ edge, isReadOnly, onConditionChange, onDelete, onClose 
 // Data transformation helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+function removeNodeOutputReferences(value, nodeId) {
+  if (typeof value === "string") {
+    const escapedNodeId = String(nodeId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const expression = new RegExp(`\\{\\{\\s*nodes\\.${escapedNodeId}(?:\\.[^{}]+)?\\s*\\}\\}`, "g");
+    const cleaned = value.replace(expression, "");
+    return cleaned === value ? value : cleaned;
+  }
+
+  if (Array.isArray(value)) {
+    let changed = false;
+    const cleaned = value.map((item) => {
+      const next = removeNodeOutputReferences(item, nodeId);
+      if (next !== item) changed = true;
+      return next;
+    });
+    return changed ? cleaned : value;
+  }
+
+  if (value && typeof value === "object") {
+    let cleaned = value;
+    for (const [key, item] of Object.entries(value)) {
+      const next = removeNodeOutputReferences(item, nodeId);
+      if (next !== item) {
+        if (cleaned === value) cleaned = { ...value };
+        cleaned[key] = next;
+      }
+    }
+    return cleaned;
+  }
+
+  return value;
+}
+
 /**
  * Transform a backend node into:
  *   - rfNode: React Flow node (uses backend UUID as id)
@@ -127,6 +160,7 @@ function transformBackendNode(n) {
       cfg = rawCfg;
     }
   }
+  const uiConfig = clearExampleNodeConfig(typeId, cfg);
 
   const label = n.label || n.name || def.name;
 
@@ -141,7 +175,7 @@ function transformBackendNode(n) {
       name: label,
       category: def.category,
       icon: def.icon,
-      config: cfg,
+      config: uiConfig,
     },
   };
 
@@ -624,7 +658,14 @@ export default function WorkflowBuilder({
     (id) => {
       if (isCanvasReadOnly) return;
       recordHistory();
-      setNodes((nds) => nds.filter((n) => n.id !== id));
+      const deletedNode = nodes.find((node) => node.id === id);
+      const deletedLogicalId = deletedNode?.data?.nodeId || deletedNode?.id || id;
+      setNodes((currentNodes) => currentNodes
+        .filter((node) => node.id !== id)
+        .map((node) => {
+          const config = removeNodeOutputReferences(node.data?.config, deletedLogicalId);
+          return config === node.data?.config ? node : { ...node, data: { ...node.data, config } };
+        }));
       setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
       if (selectedNodeId === id) setSelectedNodeId(null);
       if (selectedEdgeId && edges.some((edge) => edge.id === selectedEdgeId && (edge.source === id || edge.target === id))) {
@@ -632,7 +673,7 @@ export default function WorkflowBuilder({
       }
       markUnsaved();
     },
-    [isCanvasReadOnly, selectedNodeId, selectedEdgeId, edges, markUnsaved, setNodes, setEdges, recordHistory]
+    [isCanvasReadOnly, nodes, selectedNodeId, selectedEdgeId, edges, markUnsaved, setNodes, setEdges, recordHistory]
   );
 
   const handleDuplicateNode = useCallback((id) => {
@@ -714,13 +755,25 @@ export default function WorkflowBuilder({
   );
 
   const handleNodeChanges = useCallback((changes) => {
-    if (changes.some((change) => change.type === "remove")) recordHistory();
+    const removedIds = new Set(changes.filter((change) => change.type === "remove").map((change) => change.id));
+    const removedLogicalIds = nodes
+      .filter((node) => removedIds.has(node.id))
+      .map((node) => node.data?.nodeId || node.id);
+    if (removedIds.size) recordHistory();
     onNodesChange(changes);
     if (isCanvasReadOnly) return;
+    if (removedLogicalIds.length) {
+      setNodes((currentNodes) => currentNodes.map((node) => {
+        let config = node.data?.config;
+        for (const nodeId of removedLogicalIds) config = removeNodeOutputReferences(config, nodeId);
+        return config === node.data?.config ? node : { ...node, data: { ...node.data, config } };
+      }));
+    }
     if (changes.some((change) => change.type === "position" && change.dragging === false)) {
       markUnsaved();
     }
-  }, [onNodesChange, isCanvasReadOnly, markUnsaved, recordHistory]);
+    if (removedIds.size) markUnsaved();
+  }, [nodes, onNodesChange, isCanvasReadOnly, markUnsaved, recordHistory, setNodes]);
 
   // ── SAVE: diff-based sync to backend ─────────────────────────────────────
   const handleSave = useCallback(async () => {

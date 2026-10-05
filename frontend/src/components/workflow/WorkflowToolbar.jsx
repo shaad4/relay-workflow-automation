@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import WorkflowStatus from "../workflows/WorkflowStatus";
 import { activateWorkflow, deactivateWorkflow, deleteWorkflow, deleteWorkflowVersion, updateWorkflow } from "@/services/workflows";
 
@@ -229,7 +230,7 @@ export default function WorkflowToolbar({
   };
 
   return (
-    <div className="relative h-12 px-4 bg-[var(--surface)] border-b border-[var(--border-subtle)] flex items-center justify-between gap-4 select-none shrink-0 font-sans z-20">
+    <div className="relative h-12 px-4 bg-[var(--surface)] border-b border-[var(--border-subtle)] flex items-center justify-between gap-4 select-none shrink-0 font-sans z-30">
       {/* Left: Breadcrumb + version + status */}
       <div className="flex items-center gap-2.5 min-w-0">
         <button
@@ -442,8 +443,8 @@ export default function WorkflowToolbar({
         </div>
       )}
 
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isDeletingWorkflow) setShowDeleteConfirm(false); }}>
+      {showDeleteConfirm && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isDeletingWorkflow) setShowDeleteConfirm(false); }}>
           <section role="dialog" aria-modal="true" aria-labelledby="workflow-delete-confirm-title" className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-5 shadow-2xl">
             <h2 id="workflow-delete-confirm-title" className="text-[16px] font-semibold text-[var(--text-primary)]">Delete workflow?</h2>
             <p className="mt-2 text-[13px] leading-5 text-[var(--text-secondary)]">This permanently deletes <span className="font-medium text-[var(--text-primary)]">{workflowName}</span> and its versions. This cannot be undone.</p>
@@ -456,7 +457,8 @@ export default function WorkflowToolbar({
               </button>
             </div>
           </section>
-        </div>
+        </div>,
+        document.body
       )}
 
       {versionToDelete && (
