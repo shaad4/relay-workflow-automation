@@ -127,6 +127,27 @@ async def run_execution(
                 flush=True,
             )
 
+            if response.success:
+                try:
+                    result = json.loads(response.result_json) if response.result_json else {}
+                except (json.JSONDecodeError, TypeError):
+                    result = {}
+
+                if not isinstance(result, dict):
+                    result = {}
+
+                # HTTP connector results wrap the API payload under `body`.
+                # Expose object fields at the node root as convenient aliases
+                # while retaining status_code, headers, body, and success.
+                if node_type == "action.http_request" and isinstance(result.get("body"), dict):
+                    result = {**result["body"], **result}
+
+                context.set_node_output(node["node_id"], result)
+                print(
+                    f"Stored output for node: {node['node_id']}",
+                    flush=True,
+                )
+
         return {
             "workflow_id": workflow_id,
             "workflow_version_id": workflow_version_id,
