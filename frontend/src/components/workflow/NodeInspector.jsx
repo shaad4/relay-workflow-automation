@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getNodeDefinition } from "./nodeDefinitions";
 import { createWebhook, deleteWebhook, getWebhookEndpoint, listWebhooks, regenerateWebhookToken, updateWebhook } from "@/services/webhooks";
 import { getWorkflowVersions } from "@/services/workflows";
@@ -65,26 +65,47 @@ function VariableFieldLabel({ children, picker }) {
   return <div className="mb-1 flex items-center justify-between gap-2"><label className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">{children}</label>{picker}</div>;
 }
 
-function TextInput({ value, onChange, placeholder, mono = false }) {
+function VariableText({ value }) {
+  const pieces = String(value ?? "").split(/(\{\{[^{}]+\}\})/g);
+  return pieces.map((piece, index) => piece.startsWith("{{") && piece.endsWith("}}")
+    ? <span key={index} className="shrink-0 text-sky-400">{piece}</span>
+    : <span key={index} className="shrink-0 text-[var(--text-primary)]">{piece}</span>);
+}
+
+function TextInput({ value, onChange, mono = false, variables = false, prefix = "", ariaLabel }) {
+  const previewRef = useRef(null);
+  if (variables) {
+    return <div className={`relative h-8 w-full overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] transition-colors focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)] ${mono ? "font-mono" : ""}`}>
+      {prefix && <span aria-hidden="true" className="absolute inset-y-0 left-0 z-10 flex items-center border-r border-[var(--border-default)] px-2 text-[11px] text-[var(--text-tertiary)]">{prefix}</span>}
+      <div ref={previewRef} aria-hidden="true" className={`pointer-events-none absolute inset-0 flex items-center overflow-x-auto overflow-y-hidden whitespace-pre text-[12px] [scrollbar-width:none] ${prefix ? "pl-[26px] pr-2.5" : "px-2.5"}`}>{value ? <VariableText value={value} /> : null}</div>
+      <input type="text" aria-label={ariaLabel} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onScroll={(e) => { if (previewRef.current) previewRef.current.scrollLeft = e.currentTarget.scrollLeft; }} className={`relative h-full w-full bg-transparent text-[12px] text-transparent caret-sky-400 selection:bg-sky-500/25 focus:outline-none ${prefix ? "pl-[26px] pr-2.5" : "px-2.5"}`} />
+    </div>;
+  }
   return (
     <input
       type="text"
+      aria-label={ariaLabel}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className={`w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] placeholder-[var(--text-disabled)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors ${mono ? "font-mono" : ""}`}
+      className={`w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors ${mono ? "font-mono" : ""}`}
     />
   );
 }
 
-function TextareaInput({ value, onChange, placeholder, rows = 3, mono = false }) {
+function TextareaInput({ value, onChange, rows = 3, mono = false, variables = false }) {
+  const previewRef = useRef(null);
+  if (variables) {
+    return <div className={`relative w-full overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] transition-colors focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)] ${mono ? "font-mono" : ""}`}>
+      <div ref={previewRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-y-auto whitespace-pre-wrap break-words p-2.5 text-[12px] [scrollbar-width:none]">{value ? <VariableText value={value} /> : null}</div>
+      <textarea rows={rows} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onScroll={(e) => { if (previewRef.current) previewRef.current.scrollTop = e.currentTarget.scrollTop; }} className="relative block w-full resize-none bg-transparent p-2.5 text-[12px] text-transparent caret-sky-400 selection:bg-sky-500/25 focus:outline-none" />
+    </div>;
+  }
   return (
     <textarea
       rows={rows}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className={`w-full p-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] placeholder-[var(--text-disabled)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors resize-none ${mono ? "font-mono" : ""}`}
+      className={`w-full p-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors resize-none ${mono ? "font-mono" : ""}`}
     />
   );
 }
@@ -232,7 +253,7 @@ function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOn
     </> : <div className="space-y-2"><div className="rounded-[6px] border border-[var(--border-subtle)] p-3"><div className="flex items-center justify-between gap-2"><p className="text-[12px] font-medium text-[var(--text-primary)]">{config.setup_required ? "Webhook setup required" : "No webhook configured"}</p>{config.setup_required && <span className="rounded border border-amber-500/30 bg-amber-500/5 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wide text-amber-600 dark:text-amber-400">Setup required</span>}</div><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">{config.setup_required ? "This workflow version needs its own endpoint. Configure a new webhook URL for this version; other versions stay unchanged." : "Create an endpoint to trigger this workflow from an external service."}</p></div>{!isReadOnly && <button type="button" onClick={openCreate} className="h-8 w-full rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)]">＋ {config.setup_required ? "Set up webhook" : "Create webhook"}</button>}</div>}
     {error && webhook && <p role="alert" className="text-[10px] text-red-500">{error}</p>}
     {dialog && <div className="fixed inset-0 z-[110] flex justify-end bg-black/55"><section role="dialog" aria-modal="true" aria-labelledby="webhook-trigger-dialog-title" className="flex h-full w-full max-w-[480px] flex-col overflow-y-auto border-l border-[var(--border-default)] bg-[var(--surface)] shadow-2xl animate-in slide-in-from-right duration-200"><div className="sticky top-0 z-10 border-b border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><div className="flex items-start justify-between gap-4"><div><p className="text-[9px] font-mono uppercase tracking-[.16em] text-[var(--text-tertiary)]">Webhook trigger · {dialog === "create" ? "New endpoint" : dialog === "edit" ? "Endpoint settings" : dialog === "secret" ? "Credentials" : dialog === "delete" ? "Destructive action" : "Security"}</p><h3 id="webhook-trigger-dialog-title" className="mt-1.5 text-[17px] font-semibold tracking-tight text-[var(--text-primary)]">{dialog === "create" ? "Configure webhook" : dialog === "edit" ? "Edit webhook" : dialog === "secret" ? "Webhook created" : dialog === "delete" ? "Delete webhook?" : "Regenerate endpoint URL?"}</h3><p className="mt-1 text-[11px] leading-4 text-[var(--text-secondary)]">{dialog === "create" ? "Set the endpoint details and trigger destination." : dialog === "edit" ? "Update this workflow's webhook settings." : dialog === "secret" ? "Copy and store the secret before closing." : dialog === "delete" ? "This permanently removes the endpoint." : "This change immediately invalidates the current URL."}</p></div><div className="flex shrink-0 items-center gap-2">{(dialog === "create" || dialog === "edit") && <button type="button" onClick={onOpenGuide} className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-[var(--border-default)] px-2.5 text-[10px] font-medium text-[var(--text-secondary)] transition hover:bg-[var(--elevated)]" aria-label="Open webhook usage guide"><span className="grid h-4 w-4 place-items-center rounded-full border border-current font-mono text-[9px]">?</span>Guide</button>}<button type="button" disabled={saving} onClick={closeDialog} aria-label="Close webhook configuration" className="grid h-8 w-8 shrink-0 place-items-center rounded-[6px] border border-[var(--border-subtle)] text-[16px] text-[var(--text-tertiary)] hover:bg-[var(--elevated)]">×</button></div></div></div>
-      {(dialog === "create" || dialog === "edit") && <div role="group" aria-label="Webhook configuration" onKeyDown={(event) => { if (event.key === "Enter" && event.target.tagName !== "BUTTON") { event.preventDefault(); submit(); } }} className="flex-1 space-y-5 p-5"><section className="space-y-3"><div className="border-b border-[var(--border-subtle)] pb-2 text-[9px] font-mono uppercase tracking-[.14em] text-[var(--text-tertiary)]">Endpoint identity</div><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Webhook name<input required maxLength={255} value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} className={`${inputClass} mt-1`} placeholder="Order Created Webhook"/></label><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Event name<input required maxLength={255} value={form.event_name} onChange={(e)=>setForm({...form,event_name:e.target.value})} className={`${inputClass} mt-1 font-mono`} placeholder="orders.created"/></label></section><section className="space-y-3"><div className="border-b border-[var(--border-subtle)] pb-2 text-[9px] font-mono uppercase tracking-[.14em] text-[var(--text-tertiary)]">Request security</div><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Method<select value="POST" disabled className={`${inputClass} mt-1 opacity-70`}><option>POST</option></select></label><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Authentication<select value={form.authentication_type} onChange={(e)=>setForm({...form,authentication_type:e.target.value})} className={`${inputClass} mt-1`}><option value="secret">Secret</option><option value="none">None</option></select></label><label className="flex items-center justify-between rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[11px] text-[var(--text-secondary)]"><span><span className="block font-medium text-[var(--text-primary)]">Active</span><span className="mt-0.5 block text-[10px] text-[var(--text-tertiary)]">{form.is_active ? "Endpoint will accept requests" : "Endpoint will be paused"}</span></span><button type="button" role="switch" aria-checked={Boolean(form.is_active)} aria-label="Webhook active" onClick={()=>setForm({...form,is_active:!form.is_active})} className={`relative inline-flex h-5 w-9 items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/50 ${form.is_active ? "border-emerald-600 bg-emerald-600" : "border-[var(--border-strong)] bg-[var(--surface)]"}`}><span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${form.is_active ? "translate-x-[17px]" : "translate-x-[3px]"}`}/></button></label></section>{dialog === "edit" && <section className="border-t border-[var(--border-subtle)] pt-4"><p className="text-[10px] font-medium text-[var(--text-primary)]">Danger zone</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Permanently remove this webhook and invalidate its endpoint.</p><button type="button" onClick={()=>{setError("");setDialog("delete");}} className="mt-2 h-8 rounded-[6px] border border-red-500/30 px-3 text-[10px] text-red-600 hover:bg-red-500/5 dark:text-red-400">Delete webhook</button></section>}{dialog === "create" && <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[10px] leading-4 text-[var(--text-secondary)]">{form.authentication_type === "secret" ? "Relay generates the secret automatically. It is displayed once after creation." : "Requests to this endpoint will not require a shared secret."}</div>}{error&&<p role="alert" className="rounded-[6px] border border-red-500/30 bg-red-500/5 p-2 text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><button type="button" onClick={closeDialog} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px] text-[var(--text-secondary)]">Cancel</button><button type="button" onClick={() => submit()} disabled={saving} className="h-8 rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white">{saving ? (dialog === "create" ? "Creating…" : "Saving…") : (dialog === "create" ? "Create webhook" : "Save changes")}</button></div></div>}
+      {(dialog === "create" || dialog === "edit") && <div role="group" aria-label="Webhook configuration" onKeyDown={(event) => { if (event.key === "Enter" && event.target.tagName !== "BUTTON") { event.preventDefault(); submit(); } }} className="flex-1 space-y-5 p-5"><section className="space-y-3"><div className="border-b border-[var(--border-subtle)] pb-2 text-[9px] font-mono uppercase tracking-[.14em] text-[var(--text-tertiary)]">Endpoint identity</div><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Webhook name<input required maxLength={255} value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} className={`${inputClass} mt-1`}/></label><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Event name<input required maxLength={255} value={form.event_name} onChange={(e)=>setForm({...form,event_name:e.target.value})} className={`${inputClass} mt-1 font-mono`}/></label></section><section className="space-y-3"><div className="border-b border-[var(--border-subtle)] pb-2 text-[9px] font-mono uppercase tracking-[.14em] text-[var(--text-tertiary)]">Request security</div><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Method<select value="POST" disabled className={`${inputClass} mt-1 opacity-70`}><option>POST</option></select></label><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Authentication<select value={form.authentication_type} onChange={(e)=>setForm({...form,authentication_type:e.target.value})} className={`${inputClass} mt-1`}><option value="secret">Secret</option><option value="none">None</option></select></label><label className="flex items-center justify-between rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[11px] text-[var(--text-secondary)]"><span><span className="block font-medium text-[var(--text-primary)]">Active</span><span className="mt-0.5 block text-[10px] text-[var(--text-tertiary)]">{form.is_active ? "Endpoint will accept requests" : "Endpoint will be paused"}</span></span><button type="button" role="switch" aria-checked={Boolean(form.is_active)} aria-label="Webhook active" onClick={()=>setForm({...form,is_active:!form.is_active})} className={`relative inline-flex h-5 w-9 items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/50 ${form.is_active ? "border-emerald-600 bg-emerald-600" : "border-[var(--border-strong)] bg-[var(--surface)]"}`}><span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${form.is_active ? "translate-x-[17px]" : "translate-x-[3px]"}`}/></button></label></section>{dialog === "edit" && <section className="border-t border-[var(--border-subtle)] pt-4"><p className="text-[10px] font-medium text-[var(--text-primary)]">Danger zone</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Permanently remove this webhook and invalidate its endpoint.</p><button type="button" onClick={()=>{setError("");setDialog("delete");}} className="mt-2 h-8 rounded-[6px] border border-red-500/30 px-3 text-[10px] text-red-600 hover:bg-red-500/5 dark:text-red-400">Delete webhook</button></section>}{dialog === "create" && <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[10px] leading-4 text-[var(--text-secondary)]">{form.authentication_type === "secret" ? "Relay generates the secret automatically. It is displayed once after creation." : "Requests to this endpoint will not require a shared secret."}</div>}{error&&<p role="alert" className="rounded-[6px] border border-red-500/30 bg-red-500/5 p-2 text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><button type="button" onClick={closeDialog} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px] text-[var(--text-secondary)]">Cancel</button><button type="button" onClick={() => submit()} disabled={saving} className="h-8 rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white">{saving ? (dialog === "create" ? "Creating…" : "Saving…") : (dialog === "create" ? "Create webhook" : "Save changes")}</button></div></div>}
       {dialog === "secret" && <div className="flex-1 space-y-5 p-5"><div className="rounded-[6px] border border-amber-500/30 bg-amber-500/5 p-4"><div className="flex items-start gap-3"><span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded border border-amber-500/30 font-semibold text-amber-600 dark:text-amber-400">!</span><div><p className="text-[12px] font-semibold text-[var(--text-primary)]">Copy this secret now</p><p className="mt-1 text-[11px] leading-5 text-[var(--text-secondary)]">This is the only time Relay will show it. If you close this drawer without saving it, you’ll need to create a new webhook to get another secret.</p></div></div></div><section><div className="mb-2 flex items-center justify-between"><FieldLabel>Signing secret</FieldLabel><span className="font-mono text-[9px] uppercase tracking-wide text-[var(--text-tertiary)]">Sensitive</span></div><div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-3"><code className="block min-h-5 break-all font-mono text-[12px] leading-5 text-[var(--text-primary)]" aria-label={secretVisible?"Signing secret":"Masked signing secret"}>{secretVisible ? oneTimeSecret : `${String(oneTimeSecret || "").slice(0, 10)}${"•".repeat(Math.max(12, String(oneTimeSecret || "").length - 10))}`}</code><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={async()=>{if(!oneTimeSecret){setError("Relay did not return the signing secret. Create a new webhook to receive a new secret.");return;}try{await navigator.clipboard.writeText(oneTimeSecret);setCopied(true);setError("");}catch{setError("Unable to copy secret. Select and copy it manually.");}}} className={`h-8 rounded-[6px] px-3 text-[11px] font-medium ${copied?"border border-emerald-600/40 text-emerald-600 dark:text-emerald-400":"bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"}`}>{copied?"✓ Copied":"Copy secret"}</button><button type="button" onClick={()=>setSecretVisible((value)=>!value)} aria-pressed={secretVisible} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--elevated)]">{secretVisible?"Hide":"Reveal"}</button></div></div></section><div className="rounded-[6px] border border-[var(--border-subtle)] p-3"><p className="text-[10px] font-medium text-[var(--text-primary)]">Store it in your secrets manager</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Use this value in the external service that calls your webhook. It is never included in the endpoint URL or shown again after this drawer closes.</p></div>{error&&<p role="alert" className="text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><button type="button" onClick={closeDialog} className="h-8 rounded-[6px] bg-[var(--accent)] px-4 text-[11px] font-medium text-white">Done, secret saved</button></div></div>}
       {dialog === "delete" && <div className="flex-1 space-y-4 p-5"><div className="rounded-[6px] border border-red-500/30 bg-red-500/5 p-3"><p className="text-[11px] font-semibold text-[var(--text-primary)]">{webhook?.name}</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">Deleting this webhook immediately disables its endpoint. External services using it will stop triggering this workflow. This cannot be undone.</p></div>{error&&<p role="alert" className="text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><button type="button" disabled={saving} onClick={closeDialog} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px]">Cancel</button><button type="button" disabled={saving} onClick={removeWebhook} className="h-8 rounded-[6px] bg-red-600 px-3 text-[11px] font-medium text-white hover:bg-red-700">{saving?"Deleting…":"Delete webhook"}</button></div></div>}
       {dialog === "regenerate" && <div className="flex-1 space-y-4 p-5"><div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--elevated)] p-3"><p className="text-[11px] font-medium text-[var(--text-primary)]">Current endpoint will be invalidated</p><code className="mt-2 block break-all font-mono text-[10px] leading-4 text-[var(--text-secondary)]">{`${endpoint.split("/hooks/")[0]}/hooks/••••••••${String(webhook.public_token || "").slice(-4)}`}</code></div><p className="text-[11px] leading-5 text-[var(--text-secondary)]">The current webhook URL will stop working after the token is regenerated. External services using it will need to be updated.</p>{error&&<p role="alert" className="text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><button type="button" onClick={closeDialog} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px]">Cancel</button><button type="button" disabled={saving} onClick={regenerate} className="h-8 rounded-[6px] bg-[var(--text-primary)] px-3 text-[11px] text-[var(--canvas)]">{saving?"Regenerating…":"Regenerate token"}</button></div></div>}
@@ -249,7 +270,6 @@ function ScheduleConfig({ config, onChange }) {
         <TextInput
           value={config.cron}
           onChange={(v) => onChange("cron", v)}
-          placeholder="0 9 * * 1-5"
           mono
         />
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
@@ -261,7 +281,6 @@ function ScheduleConfig({ config, onChange }) {
         <TextInput
           value={config.timezone}
           onChange={(v) => onChange("timezone", v)}
-          placeholder="UTC"
         />
       </div>
     </div>
@@ -330,47 +349,31 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
 
   return (
     <div className="space-y-3">
-      <section className="overflow-hidden rounded-[8px] border border-[var(--border-default)] bg-[var(--surface)]">
-        <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-3 py-2.5">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[6px] border border-sky-500/20 bg-sky-500/[0.07] text-sky-500" aria-hidden="true">
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18"/></svg>
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold text-[var(--text-primary)]">HTTP connection</p>
-            <p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">Optional · adds a base URL and saved authentication</p>
-          </div>
-          <Link href="/connections" className="shrink-0 rounded-[5px] border border-[var(--border-subtle)] px-2 py-1 text-[10px] font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)]">＋ Add</Link>
+      <section className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Connection <span className="font-normal text-[var(--text-tertiary)]">(optional)</span></label>
+          <Link href="/connections" className="text-[10px] font-medium text-[var(--accent)] hover:underline">＋ Add connection</Link>
         </div>
         {connectionsLoading ? (
-          <div className="space-y-2 p-3" aria-label="Loading HTTP connections"><div className="h-3 w-28 animate-pulse rounded bg-[var(--elevated)]"/><div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]"/></div>
+          <div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]" aria-label="Loading HTTP connections" />
         ) : connectionsError ? (
-          <div className="m-3 flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2.5">
+          <div className="flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2">
             <p role="alert" className="text-[10px] text-red-500">Unable to load HTTP connections.</p>
-            <button type="button" onClick={loadConnections} className="rounded px-2 py-1 text-[10px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]">Retry</button>
+            <button type="button" onClick={loadConnections} className="text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Retry</button>
           </div>
         ) : httpConnections.length === 0 ? (
-          <div className="flex items-center gap-3 p-3">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--elevated)] text-[var(--text-tertiary)]" aria-hidden="true">＋</span>
-            <div className="min-w-0 flex-1"><p className="text-[11px] font-medium text-[var(--text-primary)]">No HTTP connections yet</p><p className="mt-0.5 text-[10px] leading-4 text-[var(--text-tertiary)]">Add one to reuse its endpoint and authentication.</p></div>
-            <Link href="/connections" className="shrink-0 text-[10px] font-semibold text-[var(--accent)] hover:underline">Create</Link>
-          </div>
+          <Link href="/connections" className="flex h-9 items-center justify-between rounded-[6px] border border-dashed border-[var(--border-default)] px-3 text-[10px] text-[var(--text-tertiary)] hover:border-[var(--accent)]/50 hover:text-[var(--text-secondary)]"><span>No saved HTTP connections</span><span className="font-medium text-[var(--accent)]">Connect one →</span></Link>
         ) : (
-          <div className="space-y-2.5 p-3">
-            <FieldLabel>Saved connections</FieldLabel>
-            <select
-              aria-label="HTTP request connection"
-              value={config.connection_id ?? ""}
-              onChange={(event) => onChange("connection_id", event.target.value || undefined)}
-              className="w-full h-10 px-3 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 focus:outline-none transition-colors"
-            >
+          <>
+            <select aria-label="HTTP request connection" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30">
               <option value="">No connection</option>
               {httpConnections.map((connection) => (
                 <option key={connection.id} value={connection.id}>{connection.name}</option>
               ))}
             </select>
-            {config.connection_id && !selectedConnection && <p className="mt-1.5 text-[10px] text-amber-600 dark:text-amber-400">The saved connection is unavailable. Choose another connection or clear the selection.</p>}
-            {selectedConnection && <div className="flex min-w-0 items-center gap-2 rounded-[5px] bg-[var(--elevated)] px-2.5 py-2"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true"/><div className="min-w-0"><p className="truncate text-[10px] font-medium text-[var(--text-secondary)]">{selectedConnection.config?.base_url || "HTTP API"}</p><p className="mt-0.5 text-[9px] text-[var(--text-tertiary)]">{selectedConnection.auth_type === "none" ? "No authentication" : "Authentication configured"}</p></div></div>}
-          </div>
+            {config.connection_id && !selectedConnection && <p className="text-[10px] text-amber-600 dark:text-amber-400">Saved connection unavailable. Select another one.</p>}
+            {selectedConnection && <p className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]" title={connectionBaseUrl}>{connectionBaseUrl || "Base URL not configured"}<span className="px-1.5">·</span>{selectedConnection.auth_type === "none" ? "No auth" : "Auth configured"}</p>}
+          </>
         )}
       </section>
       <div>
@@ -390,17 +393,14 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
       <div>
         <VariableFieldLabel picker={pickerFor("url", () => selectedConnection ? requestPath.replace(/^\/+/, "") : config.url || "", (value) => selectedConnection ? handlePathChange(value) : onChange("url", value))}>{selectedConnection ? "Request path" : "URL"}</VariableFieldLabel>
         {selectedConnection && <div className="mb-1.5 flex min-w-0 items-center overflow-hidden rounded-[5px] border border-[var(--border-subtle)] bg-[var(--elevated)] font-mono text-[10px] leading-4"><span className="shrink-0 border-r border-[var(--border-subtle)] px-2 py-1.5 text-[var(--text-tertiary)]">BASE</span><span className="truncate px-2 py-1.5 text-[var(--text-secondary)]" title={connectionBaseUrl}>{connectionBaseUrl || "Base URL is not configured"}</span></div>}
-        <div className="flex h-8 overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)]">
-          {selectedConnection && <span className="flex shrink-0 items-center border-r border-[var(--border-default)] px-2 text-[11px] font-mono text-[var(--text-tertiary)]">/</span>}
-          <input
-            type="text"
-            value={selectedConnection ? requestPath.replace(/^\/+/, "") : config.url ?? ""}
-            onChange={(event) => selectedConnection ? handlePathChange(event.target.value) : onChange("url", event.target.value)}
-            placeholder={selectedConnection ? "v1/orders" : "https://api.example.com/endpoint"}
-            aria-label={selectedConnection ? "HTTP request path" : "HTTP request URL"}
-            className="h-full min-w-0 flex-1 bg-transparent px-2.5 text-[12px] font-mono text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none"
-          />
-        </div>
+        <TextInput
+          value={selectedConnection ? requestPath.replace(/^\/+/, "") : config.url ?? ""}
+          onChange={(value) => selectedConnection ? handlePathChange(value) : onChange("url", value)}
+          aria-label={selectedConnection ? "HTTP request path" : "HTTP request URL"}
+          variables
+          mono
+          prefix={selectedConnection ? "/" : ""}
+        />
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">{selectedConnection ? "The saved connection supplies the base URL and authentication." : "Select a saved connection to reuse its base URL and authentication."}</p>
       </div>
       <div>
@@ -408,9 +408,9 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
         <TextareaInput
           value={config.headers}
           onChange={(v) => onChange("headers", v)}
-          placeholder={"Content-Type: application/json\nAuthorization: Bearer {{token}}"}
           rows={2}
           mono
+          variables
         />
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">One per line: Name: Value. Connection authentication is added separately.</p>
       </div>
@@ -419,9 +419,9 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
         <TextareaInput
           value={config.body}
           onChange={(v) => onChange("body", v)}
-          placeholder='{"key": "value"}'
           rows={3}
           mono
+          variables
         />
       </div>
     </div>
@@ -463,20 +463,23 @@ function EmailConfig({ config, onChange, variableContext }) {
 
   return (
     <div className="space-y-3">
-      <section className="overflow-hidden rounded-[8px] border border-[var(--border-default)] bg-[var(--surface)]">
-        <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-3 py-2.5">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[6px] border border-red-500/20 bg-red-500/[0.06] text-red-500" aria-hidden="true">
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>
-          </span>
-          <div className="min-w-0 flex-1"><p className="text-[11px] font-semibold text-[var(--text-primary)]">Gmail account</p><p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">Choose the connected account that sends this email.</p></div>
-          <Link href="/connections" className="shrink-0 rounded-[5px] border border-[var(--border-subtle)] px-2 py-1 text-[10px] font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)]">＋ Add</Link>
+      <section className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Gmail account</label>
+          <Link href="/connections" className="text-[10px] font-medium text-[var(--accent)] hover:underline">＋ Add connection</Link>
         </div>
-        {connectionsLoading ? <div className="space-y-2 p-3" aria-label="Loading Gmail accounts"><div className="h-3 w-24 animate-pulse rounded bg-[var(--elevated)]"/><div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]"/></div> : connectionsError ? (
-          <div className="m-3 flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2.5"><p role="alert" className="text-[10px] text-red-500">Unable to load Gmail accounts.</p><button type="button" onClick={loadGmailConnections} className="rounded px-2 py-1 text-[10px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface)]">Retry</button></div>
+        {connectionsLoading ? (
+          <div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]" aria-label="Loading Gmail accounts" />
+        ) : connectionsError ? (
+          <div className="flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2"><p role="alert" className="text-[10px] text-red-500">Unable to load Gmail accounts.</p><button type="button" onClick={loadGmailConnections} className="text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Retry</button></div>
         ) : connections.length === 0 ? (
-          <div className="flex items-center gap-3 p-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--elevated)] text-[var(--text-tertiary)]" aria-hidden="true">＋</span><div className="min-w-0 flex-1"><p className="text-[11px] font-medium text-[var(--text-primary)]">No Gmail accounts connected</p><p className="mt-0.5 text-[10px] leading-4 text-[var(--text-tertiary)]">Connect Gmail to send email from this workflow.</p></div><Link href="/connections" className="shrink-0 text-[10px] font-semibold text-[var(--accent)] hover:underline">Connect</Link></div>
+          <Link href="/connections" className="flex h-9 items-center justify-between rounded-[6px] border border-dashed border-[var(--border-default)] px-3 text-[10px] text-[var(--text-tertiary)] hover:border-[var(--accent)]/50 hover:text-[var(--text-secondary)]"><span>No Gmail accounts connected</span><span className="font-medium text-[var(--accent)]">Connect one →</span></Link>
         ) : (
-          <div className="space-y-2.5 p-3"><FieldLabel>Connected accounts</FieldLabel><select aria-label="Gmail sending account" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-10 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-3 text-[12px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20"><option value="">Select a Gmail account</option>{connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.config?.email || connection.name}</option>)}</select>{config.connection_id && !selectedGmail && <p className="text-[10px] text-amber-600 dark:text-amber-400">This Gmail account is unavailable. Choose another account.</p>}{selectedGmail && <div className="flex items-center gap-2 rounded-[5px] bg-[var(--elevated)] px-2.5 py-2"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true"/><p className="truncate text-[10px] text-[var(--text-secondary)]">Connected · {selectedGmail.config?.email || selectedGmail.name}</p></div>}</div>
+          <>
+            <select aria-label="Gmail sending account" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30"><option value="">Select a Gmail account</option>{connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.config?.email || connection.name}</option>)}</select>
+            {config.connection_id && !selectedGmail && <p className="text-[10px] text-amber-600 dark:text-amber-400">Gmail account unavailable. Select another one.</p>}
+            {selectedGmail && <p className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]">Connected · {selectedGmail.config?.email || selectedGmail.name}</p>}
+          </>
         )}
       </section>
       <div>
@@ -484,7 +487,7 @@ function EmailConfig({ config, onChange, variableContext }) {
         <TextInput
           value={config.to}
           onChange={(v) => onChange("to", v)}
-          placeholder="recipient@example.com"
+          variables
         />
       </div>
       <div>
@@ -492,7 +495,7 @@ function EmailConfig({ config, onChange, variableContext }) {
         <TextInput
           value={config.subject}
           onChange={(v) => onChange("subject", v)}
-          placeholder="Workflow Notification"
+          variables
         />
       </div>
       <div>
@@ -500,8 +503,8 @@ function EmailConfig({ config, onChange, variableContext }) {
         <TextareaInput
           value={config.body}
           onChange={(v) => onChange("body", v)}
-          placeholder="Your automated message here."
           rows={3}
+          variables
         />
       </div>
     </div>
@@ -516,7 +519,6 @@ function RefundConfig({ config, onChange }) {
         <TextInput
           value={config.charge_id}
           onChange={(v) => onChange("charge_id", v)}
-          placeholder="ch_12345"
           mono
         />
       </div>
@@ -544,7 +546,6 @@ function AIConfig({ config, onChange }) {
         <TextareaInput
           value={config.prompt}
           onChange={(v) => onChange("prompt", v)}
-          placeholder="Describe what the AI should do..."
           rows={4}
         />
       </div>
@@ -572,7 +573,6 @@ function RAGConfig({ config, onChange }) {
         <TextInput
           value={config.knowledge_base}
           onChange={(v) => onChange("knowledge_base", v)}
-          placeholder="kb_customer_docs"
           mono
         />
       </div>
@@ -581,7 +581,6 @@ function RAGConfig({ config, onChange }) {
         <TextInput
           value={config.query}
           onChange={(v) => onChange("query", v)}
-          placeholder="{{input.message}}"
           mono
         />
       </div>
@@ -590,7 +589,6 @@ function RAGConfig({ config, onChange }) {
         <TextInput
           value={String(config.top_k ?? 5)}
           onChange={(v) => onChange("top_k", Number.parseInt(v, 10) || 5)}
-          placeholder="5"
           mono
         />
       </div>
@@ -606,7 +604,6 @@ function ConditionConfig({ config, onChange }) {
         <TextInput
           value={config.field}
           onChange={(v) => onChange("field", v)}
-          placeholder="status_code"
           mono
         />
       </div>
@@ -632,7 +629,6 @@ function ConditionConfig({ config, onChange }) {
         <TextInput
           value={config.value}
           onChange={(v) => onChange("value", v)}
-          placeholder="200"
           mono
         />
       </div>
@@ -648,7 +644,6 @@ function ApprovalConfig({ config, onChange }) {
         <TextInput
           value={config.approver}
           onChange={(v) => onChange("approver", v)}
-          placeholder="admin@company.com"
         />
       </div>
       <div>
@@ -656,7 +651,6 @@ function ApprovalConfig({ config, onChange }) {
         <TextInput
           value={String(config.timeout_hours ?? 24)}
           onChange={(v) => onChange("timeout_hours", Number.parseInt(v, 10) || 24)}
-          placeholder="24"
           mono
         />
       </div>
@@ -665,7 +659,6 @@ function ApprovalConfig({ config, onChange }) {
         <TextareaInput
           value={config.message}
           onChange={(v) => onChange("message", v)}
-          placeholder="Please review and approve this request."
           rows={2}
         />
       </div>
