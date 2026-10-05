@@ -49,6 +49,53 @@ class ActionInternalService(
                 if connection.credential:
                     config["refresh_token"] = connection.credential
 
+            if connection.provider == "http":
+                if connection.auth_type == "bearer":
+                    if not connection.credential:
+                        raise ValueError(
+                            "Credential is required for bearer authentication"
+                        )
+
+                    headers = input_data.get("headers") or {}
+                    headers["Authorization"] = (
+                        f"Bearer {connection.credential}"
+                    )
+                    input_data["headers"] = headers
+
+                elif connection.auth_type == "api_key_header":
+                    if not connection.credential:
+                        raise ValueError(
+                            "Credential is required for api_key_header authentication"
+                        )
+
+                    auth_header = (connection.config or {}).get("auth_header")
+
+                    if not auth_header:
+                        raise ValueError(
+                            "config.auth_header is required for api_key_header"
+                        )
+
+                    headers = input_data.get("headers") or {}
+                    headers[auth_header] = connection.credential
+                    input_data["headers"] = headers
+
+                elif connection.auth_type == "api_key_query":
+                    if not connection.credential:
+                        raise ValueError(
+                            "Credential is required for api_key_query authentication"
+                        )
+
+                    auth_param = (connection.config or {}).get("auth_param")
+
+                    if not auth_param:
+                        raise ValueError(
+                            "config.auth_param is required for api_key_query"
+                        )
+
+                    params = input_data.get("params") or {}
+                    params[auth_param] = connection.credential
+                    input_data["params"] = params
+
             connector = connector_registry.get(
                 request.provider
             )

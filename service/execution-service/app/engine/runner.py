@@ -61,20 +61,48 @@ async def run_execution(
         for node in action_nodes:
             configuration = node.get("configuration", {})
 
+            if isinstance(configuration.get("headers"), str):
+                headers = {}
+
+                for line in configuration["headers"].splitlines():
+                    if ":" not in line:
+                        continue
+
+                    key, value = line.split(":", 1)
+                    headers[key.strip()] = value.strip()
+
+                configuration["headers"] = headers
+
             print(
                 f"Executing action node: {node['node_id']}",
                 flush=True,
             )
 
+            connection_id = configuration.get("connection_id")
+
+            if not connection_id:
+                raise ValueError(
+                    f"Action node {node['node_id']} has no connection_id configured"
+                )
+
+            print(
+                "Action request:",
+                {
+                    "workspace_id": workspace_id,
+                    "connection_id": connection_id,
+                    "provider": "http",
+                    "action": "request",
+                },
+                flush=True,
+            )
+
             response = await action_client.execute_action(
                 workspace_id=workspace_id,
-                connection_id="00000000-0000-0000-0000-000000000000",
+                connection_id=connection_id,
                 provider="http",
                 action="request",
-                config_json=json.dumps(configuration),
-                input_data_json=json.dumps(
-                    context.to_dict()
-                ),
+                config_json=json.dumps({}),
+                input_data_json=json.dumps(configuration),
             )
 
             print(
