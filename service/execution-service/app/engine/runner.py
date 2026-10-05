@@ -3,6 +3,7 @@ import json
 from app.engine.context import ExecutionContext
 from app.engine.executor import SequentialExecutor
 from app.engine.graph import ExecutionGraph
+from app.engine.resolver import ExpressionResolver
 from app.grpc.action_client import ActionClient
 from app.grpc.workflow_client import WorkflowClient
 
@@ -34,6 +35,7 @@ async def run_execution(
         context = ExecutionContext(
             trigger_data=trigger_data,
         )
+        resolver = ExpressionResolver(context)
 
         executor = SequentialExecutor(graph)
 
@@ -74,12 +76,14 @@ async def run_execution(
 
                 configuration["headers"] = headers
 
+            resolved_configuration = resolver.resolve(configuration)
+
             print(
                 f"Executing action node: {node['node_id']}",
                 flush=True,
             )
 
-            connection_id = configuration.get("connection_id")
+            connection_id = resolved_configuration.get("connection_id")
 
             if not connection_id:
                 raise ValueError(
@@ -110,7 +114,7 @@ async def run_execution(
                 provider=provider,
                 action=action,
                 config_json=json.dumps({}),
-                input_data_json=json.dumps(configuration),
+                input_data_json=json.dumps(resolved_configuration),
             )
 
             print(
