@@ -8,6 +8,7 @@ import { listConnections } from "@/services/connections";
 import Link from "next/link";
 import WebhookTestDialog from "@/components/webhooks/WebhookTestDialog";
 import WebhookUsageGuide from "@/components/webhooks/WebhookUsageGuide";
+import VariablePicker from "@/components/workflow/VariablePicker";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Icons
@@ -58,6 +59,10 @@ function FieldLabel({ children }) {
       {children}
     </label>
   );
+}
+
+function VariableFieldLabel({ children, picker }) {
+  return <div className="mb-1 flex items-center justify-between gap-2"><label className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">{children}</label>{picker}</div>;
 }
 
 function TextInput({ value, onChange, placeholder, mono = false }) {
@@ -273,7 +278,7 @@ function ManualConfig() {
 
 const connectionRowsOf = (data) => Array.isArray(data) ? data : data?.connections || data?.results || data?.data || [];
 
-function HttpRequestConfig({ config, onChange }) {
+function HttpRequestConfig({ config, onChange, variableContext }) {
   const [connections, setConnections] = useState([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [connectionsError, setConnectionsError] = useState(false);
@@ -319,6 +324,9 @@ function HttpRequestConfig({ config, onChange }) {
       : path;
     onChange("url", composedUrl);
   };
+  const pickerFor = (field, getCurrent = () => config[field] || "", setValue = (value) => onChange(field, value)) => (
+    <VariablePicker {...variableContext} onInsert={(expression) => setValue(`${getCurrent()}${expression}`)} />
+  );
 
   return (
     <div className="space-y-3">
@@ -380,7 +388,7 @@ function HttpRequestConfig({ config, onChange }) {
         />
       </div>
       <div>
-        <FieldLabel>{selectedConnection ? "Request path" : "URL"}</FieldLabel>
+        <VariableFieldLabel picker={pickerFor("url", () => selectedConnection ? requestPath.replace(/^\/+/, "") : config.url || "", (value) => selectedConnection ? handlePathChange(value) : onChange("url", value))}>{selectedConnection ? "Request path" : "URL"}</VariableFieldLabel>
         {selectedConnection && <div className="mb-1.5 flex min-w-0 items-center overflow-hidden rounded-[5px] border border-[var(--border-subtle)] bg-[var(--elevated)] font-mono text-[10px] leading-4"><span className="shrink-0 border-r border-[var(--border-subtle)] px-2 py-1.5 text-[var(--text-tertiary)]">BASE</span><span className="truncate px-2 py-1.5 text-[var(--text-secondary)]" title={connectionBaseUrl}>{connectionBaseUrl || "Base URL is not configured"}</span></div>}
         <div className="flex h-8 overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)]">
           {selectedConnection && <span className="flex shrink-0 items-center border-r border-[var(--border-default)] px-2 text-[11px] font-mono text-[var(--text-tertiary)]">/</span>}
@@ -396,7 +404,7 @@ function HttpRequestConfig({ config, onChange }) {
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">{selectedConnection ? "The saved connection supplies the base URL and authentication." : "Select a saved connection to reuse its base URL and authentication."}</p>
       </div>
       <div>
-        <FieldLabel>Additional headers</FieldLabel>
+        <VariableFieldLabel picker={pickerFor("headers")}>Additional headers</VariableFieldLabel>
         <TextareaInput
           value={config.headers}
           onChange={(v) => onChange("headers", v)}
@@ -407,7 +415,7 @@ function HttpRequestConfig({ config, onChange }) {
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">One per line: Name: Value. Connection authentication is added separately.</p>
       </div>
       <div>
-        <FieldLabel>Body</FieldLabel>
+        <VariableFieldLabel picker={pickerFor("body")}>Body</VariableFieldLabel>
         <TextareaInput
           value={config.body}
           onChange={(v) => onChange("body", v)}
@@ -420,7 +428,7 @@ function HttpRequestConfig({ config, onChange }) {
   );
 }
 
-function EmailConfig({ config, onChange }) {
+function EmailConfig({ config, onChange, variableContext }) {
   const [connections, setConnections] = useState([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [connectionsError, setConnectionsError] = useState(false);
@@ -451,6 +459,7 @@ function EmailConfig({ config, onChange }) {
   }, []);
 
   const selectedGmail = connections.find((connection) => String(connection.id) === String(config.connection_id));
+  const pickerFor = (field) => <VariablePicker {...variableContext} onInsert={(expression) => onChange(field, `${config[field] || ""}${expression}`)} />;
 
   return (
     <div className="space-y-3">
@@ -471,7 +480,7 @@ function EmailConfig({ config, onChange }) {
         )}
       </section>
       <div>
-        <FieldLabel>To Email</FieldLabel>
+        <VariableFieldLabel picker={pickerFor("to")}>To Email</VariableFieldLabel>
         <TextInput
           value={config.to}
           onChange={(v) => onChange("to", v)}
@@ -479,7 +488,7 @@ function EmailConfig({ config, onChange }) {
         />
       </div>
       <div>
-        <FieldLabel>Subject</FieldLabel>
+        <VariableFieldLabel picker={pickerFor("subject")}>Subject</VariableFieldLabel>
         <TextInput
           value={config.subject}
           onChange={(v) => onChange("subject", v)}
@@ -487,7 +496,7 @@ function EmailConfig({ config, onChange }) {
         />
       </div>
       <div>
-        <FieldLabel>Message Body</FieldLabel>
+        <VariableFieldLabel picker={pickerFor("body")}>Message Body</VariableFieldLabel>
         <TextareaInput
           value={config.body}
           onChange={(v) => onChange("body", v)}
@@ -676,6 +685,8 @@ export default function NodeInspector({
   workflowId,
   workflowVersionId,
   className = "",
+  workflowNodes = [],
+  workflowEdges = [],
 }) {
   const [formData, setFormData] = useState({});
   const [nodeName, setNodeName] = useState("");
@@ -723,6 +734,7 @@ export default function NodeInspector({
 
   const typeId = selectedNode.data?.typeId ?? "custom";
   const def = getNodeDefinition(typeId);
+  const variableContext = { nodes: workflowNodes, edges: workflowEdges, currentNode: selectedNode };
 
   const handleFieldChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -767,9 +779,9 @@ export default function NodeInspector({
       case "trigger.manual":
         return <ManualConfig />;
       case "action.http_request":
-        return <HttpRequestConfig config={formData} onChange={handleFieldChange} />;
+        return <HttpRequestConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} />;
       case "action.email":
-        return <EmailConfig config={formData} onChange={handleFieldChange} />;
+        return <EmailConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} />;
       case "action.refund":
         return <RefundConfig config={formData} onChange={handleFieldChange} />;
       case "ai.decision":

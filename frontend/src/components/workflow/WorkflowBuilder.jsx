@@ -1318,6 +1318,8 @@ export default function WorkflowBuilder({
               isReadOnly={isCanvasReadOnly}
               workflowId={workflowId}
               workflowVersionId={version?.id}
+              workflowNodes={nodes}
+              workflowEdges={edges}
             />
           </div>
         )}
