@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 const outputsByType = {
   "action.http_request": ["status_code", "body", "headers", "success"],
   "action.email": ["message_id", "thread_id", "label_ids", "success"],
+  "action.refund": ["refund_id", "payment_id", "amount", "status", "success"],
 };
 
 function previousNodesFor(nodes, edges, currentNodeId) {

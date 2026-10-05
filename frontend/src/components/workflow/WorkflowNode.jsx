@@ -28,7 +28,7 @@ function WorkflowNode({ data, selected }) {
     if (typeId === "trigger.manual") return "Manual trigger";
     if (typeId === "action.http_request") return `${config.method || "POST"}  ${config.url || "Request URL not set"}`;
     if (typeId === "action.email") return `To  ${config.to || "Recipient not set"}`;
-    if (typeId === "action.refund") return `Charge  ${config.charge_id || "Not configured"}`;
+    if (typeId === "action.refund") return `Payment  ${config.payment_id || config.charge_id || "Not configured"}`;
     if (typeId === "ai.decision" || typeId === "ai.generate") return config.model || "gemini-2.5-flash";
     if (typeId === "ai.rag_search") return `Index  ${config.knowledge_base || "Not configured"}`;
     if (typeId === "logic.condition") return `${config.field || "Field not set"}  ${config.operator || "=="}  ${config.value || "Value not set"}`;

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { getNodeDefinition } from "./nodeDefinitions";
 import { createWebhook, deleteWebhook, getWebhookEndpoint, listWebhooks, regenerateWebhookToken, updateWebhook } from "@/services/webhooks";
 import { getWorkflowVersions } from "@/services/workflows";
-import { listConnections } from "@/services/connections";
+import { createConnection, listConnections } from "@/services/connections";
 import Link from "next/link";
 import WebhookTestDialog from "@/components/webhooks/WebhookTestDialog";
 import WebhookUsageGuide from "@/components/webhooks/WebhookUsageGuide";
@@ -511,28 +511,102 @@ function EmailConfig({ config, onChange, variableContext }) {
   );
 }
 
-function RefundConfig({ config, onChange }) {
+function RefundConfig({ config, onChange, variableContext }) {
+  const [connections, setConnections] = useState([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const [connectionsError, setConnectionsError] = useState(false);
+  const [creatingConnection, setCreatingConnection] = useState(false);
+  const [createConnectionError, setCreateConnectionError] = useState(false);
+
+  const loadPaymentConnections = async () => {
+    setConnectionsLoading(true);
+    setConnectionsError(false);
+    try {
+      const result = await listConnections();
+      setConnections(connectionRowsOf(result).filter((connection) => connection.provider === "mock_payment"));
+    } catch {
+      setConnectionsError(true);
+    } finally {
+      setConnectionsLoading(false);
+    }
+  };
+
+  const createMockPaymentConnection = async () => {
+    setCreatingConnection(true);
+    setCreateConnectionError(false);
+    try {
+      const created = await createConnection({
+        name: "Mock Payment",
+        provider: "mock_payment",
+        auth_type: "none",
+        credential: null,
+        config: {},
+      });
+      const createdConnection = created?.connection ?? created?.data ?? created;
+      if (createdConnection?.id) onChange("connection_id", createdConnection.id);
+      await loadPaymentConnections();
+    } catch {
+      setCreateConnectionError(true);
+    } finally {
+      setCreatingConnection(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    listConnections().then((result) => {
+      if (active) setConnections(connectionRowsOf(result).filter((connection) => connection.provider === "mock_payment"));
+    }).catch(() => {
+      if (active) setConnectionsError(true);
+    }).finally(() => {
+      if (active) setConnectionsLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const selectedConnection = connections.find((connection) => String(connection.id) === String(config.connection_id));
+  const pickerFor = (field) => <VariablePicker {...variableContext} onInsert={(expression) => onChange(field, `${config[field] || ""}${expression}`)} />;
+
   return (
     <div className="space-y-3">
+      <section className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Payment connection</label>
+          <span className="text-[9px] text-[var(--text-tertiary)]">Mock payment</span>
+        </div>
+        {connectionsLoading ? (
+          <div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]" aria-label="Loading payment connections" />
+        ) : connectionsError ? (
+          <div className="flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2"><p role="alert" className="text-[10px] text-red-500">Unable to load payment connections.</p><button type="button" onClick={loadPaymentConnections} className="text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Retry</button></div>
+        ) : connections.length === 0 ? (
+          <div className="space-y-2 rounded-[6px] border border-dashed border-[var(--border-default)] p-2.5">
+            <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Create a workspace connection for the existing mock payment connector.</p>
+            <button type="button" onClick={createMockPaymentConnection} disabled={creatingConnection} className="h-8 w-full rounded-[5px] bg-[var(--accent)] px-2 text-[10px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60">{creatingConnection ? "Creating connection…" : "＋ Create mock payment connection"}</button>
+            {createConnectionError && <p role="alert" className="text-[10px] text-red-500">Unable to create the payment connection. Try again.</p>}
+          </div>
+        ) : (
+          <>
+            <select aria-label="Refund payment connection" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30">
+              <option value="">Select a payment connection</option>
+              {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name}</option>)}
+            </select>
+            {config.connection_id && !selectedConnection && <p className="text-[10px] text-amber-600 dark:text-amber-400">Payment connection unavailable. Select another one.</p>}
+            {selectedConnection && <p className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]">Connected · {selectedConnection.name}</p>}
+          </>
+        )}
+      </section>
       <div>
-        <FieldLabel>Charge / Order ID</FieldLabel>
-        <TextInput
-          value={config.charge_id}
-          onChange={(v) => onChange("charge_id", v)}
-          mono
-        />
+        <VariableFieldLabel picker={pickerFor("payment_id")}>Payment ID</VariableFieldLabel>
+        <TextInput value={config.payment_id ?? config.charge_id ?? ""} onChange={(value) => onChange("payment_id", value)} variables mono />
       </div>
       <div>
-        <FieldLabel>Reason</FieldLabel>
-        <SelectInput
-          value={config.reason}
-          onChange={(v) => onChange("reason", v)}
-          options={[
-            { value: "requested_by_customer", label: "Requested by customer" },
-            { value: "duplicate", label: "Duplicate charge" },
-            { value: "fraudulent", label: "Fraudulent" },
-          ]}
-        />
+        <VariableFieldLabel picker={pickerFor("amount")}>Amount</VariableFieldLabel>
+        <TextInput value={config.amount ?? ""} onChange={(value) => onChange("amount", value)} variables mono />
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Enter the refund amount, or insert a value from a previous node.</p>
+      </div>
+      <div>
+        <VariableFieldLabel picker={pickerFor("reason")}>Reason</VariableFieldLabel>
+        <TextareaInput value={config.reason ?? ""} onChange={(value) => onChange("reason", value)} rows={2} variables />
       </div>
     </div>
   );
@@ -776,7 +850,7 @@ export default function NodeInspector({
       case "action.email":
         return <EmailConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} />;
       case "action.refund":
-        return <RefundConfig config={formData} onChange={handleFieldChange} />;
+        return <RefundConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} />;
       case "ai.decision":
       case "ai.generate":
         return <AIConfig config={formData} onChange={handleFieldChange} />;

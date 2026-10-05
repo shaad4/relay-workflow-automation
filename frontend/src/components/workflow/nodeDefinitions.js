@@ -75,8 +75,10 @@ export const NODE_CATEGORIES = [
         icon: "💳",
         description: "Process a payment refund",
         defaultConfig: {
-          charge_id: "",
-          reason: "requested_by_customer",
+          connection_id: "",
+          payment_id: "",
+          amount: "",
+          reason: "",
         },
       },
     ],
@@ -160,7 +162,7 @@ const exampleValuesByType = {
     subject: "Workflow Alert",
     body: "Your workflow step completed.",
   },
-  "action.refund": { charge_id: "ch_12345" },
+  "action.refund": { payment_id: "ch_12345" },
   "ai.decision": { prompt: "Classify incoming customer request priority" },
   "ai.rag_search": { knowledge_base: "kb_customer_docs", query: "{{input.message}}" },
   "ai.generate": { prompt: "Generate summary of customer ticket" },
@@ -170,11 +172,20 @@ const exampleValuesByType = {
 
 export function clearExampleNodeConfig(typeId, config) {
   const examples = exampleValuesByType[typeId];
-  if (!examples || !config || typeof config !== "object") return config;
+  if (!config || typeof config !== "object") return config;
 
   let cleaned = config;
+
+  // Older Refund Payment nodes used `charge_id`; normalize them to the
+  // payment connector's input field so saving the node persists the new shape.
+  if (typeId === "action.refund" && Object.hasOwn(config, "charge_id")) {
+    cleaned = { ...config, payment_id: config.payment_id ?? config.charge_id };
+    delete cleaned.charge_id;
+  }
+
+  if (!examples) return cleaned;
   for (const [key, example] of Object.entries(examples)) {
-    if (config[key] === example) {
+    if (cleaned[key] === example) {
       if (cleaned === config) cleaned = { ...config };
       cleaned[key] = "";
     }
