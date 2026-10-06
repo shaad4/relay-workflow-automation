@@ -14,6 +14,7 @@ from app.engine.step_status import ExecutionStepStatus
 from app.engine.exceptions import HumanApprovalRequired, ActionExecutionFailed
 from app.services.approval_service import (
     approve_approval,
+    reject_approval,
     list_pending_approvals,
     get_approval,
 )
@@ -168,6 +169,83 @@ async def approve(
 
     execution.status = ExecutionStatus.COMPLETED
     execution.completed_at = datetime.now(timezone.utc)
+
+    await session.commit()
+
+    return ApprovalResponse.model_validate(approval)
+
+
+
+@router.post("/{approval_id}/reject/", response_model=ApprovalResponse)
+async def reject(
+    approval_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        approval = await reject_approval(
+            approval_id=approval_id,
+            workspace_id=identity["workspace_id"],
+            approver_user_id=identity["user_id"],
+            session=session,
+        )
+
+    except ValueError as exc:
+        if str(exc) == "Approval not found":
+            raise HTTPException(
+                status_code=404,
+                detail="Approval not found",
+            )
+
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        )
+
+    execution = await session.get(
+        Execution,
+        approval.execution_id,
+    )
+
+    if execution is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Execution not found",
+        )
+
+    execution_step = await session.get(
+        ExecutionStep,
+        approval.execution_step_id,
+    )
+
+    if execution_step is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Execution step not found",
+        )
+
+    completed_at = datetime.now(timezone.utc)
+
+    execution_step.status = ExecutionStepStatus.FAILED
+    execution_step.completed_at = completed_at
+    execution_step.error = {
+        "message": "Human approval rejected",
+    }
+
+    if execution_step.started_at:
+        execution_step.duration_ms = int(
+            (
+                completed_at - execution_step.started_at
+            ).total_seconds()
+            * 1000
+        )
+
+    execution.status = ExecutionStatus.FAILED
+    execution.completed_at = completed_at
+    execution.error = {
+        "node_id": execution_step.node_id,
+        "message": "Human approval rejected",
+    }
 
     await session.commit()
 
