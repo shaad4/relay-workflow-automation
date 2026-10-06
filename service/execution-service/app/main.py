@@ -10,6 +10,7 @@ from app.kafka.consumer import (
     consume_workflow_triggered,
 )
 
+from app.routes.approvals import router as approvals_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,6 +31,8 @@ app = FastAPI(
     title="Relay Execution Service",
     lifespan=lifespan,
 )
+
+app.include_router(approvals_router)
 
 
 @app.get("/health")
