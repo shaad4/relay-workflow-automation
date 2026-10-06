@@ -23,6 +23,8 @@ async def run_execution(
     workflow_version_id: str,
     workspace_id: str,
     trigger_data: dict | None = None,
+    resume_from_sequence: int | None = None,
+    context_data: dict | None = None,
 ):
     workflow_client = WorkflowClient()
     action_client = ActionClient()
@@ -42,9 +44,12 @@ async def run_execution(
             edges=edges,
         )
 
-        context = ExecutionContext(
-            trigger_data=trigger_data,
-        )
+        if context_data is not None:
+            context = ExecutionContext.from_dict(context_data)
+        else:
+            context = ExecutionContext(
+                trigger_data=trigger_data,
+            )
         resolver = ExpressionResolver(context)
 
         executor = SequentialExecutor(graph)
@@ -71,6 +76,9 @@ async def run_execution(
         )
 
         for sequence, node in enumerate(execution_order, start=1):
+            if resume_from_sequence is not None and sequence <= resume_from_sequence:
+                continue
+
             configuration = node.get("configuration", {})
 
             # Create execution step
