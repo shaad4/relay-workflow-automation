@@ -57,6 +57,9 @@ async def create_execution(event: dict) -> Execution:
                     trigger_data=event.get("payload"),
                 )
             except HumanApprovalRequired:
+                execution.status = ExecutionStatus.WAITING_FOR_APPROVAL
+                await session.commit()
+                
                 return execution
 
             execution.status = ExecutionStatus.COMPLETED
