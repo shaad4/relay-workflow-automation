@@ -2,10 +2,11 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from app.db.database import AsyncSessionLocal
+from app.engine.exceptions import HumanApprovalRequired
 from app.engine.runner import run_execution
+from app.engine.status import ExecutionStatus
 from app.grpc.workflow_client import WorkflowClient
 from app.models.execution import Execution
-from app.engine.status import ExecutionStatus
 
 
 async def create_execution(event: dict) -> Execution:
@@ -47,13 +48,16 @@ async def create_execution(event: dict) -> Execution:
             execution.status = ExecutionStatus.RUNNING
             await session.commit()
 
-            await run_execution(
-                execution_id=execution.id,
-                workflow_id=event["workflow_id"],
-                workflow_version_id=event["workflow_version_id"],
-                workspace_id=event["workspace_id"],
-                trigger_data=event.get("payload"),
-            )
+            try:
+                await run_execution(
+                    execution_id=execution.id,
+                    workflow_id=event["workflow_id"],
+                    workflow_version_id=event["workflow_version_id"],
+                    workspace_id=event["workspace_id"],
+                    trigger_data=event.get("payload"),
+                )
+            except HumanApprovalRequired:
+                return execution
 
             execution.status = ExecutionStatus.COMPLETED
             execution.completed_at = datetime.now(timezone.utc)
