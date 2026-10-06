@@ -6,7 +6,7 @@ from uuid import UUID
 from app.db.database import AsyncSessionLocal
 from app.engine.context import ExecutionContext
 from app.engine.executor import SequentialExecutor
-from app.engine.exceptions import HumanApprovalRequired
+from app.engine.exceptions import HumanApprovalRequired, ActionExecutionFailed
 from app.engine.graph import ExecutionGraph
 from app.engine.resolver import ExpressionResolver
 from app.engine.step_status import ExecutionStepStatus
@@ -340,6 +340,35 @@ async def run_execution(
                         )
 
                     await session.commit()
+            else:
+                completed_at = datetime.now(timezone.utc)
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    execution_step.status = ExecutionStepStatus.FAILED
+                    execution_step.completed_at = completed_at
+                    execution_step.error = {
+                        "message": response.error or "Action execution failed",
+                    }
+
+                    if execution_step.started_at:
+                        execution_step.duration_ms = int(
+                            (
+                                completed_at - execution_step.started_at
+                            ).total_seconds()
+                            * 1000
+                        )
+
+                    await session.commit()
+
+                    raise ActionExecutionFailed(
+                        node_id=node["node_id"],
+                        error=response.error or "Action execution failed",
+                    )
 
         return {
             "workflow_id": workflow_id,
