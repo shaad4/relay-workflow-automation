@@ -5,6 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_identity
 from app.db.database import AsyncSessionLocal
 from app.schemas.approvals import ApprovalListResponse, ApprovalResponse
+from app.engine.runner import run_execution
+from app.models.execution import Execution
+from app.models.execution_step import ExecutionStep
 from app.services.approval_service import (
     approve_approval,
     list_pending_approvals,
@@ -89,5 +92,36 @@ async def approve(
             status_code=409,
             detail=str(exc),
         )
+
+    execution = await session.get(
+        Execution,
+        approval.execution_id,
+    )
+
+    if execution is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Execution not found",
+        )
+
+    execution_step = await session.get(
+        ExecutionStep,
+        approval.execution_step_id,
+    )
+
+    if execution_step is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Execution step not found",
+        )
+
+    await run_execution(
+        execution_id=execution.id,
+        workflow_id=str(execution.workflow_id),
+        workflow_version_id=str(execution.workflow_version_id),
+        workspace_id=str(execution.workspace_id),
+        resume_from_sequence=execution_step.sequence,
+        context_data=execution.context,
+    )
 
     return ApprovalResponse.model_validate(approval)
