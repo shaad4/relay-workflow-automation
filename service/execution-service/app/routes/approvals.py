@@ -11,6 +11,7 @@ from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
 from app.engine.status import ExecutionStatus
 from app.engine.step_status import ExecutionStepStatus
+from app.engine.exceptions import HumanApprovalRequired
 from app.services.approval_service import (
     approve_approval,
     list_pending_approvals,
@@ -137,13 +138,25 @@ async def approve(
 
     await session.commit()
 
-    await run_execution(
-        execution_id=execution.id,
-        workflow_id=str(execution.workflow_id),
-        workflow_version_id=str(execution.workflow_version_id),
-        workspace_id=str(execution.workspace_id),
-        resume_from_sequence=execution_step.sequence,
-        context_data=execution.context,
-    )
+    try:
+        await run_execution(
+            execution_id=execution.id,
+            workflow_id=str(execution.workflow_id),
+            workflow_version_id=str(execution.workflow_version_id),
+            workspace_id=str(execution.workspace_id),
+            resume_from_sequence=execution_step.sequence,
+            context_data=execution.context,
+        )
+
+    except HumanApprovalRequired:
+        execution.status = ExecutionStatus.WAITING_FOR_APPROVAL
+        await session.commit()
+
+        return ApprovalResponse.model_validate(approval)
+
+    execution.status = ExecutionStatus.COMPLETED
+    execution.completed_at = datetime.now(timezone.utc)
+
+    await session.commit()
 
     return ApprovalResponse.model_validate(approval)
