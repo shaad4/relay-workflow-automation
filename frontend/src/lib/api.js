@@ -92,11 +92,13 @@ export async function apiRequest(
   }
 
   if (!response.ok) {
-    throw new Error(
+    const error = new Error(
       getErrorMessage(data.detail) ||
         getErrorMessage(data.message) ||
         "Something went wrong"
     );
+    error.status = response.status;
+    throw error;
   }
 
   return data;

@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import SidebarNavItem from "./SidebarNavItem";
 import ProfileMenu from "./ProfileMenu";
+import { getApprovals } from "@/services/approvals";
+
+let cachedPendingApprovalCount = null;
 
 // SVG Line Icons (1.5px stroke)
 function DashboardIcon(props) {
@@ -35,6 +38,15 @@ function ExecutionsIcon(props) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
       <circle cx="12" cy="12" r="10" />
       <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function ApprovalsIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
     </svg>
   );
 }
@@ -79,6 +91,32 @@ export default function DashboardSidebar({
 }) {
   const pathname = usePathname();
   const { user } = useAuth();
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(cachedPendingApprovalCount ?? 0);
+
+  const refreshApprovalCount = useCallback(async () => {
+    try {
+      const response = await getApprovals();
+      const approvals = Array.isArray(response) ? response : response?.approvals || [];
+      const nextCount = approvals.filter((approval) => String(approval.status || "pending").toLowerCase() === "pending").length;
+      cachedPendingApprovalCount = nextCount;
+      setPendingApprovalCount((currentCount) => currentCount === nextCount ? currentCount : nextCount);
+    } catch {
+      // Keep the last known count when the sidebar count request fails.
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshApprovalCount();
+    const interval = window.setInterval(refreshApprovalCount, 30000);
+    const onApprovalsUpdated = () => refreshApprovalCount();
+    window.addEventListener("focus", onApprovalsUpdated);
+    window.addEventListener("relay:approvals-updated", onApprovalsUpdated);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onApprovalsUpdated);
+      window.removeEventListener("relay:approvals-updated", onApprovalsUpdated);
+    };
+  }, [refreshApprovalCount]);
 
   const userName = user?.name || user?.email?.split("@")[0] || "Shaad";
   const userInitial = userName.charAt(0).toUpperCase();
@@ -87,6 +125,7 @@ export default function DashboardSidebar({
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
     { label: "Workflows", href: "/workflows", icon: WorkflowsIcon },
     { label: "Executions", href: "/dashboard/executions", icon: ExecutionsIcon },
+    { label: "Approvals", href: "/approvals", icon: ApprovalsIcon },
   ];
 
   const resourceNavItems = [
@@ -168,6 +207,7 @@ export default function DashboardSidebar({
                   icon={item.icon}
                   active={isActive}
                   collapsed={isCollapsed}
+                  badgeCount={item.href === "/approvals" ? pendingApprovalCount : undefined}
                   onClick={onMobileClose}
                 />
               );
@@ -184,15 +224,15 @@ export default function DashboardSidebar({
           )}
           <nav aria-label="Resource Navigation" className="space-y-1">
             {resourceNavItems.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith("/connections/");
+              const isActive = pathname === item.href || (item.href === "/connections" && pathname.startsWith("/connections/"));
               const isConnections = item.label === "Connections";
               return (
                 <div key={item.href}>
-                  <SidebarNavItem href={item.href} label={item.label} icon={item.icon} active={isActive && !(isConnections && pathname === "/connections/webhooks")} collapsed={isCollapsed} onClick={onMobileClose} />
+                  <SidebarNavItem href={item.href} label={item.label} icon={item.icon} active={isActive} collapsed={isCollapsed} onClick={onMobileClose} />
                   {isConnections && isActive && !isCollapsed && (
-                    <div className="ml-9 mt-1 space-y-0.5 border-l border-[var(--border-default)] pl-3">
-                      <Link href="/connections" onClick={onMobileClose} aria-current={pathname === "/connections" ? "page" : undefined} className={`flex h-8 items-center text-[12px] transition-colors ${pathname === "/connections" ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"}`}>Connections</Link>
-                      <Link href="/connections/webhooks" onClick={onMobileClose} aria-current={pathname === "/connections/webhooks" ? "page" : undefined} className={`flex h-8 items-center text-[12px] transition-colors ${pathname === "/connections/webhooks" ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"}`}>Webhooks</Link>
+                    <div className="ml-5 mt-1.5 space-y-0.5 border-l border-[var(--border-default)] pl-3">
+                      <Link href="/connections" onClick={onMobileClose} aria-current={pathname === "/connections" ? "page" : undefined} className={`group flex h-7 items-center gap-2 rounded-md px-2 text-[12px] transition-colors ${pathname === "/connections" ? "font-medium text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:bg-[var(--elevated)]/70 hover:text-[var(--text-primary)]"}`}><span aria-hidden="true" className={`h-1 w-1 rounded-full ${pathname === "/connections" ? "bg-[var(--text-primary)]" : "bg-transparent"}`}/>Connections</Link>
+                      <Link href="/connections/webhooks" onClick={onMobileClose} aria-current={pathname === "/connections/webhooks" ? "page" : undefined} className={`group flex h-7 items-center gap-2 rounded-md px-2 text-[12px] transition-colors ${pathname === "/connections/webhooks" ? "font-medium text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:bg-[var(--elevated)]/70 hover:text-[var(--text-primary)]"}`}><span aria-hidden="true" className={`h-1 w-1 rounded-full ${pathname === "/connections/webhooks" ? "bg-[var(--text-primary)]" : "bg-transparent"}`}/>Webhooks</Link>
                     </div>
                   )}
                 </div>
