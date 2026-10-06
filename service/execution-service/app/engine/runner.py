@@ -153,14 +153,16 @@ async def run_execution(
             resolved_configuration = resolver.resolve(configuration)
 
             # Human Approval does not use Action Service or a connection.
-            if node_type == "action.human_approval":
+            if node_type == "human.approval":
                 print(
                     f"Human approval reached: {node['node_id']}",
                     flush=True,
                 )
 
                 approver_user_id = configuration.get("approver_user_id")
-                message = configuration.get("message", "")
+                message = resolver.resolve(
+                    configuration.get("message", "")
+                )
                 timeout_minutes = configuration.get("timeout_minutes")
 
                 if not approver_user_id:
