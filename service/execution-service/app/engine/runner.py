@@ -1,15 +1,15 @@
 import json
+from datetime import datetime, timezone
 
+from app.db.database import AsyncSessionLocal
 from app.engine.context import ExecutionContext
 from app.engine.executor import SequentialExecutor
 from app.engine.graph import ExecutionGraph
 from app.engine.resolver import ExpressionResolver
+from app.engine.step_status import ExecutionStepStatus
 from app.grpc.action_client import ActionClient
 from app.grpc.workflow_client import WorkflowClient
-
-from app.db.database import AsyncSessionLocal
 from app.models.execution_step import ExecutionStep
-from app.engine.status import ExecutionStatus
 
 
 async def run_execution(
@@ -68,11 +68,12 @@ async def run_execution(
         for sequence, node in enumerate(execution_order, start=1):
             configuration = node.get("configuration", {})
 
+            # Create execution step
             async with AsyncSessionLocal() as session:
                 execution_step = ExecutionStep(
                     execution_id=execution_id,
                     node_id=node["node_id"],
-                    status=ExecutionStatus.PENDING,
+                    status=ExecutionStepStatus.PENDING,
                     sequence=sequence,
                 )
 
@@ -80,6 +81,19 @@ async def run_execution(
                 await session.commit()
                 await session.refresh(execution_step)
 
+            execution_step_id = execution_step.id
+
+            # Mark step as running
+            async with AsyncSessionLocal() as session:
+                execution_step = await session.get(
+                    ExecutionStep,
+                    execution_step_id,
+                )
+
+                execution_step.status = ExecutionStepStatus.RUNNING
+                execution_step.started_at = datetime.now(timezone.utc)
+
+                await session.commit()
 
             node_type = node.get("node_type", "")
 
@@ -91,9 +105,35 @@ async def run_execution(
             )
 
             if node_type.startswith("trigger."):
+                # Trigger nodes do not execute an action.
+                # Mark the step as completed.
+                completed_at = datetime.now(timezone.utc)
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    execution_step.status = ExecutionStepStatus.COMPLETED
+                    execution_step.completed_at = completed_at
+
+                    if execution_step.started_at:
+                        execution_step.duration_ms = int(
+                            (
+                                completed_at - execution_step.started_at
+                            ).total_seconds()
+                            * 1000
+                        )
+
+                    await session.commit()
+
                 continue
 
-            if node_type == "action.http_request" and isinstance(configuration.get("headers"), str):
+            if (
+                node_type == "action.http_request"
+                and isinstance(configuration.get("headers"), str)
+            ):
                 headers = {}
 
                 for line in configuration["headers"].splitlines():
@@ -126,7 +166,9 @@ async def run_execution(
             elif node_type == "action.refund":
                 provider, action = "mock_payment", "refund_payment"
             else:
-                raise ValueError(f"Unsupported action node type: {node_type}")
+                raise ValueError(
+                    f"Unsupported action node type: {node_type}"
+                )
 
             print(
                 "Action request:",
@@ -160,7 +202,11 @@ async def run_execution(
 
             if response.success:
                 try:
-                    result = json.loads(response.result_json) if response.result_json else {}
+                    result = (
+                        json.loads(response.result_json)
+                        if response.result_json
+                        else {}
+                    )
                 except (json.JSONDecodeError, TypeError):
                     result = {}
 
@@ -170,14 +216,47 @@ async def run_execution(
                 # HTTP connector results wrap the API payload under `body`.
                 # Expose object fields at the node root as convenient aliases
                 # while retaining status_code, headers, body, and success.
-                if node_type == "action.http_request" and isinstance(result.get("body"), dict):
-                    result = {**result["body"], **result}
+                if (
+                    node_type == "action.http_request"
+                    and isinstance(result.get("body"), dict)
+                ):
+                    result = {
+                        **result["body"],
+                        **result,
+                    }
 
-                context.set_node_output(node["node_id"], result)
+                context.set_node_output(
+                    node["node_id"],
+                    result,
+                )
+
                 print(
                     f"Stored output for node: {node['node_id']}",
                     flush=True,
                 )
+
+                # Mark action step as completed
+                completed_at = datetime.now(timezone.utc)
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    execution_step.status = ExecutionStepStatus.COMPLETED
+                    execution_step.output = result
+                    execution_step.completed_at = completed_at
+
+                    if execution_step.started_at:
+                        execution_step.duration_ms = int(
+                            (
+                                completed_at - execution_step.started_at
+                            ).total_seconds()
+                            * 1000
+                        )
+
+                    await session.commit()
 
         return {
             "workflow_id": workflow_id,
