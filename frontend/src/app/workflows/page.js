@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
+import Pagination from "@/components/Pagination";
 import { useAuth } from "@/context/AuthContext";
 import { getWorkflows } from "@/services/workflows";
 
@@ -13,6 +14,8 @@ import WorkflowErrorState from "@/components/workflows/WorkflowErrorState";
 import WorkflowList from "@/components/workflows/WorkflowList";
 
 import CreateWorkflowDialog from "@/components/workflows/CreateWorkflowDialog";
+
+const PAGE_SIZE = 12;
 
 function PlusIcon(props) {
   return (
@@ -58,6 +61,7 @@ function WorkflowsContent() {
   const [workflows, setWorkflows] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // 'all' | 'published' | 'draft'
+  const [page, setPage] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
@@ -123,6 +127,10 @@ function WorkflowsContent() {
     });
   }, [workflows, statusFilter, searchQuery]);
 
+  const pageCount = Math.max(1, Math.ceil(filteredWorkflows.length / PAGE_SIZE));
+  const paginatedWorkflows = filteredWorkflows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
+
   return (
     <div className="w-full space-y-5 max-w-7xl mx-auto font-sans">
       {/* Top Header & Action */}
@@ -179,7 +187,7 @@ function WorkflowsContent() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
               placeholder="Filter workflows..."
               className="w-full h-8 pl-9 pr-8 text-[13px] font-sans bg-[var(--surface)] text-[var(--text-primary)] placeholder-[var(--text-disabled)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors duration-100 ease-out"
             />
@@ -208,7 +216,7 @@ function WorkflowsContent() {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setStatusFilter(tab.id)}
+                  onClick={() => { setStatusFilter(tab.id); setPage(1); }}
                   className={`px-3 py-1 text-[12px] font-medium rounded-[4px] transition-all duration-100 cursor-pointer ${
                     isSelected
                       ? "bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shadow-2xs"
@@ -239,18 +247,22 @@ function WorkflowsContent() {
           onClearSearch={() => {
             setSearchQuery("");
             setStatusFilter("all");
+            setPage(1);
           }}
         />
       ) : (
-        <WorkflowList
-          workflows={filteredWorkflows}
-          onDeleteSuccess={() => setReloadKey((prev) => prev + 1)}
-          onWorkflowStatusChange={(workflowId, status) => {
-            setWorkflows((current) => current.map((workflow) =>
-              workflow.id === workflowId ? { ...workflow, status } : workflow
-            ));
-          }}
-        />
+        <div className="space-y-4">
+          <WorkflowList
+            workflows={paginatedWorkflows}
+            onDeleteSuccess={() => setReloadKey((prev) => prev + 1)}
+            onWorkflowStatusChange={(workflowId, status) => {
+              setWorkflows((current) => current.map((workflow) =>
+                workflow.id === workflowId ? { ...workflow, status } : workflow
+              ));
+            }}
+          />
+          <Pagination page={page} pageSize={PAGE_SIZE} total={filteredWorkflows.length} onPageChange={setPage}/>
+        </div>
       )}
 
       {/* Create Workflow Modal */}
