@@ -198,7 +198,7 @@ export default function ApprovalsPage() {
     }
   };
 
-  const content = <div className="mx-auto w-full max-w-7xl space-y-6">
+  const content = <div className="w-full space-y-6">
     <header className="flex flex-col gap-4 border-b border-[var(--border-subtle)] pb-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="mb-2 text-[11px] font-medium uppercase tracking-[.16em] text-[var(--text-tertiary)]">Workflow tasks</p><h1 className="text-[26px] font-semibold leading-[32px] tracking-tight text-[var(--text-primary)]">Approvals</h1><p className="mt-1 text-[13px] text-[var(--text-secondary)]">Review and respond to workflow actions that require your approval.</p></div><button type="button" onClick={refresh} disabled={loading} className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface)] px-3 text-[12px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--elevated)] disabled:opacity-50"><span aria-hidden="true">↻</span>Refresh</button></header>
 
     {notice && <div key={notice.key} role={notice.kind === "error" ? "alert" : "status"} className={`flex items-start justify-between gap-3 rounded-md border px-3 py-2.5 text-[12px] ${notice.kind === "success" ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300" : notice.kind === "error" ? "border-red-500/30 bg-red-500/5 text-red-600 dark:text-red-400" : "border-[var(--border-default)] bg-[var(--elevated)] text-[var(--text-secondary)]"}`}><span>{notice.message}</span><button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification" className="shrink-0 text-current opacity-70 hover:opacity-100">×</button></div>}

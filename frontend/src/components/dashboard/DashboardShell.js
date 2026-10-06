@@ -55,7 +55,7 @@ export default function DashboardShell({ children, pageTitle = "Dashboard", full
           className={
             fullWidth
               ? "flex-1 flex flex-col min-w-0 min-h-0 h-[calc(100vh-56px)] overflow-hidden"
-              : "flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto"
+              : "flex-1 p-4 sm:p-6 md:p-7 w-full mx-auto"
           }
         >
           {children}

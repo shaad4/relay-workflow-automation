@@ -132,7 +132,7 @@ function WorkflowsContent() {
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
 
   return (
-    <div className="w-full space-y-5 max-w-7xl mx-auto font-sans">
+    <div className="w-full space-y-5 font-sans">
       {/* Top Header & Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[var(--border-subtle)]">
         <div>
