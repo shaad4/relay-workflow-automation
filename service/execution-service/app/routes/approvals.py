@@ -11,7 +11,7 @@ from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
 from app.engine.status import ExecutionStatus
 from app.engine.step_status import ExecutionStepStatus
-from app.engine.exceptions import HumanApprovalRequired
+from app.engine.exceptions import HumanApprovalRequired, ActionExecutionFailed
 from app.services.approval_service import (
     approve_approval,
     list_pending_approvals,
@@ -150,6 +150,18 @@ async def approve(
 
     except HumanApprovalRequired:
         execution.status = ExecutionStatus.WAITING_FOR_APPROVAL
+        await session.commit()
+
+        return ApprovalResponse.model_validate(approval)
+
+    except ActionExecutionFailed as exc:
+        execution.status = ExecutionStatus.FAILED
+        execution.completed_at = datetime.now(timezone.utc)
+        execution.error = {
+            "node_id": exc.node_id,
+            "message": exc.error,
+        }
+
         await session.commit()
 
         return ApprovalResponse.model_validate(approval)
