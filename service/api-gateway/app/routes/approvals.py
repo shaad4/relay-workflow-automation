@@ -11,6 +11,13 @@ EXECUTION_SERVICE_URL = "http://execution-service:8000"
 async def list_approvals(request: Request):
     return await proxy_execution_request(request, "")
 
+@router.get("/{approval_id}/")
+async def get_approval(request: Request, approval_id: str):
+    return await proxy_execution_request(
+        request,
+        approval_id,
+    )
+
 
 async def proxy_execution_request(
     request: Request,
