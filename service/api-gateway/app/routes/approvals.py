@@ -18,6 +18,13 @@ async def get_approval(request: Request, approval_id: str):
         approval_id,
     )
 
+@router.post("/{approval_id}/approve/")
+async def approve_approval(request: Request, approval_id: str):
+    return await proxy_execution_request(
+        request,
+        f"{approval_id}/approve",
+    )
+
 
 async def proxy_execution_request(
     request: Request,
