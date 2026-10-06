@@ -6,6 +6,7 @@ from app.dependencies import get_current_identity
 from app.db.database import AsyncSessionLocal
 from app.schemas.approvals import ApprovalListResponse, ApprovalResponse
 from app.services.approval_service import (
+    approve_approval,
     list_pending_approvals,
     get_approval,
 )
@@ -58,6 +59,35 @@ async def get_approval_details(
         raise HTTPException(
             status_code=404,
             detail="Approval not found",
+        )
+
+    return ApprovalResponse.model_validate(approval)
+
+
+@router.post("/{approval_id}/approve/", response_model=ApprovalResponse)
+async def approve(
+    approval_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        approval = await approve_approval(
+            approval_id=approval_id,
+            workspace_id=identity["workspace_id"],
+            approver_user_id=identity["user_id"],
+            session=session,
+        )
+
+    except ValueError as exc:
+        if str(exc) == "Approval not found":
+            raise HTTPException(
+                status_code=404,
+                detail="Approval not found",
+            )
+
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
         )
 
     return ApprovalResponse.model_validate(approval)
