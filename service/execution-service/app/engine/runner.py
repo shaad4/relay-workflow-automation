@@ -9,6 +9,7 @@ from app.grpc.workflow_client import WorkflowClient
 
 
 async def run_execution(
+    execution_id,
     workflow_id: str,
     workflow_version_id: str,
     workspace_id: str,

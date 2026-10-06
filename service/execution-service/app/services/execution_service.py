@@ -5,6 +5,7 @@ from app.db.database import AsyncSessionLocal
 from app.engine.runner import run_execution
 from app.grpc.workflow_client import WorkflowClient
 from app.models.execution import Execution
+from app.engine.status import ExecutionStatus
 
 
 async def create_execution(event: dict) -> Execution:
@@ -31,7 +32,7 @@ async def create_execution(event: dict) -> Execution:
                 workspace_id=UUID(event["workspace_id"]),
                 workflow_id=UUID(event["workflow_id"]),
                 workflow_version_id=UUID(event["workflow_version_id"]),
-                status="pending",
+                status=ExecutionStatus.PENDING,
                 trigger_type=event["event_type"],
                 trigger_data=event.get("payload"),
                 context={},
@@ -44,6 +45,7 @@ async def create_execution(event: dict) -> Execution:
             await session.refresh(execution)
 
             await run_execution(
+                execution_id=execution.id,
                 workflow_id=event["workflow_id"],
                 workflow_version_id=event["workflow_version_id"],
                 workspace_id=event["workspace_id"],
