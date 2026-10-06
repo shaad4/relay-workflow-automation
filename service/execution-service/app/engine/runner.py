@@ -4,12 +4,14 @@ from datetime import datetime, timezone
 from app.db.database import AsyncSessionLocal
 from app.engine.context import ExecutionContext
 from app.engine.executor import SequentialExecutor
+from app.engine.exceptions import HumanApprovalRequired
 from app.engine.graph import ExecutionGraph
 from app.engine.resolver import ExpressionResolver
 from app.engine.step_status import ExecutionStepStatus
 from app.grpc.action_client import ActionClient
 from app.grpc.workflow_client import WorkflowClient
 from app.models.execution_step import ExecutionStep
+
 
 
 async def run_execution(
@@ -146,6 +148,15 @@ async def run_execution(
                 configuration["headers"] = headers
 
             resolved_configuration = resolver.resolve(configuration)
+
+            # Human Approval does not use Action Service or a connection.
+            if node_type == "action.human_approval":
+                print(
+                    f"Human approval reached: {node['node_id']}",
+                    flush=True,
+                )
+
+                raise HumanApprovalRequired(node["node_id"])
 
             print(
                 f"Executing action node: {node['node_id']}",
