@@ -14,6 +14,15 @@ class ExecutionContext:
             "nodes": {},
         }
 
+    @classmethod
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+    ) -> "ExecutionContext":
+        context = cls()
+        context.data = data
+        return context
+
     def get(self, path: str) -> Any:
         current: Any = self.data
 

@@ -15,7 +15,7 @@ from app.grpc.workflow_client import WorkflowClient
 from app.models.execution_step import ExecutionStep
 from app.engine.approval_status import HumanApprovalStatus
 from app.models.human_approval import HumanApproval
-
+from app.models.execution import Execution
 
 async def run_execution(
     execution_id,
@@ -188,8 +188,18 @@ async def run_execution(
                         execution_step_id,
                     )
 
+                    execution = await session.get(
+                        Execution,
+                        execution_id,
+                    )
+
+                    if execution is None:
+                        raise ValueError(f"Execution {execution_id} not found")
+
                     execution_step.status = ExecutionStepStatus.WAITING_FOR_APPROVAL
 
+                    execution.context = context.to_dict()
+                    
                     approval = HumanApproval(
                         execution_id=execution_id,
                         execution_step_id=execution_step_id,
