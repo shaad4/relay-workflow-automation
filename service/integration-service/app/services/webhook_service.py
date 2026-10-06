@@ -30,7 +30,9 @@ async def validate_workflow_version(
     workflow_id: uuid.UUID,
     workflow_version_id: uuid.UUID,
     workspace_id: uuid.UUID,
-) -> None:
+    *,
+    allow_draft: bool = False,
+) -> tuple[str, str]:
     client = WorkflowGrpcClient()
 
     try:
@@ -44,10 +46,13 @@ async def validate_workflow_version(
 
     if not validation.valid:
         raise WorkflowVersionNotFoundError("Workflow or workflow version not found")
-    if validation.status.lower() != "published":
+    version_status = validation.status.lower()
+    workflow_status = validation.workflow_status.lower()
+    if version_status != "published" and not (allow_draft and version_status == "draft"):
         raise UnpublishedWorkflowVersionError("Webhook workflow version must be published")
-    if validation.workflow_status.lower() != "active":
+    if version_status == "published" and workflow_status != "active":
         raise InactiveWorkflowError("Workflow is inactive")
+    return version_status, workflow_status
 
 
 def generate_public_token() -> str:
@@ -68,10 +73,11 @@ async def create_webhook(
     workspace_id: uuid.UUID,
     session: AsyncSession,
 ) -> tuple[Webhook, str | None]:
-    await validate_workflow_version(
+    version_status, _ = await validate_workflow_version(
         workflow_id=data.workflow_id,
         workflow_version_id=data.workflow_version_id,
         workspace_id=workspace_id,
+        allow_draft=True,
     )
 
     secret = None
@@ -91,7 +97,10 @@ async def create_webhook(
         method=data.method,
         authentication_type=data.authentication_type,
         secret_hash=secret_hash,
-        is_active=data.is_active,
+        # Draft endpoints are provisioned immediately but cannot receive
+        # traffic until their version is published.
+        is_active=data.is_active and version_status == "published",
+        activate_on_publish=version_status == "draft",
     )
 
     session.add(webhook)
@@ -241,6 +250,33 @@ async def delete_workflow_webhooks(
         result = await session.execute(statement)
         await session.commit()
         return result.rowcount or 0
+    except Exception:
+        await session.rollback()
+        raise
+
+
+async def activate_workflow_version_webhooks(
+    workflow_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    workflow_version_id: uuid.UUID,
+    session: AsyncSession,
+) -> int:
+    """Activate endpoints after their exact workflow version is published."""
+    result = await session.execute(
+        select(Webhook).where(
+            Webhook.workflow_id == workflow_id,
+            Webhook.workspace_id == workspace_id,
+            Webhook.workflow_version_id == workflow_version_id,
+            Webhook.activate_on_publish.is_(True),
+        )
+    )
+    webhooks = list(result.scalars().all())
+    for webhook in webhooks:
+        webhook.is_active = True
+        webhook.activate_on_publish = False
+    try:
+        await session.commit()
+        return len(webhooks)
     except Exception:
         await session.rollback()
         raise

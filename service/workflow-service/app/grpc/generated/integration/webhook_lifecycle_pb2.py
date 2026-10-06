@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#integration/webhook_lifecycle.proto\x12\x11relay.integration\"g\n\x1d\x44\x65leteWorkflowWebhooksRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x02 \x01(\t\x12\x1b\n\x13workflow_version_id\x18\x03 \x01(\t\"7\n\x1e\x44\x65leteWorkflowWebhooksResponse\x12\x15\n\rdeleted_count\x18\x01 \x01(\r2\x9b\x01\n\x1aIntegrationInternalService\x12}\n\x16\x44\x65leteWorkflowWebhooks\x12\x30.relay.integration.DeleteWorkflowWebhooksRequest\x1a\x31.relay.integration.DeleteWorkflowWebhooksResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#integration/webhook_lifecycle.proto\x12\x11relay.integration\"g\n\x1d\x44\x65leteWorkflowWebhooksRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x02 \x01(\t\x12\x1b\n\x13workflow_version_id\x18\x03 \x01(\t\"7\n\x1e\x44\x65leteWorkflowWebhooksResponse\x12\x15\n\rdeleted_count\x18\x01 \x01(\r\"B\n\'ActivateWorkflowVersionWebhooksResponse\x12\x17\n\x0f\x61\x63tivated_count\x18\x01 \x01(\r2\xad\x02\n\x1aIntegrationInternalService\x12}\n\x16\x44\x65leteWorkflowWebhooks\x12\x30.relay.integration.DeleteWorkflowWebhooksRequest\x1a\x31.relay.integration.DeleteWorkflowWebhooksResponse\x12\x8f\x01\n\x1f\x41\x63tivateWorkflowVersionWebhooks\x12\x30.relay.integration.DeleteWorkflowWebhooksRequest\x1a:.relay.integration.ActivateWorkflowVersionWebhooksResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,6 +35,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_DELETEWORKFLOWWEBHOOKSREQUEST']._serialized_end=161
   _globals['_DELETEWORKFLOWWEBHOOKSRESPONSE']._serialized_start=163
   _globals['_DELETEWORKFLOWWEBHOOKSRESPONSE']._serialized_end=218
-  _globals['_INTEGRATIONINTERNALSERVICE']._serialized_start=221
-  _globals['_INTEGRATIONINTERNALSERVICE']._serialized_end=376
+  _globals['_ACTIVATEWORKFLOWVERSIONWEBHOOKSRESPONSE']._serialized_start=220
+  _globals['_ACTIVATEWORKFLOWVERSIONWEBHOOKSRESPONSE']._serialized_end=286
+  _globals['_INTEGRATIONINTERNALSERVICE']._serialized_start=289
+  _globals['_INTEGRATIONINTERNALSERVICE']._serialized_end=590
 # @@protoc_insertion_point(module_scope)

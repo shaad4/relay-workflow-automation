@@ -33,7 +33,12 @@ from app.services.workflow_service import (
     deactivate_workflow,
     delete_workflow_version,
 )
-from app.services.webhook_lifecycle import WebhookCleanupError, revoke_workflow_webhooks
+from app.services.webhook_lifecycle import (
+    WebhookActivationError,
+    WebhookCleanupError,
+    activate_workflow_version_webhooks,
+    revoke_workflow_webhooks,
+)
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -595,6 +600,18 @@ async def publish_workflow_version_route(
             status_code=404,
             detail="Workflow or version not found",
         )
+
+    try:
+        await activate_workflow_version_webhooks(
+            workflow_id=workflow_id,
+            workspace_id=identity["workspace_id"],
+            workflow_version_id=result["id"],
+        )
+    except WebhookActivationError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Workflow was published, but its webhook endpoints are still inactive. Retry publishing this version to activate them.",
+        ) from exc
 
     return result
 

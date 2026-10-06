@@ -29,5 +29,19 @@ class IntegrationGrpcClient:
         response = await self.stub.DeleteWorkflowWebhooks(request, timeout=8.0)
         return response.deleted_count
 
+    async def activate_workflow_version_webhooks(
+        self,
+        workflow_id: UUID,
+        workspace_id: UUID | str,
+        workflow_version_id: UUID,
+    ) -> int:
+        request = webhook_lifecycle_pb2.DeleteWorkflowWebhooksRequest(
+            workflow_id=str(workflow_id),
+            workspace_id=str(workspace_id),
+            workflow_version_id=str(workflow_version_id),
+        )
+        response = await self.stub.ActivateWorkflowVersionWebhooks(request, timeout=8.0)
+        return response.activated_count
+
     async def close(self):
         await self.channel.close()

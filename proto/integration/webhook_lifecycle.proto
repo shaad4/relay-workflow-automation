@@ -13,7 +13,13 @@ message DeleteWorkflowWebhooksResponse {
   uint32 deleted_count = 1;
 }
 
+message ActivateWorkflowVersionWebhooksResponse {
+  uint32 activated_count = 1;
+}
+
 service IntegrationInternalService {
   rpc DeleteWorkflowWebhooks(DeleteWorkflowWebhooksRequest)
       returns (DeleteWorkflowWebhooksResponse);
+  rpc ActivateWorkflowVersionWebhooks(DeleteWorkflowWebhooksRequest)
+      returns (ActivateWorkflowVersionWebhooksResponse);
 }

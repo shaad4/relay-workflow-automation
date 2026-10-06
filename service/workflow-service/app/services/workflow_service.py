@@ -983,33 +983,39 @@ async def publish_workflow(
     if version is None:
         return None
 
-    if version.status != "draft":
+    already_published = (
+        version.status == "published"
+        and workflow.published_version_id == version.id
+        and workflow.status == "active"
+    )
+    if version.status != "draft" and not already_published:
         raise ValueError("Only draft versions can be published")
 
-    validation_result = await validate_workflow(
-        workflow_id=workflow_id,
-        version_number=version_number,
-        workspace_id=workspace_id,
-        session=session,
-    )
+    if not already_published:
+        validation_result = await validate_workflow(
+            workflow_id=workflow_id,
+            version_number=version_number,
+            workspace_id=workspace_id,
+            session=session,
+        )
 
-    if validation_result is None:
-        return None
+        if validation_result is None:
+            return None
 
-    if not validation_result["valid"]:
-        raise ValueError("Workflow validation failed")
+        if not validation_result["valid"]:
+            raise ValueError("Workflow validation failed")
 
-    version.status = "published"
+        version.status = "published"
 
-    workflow.status = "active"
-    workflow.published_version_id = version.id
+        workflow.status = "active"
+        workflow.published_version_id = version.id
 
-    try:
-        await session.commit()
-        await session.refresh(version)
-    except Exception:
-        await session.rollback()
-        raise
+        try:
+            await session.commit()
+            await session.refresh(version)
+        except Exception:
+            await session.rollback()
+            raise
 
     return {
         "id": version.id,
