@@ -1,5 +1,7 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from uuid import UUID
+
 
 from app.db.database import AsyncSessionLocal
 from app.engine.context import ExecutionContext
@@ -11,7 +13,8 @@ from app.engine.step_status import ExecutionStepStatus
 from app.grpc.action_client import ActionClient
 from app.grpc.workflow_client import WorkflowClient
 from app.models.execution_step import ExecutionStep
-
+from app.engine.approval_status import HumanApprovalStatus
+from app.models.human_approval import HumanApproval
 
 
 async def run_execution(
@@ -155,6 +158,55 @@ async def run_execution(
                     f"Human approval reached: {node['node_id']}",
                     flush=True,
                 )
+
+                approver_user_id = configuration.get("approver_user_id")
+                message = configuration.get("message", "")
+                timeout_minutes = configuration.get("timeout_minutes")
+
+                if not approver_user_id:
+                    raise ValueError(
+                        f"Human approval node {node['node_id']} has no approver_user_id"
+                    )
+
+                if not message:
+                    raise ValueError(
+                        f"Human approval node {node['node_id']} has no message"
+                    )
+
+                timeout_at = None
+
+                if timeout_minutes is not None:
+                    timeout_at = datetime.now(timezone.utc) + timedelta(
+                        minutes=int(timeout_minutes)
+                    )
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    execution_step.status = ExecutionStepStatus.WAITING_FOR_APPROVAL
+
+                    approval = HumanApproval(
+                        execution_id=execution_id,
+                        execution_step_id=execution_step_id,
+                        workspace_id=UUID(workspace_id),
+                        approver_user_id=UUID(approver_user_id),
+                        message=message,
+                        status=HumanApprovalStatus.PENDING,
+                        decision=None,
+                        timeout_at=timeout_at,
+                        decided_at=None,
+                    )
+
+                    session.add(approval)
+                    await session.commit()
+
+                    print(
+                        f"Created human approval: {approval.id}",
+                        flush=True,
+                    )
 
                 raise HumanApprovalRequired(node["node_id"])
 
