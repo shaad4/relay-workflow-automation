@@ -9,6 +9,7 @@ import Link from "next/link";
 import WebhookTestDialog from "@/components/webhooks/WebhookTestDialog";
 import WebhookUsageGuide from "@/components/webhooks/WebhookUsageGuide";
 import VariablePicker from "@/components/workflow/VariablePicker";
+import { useAuth } from "@/context/AuthContext";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Icons
@@ -92,18 +93,20 @@ function TextInput({ value, onChange, mono = false, variables = false, prefix = 
   );
 }
 
-function TextareaInput({ value, onChange, rows = 3, mono = false, variables = false }) {
+function TextareaInput({ value, onChange, rows = 3, mono = false, variables = false, placeholder = "", disabled = false }) {
   const previewRef = useRef(null);
   if (variables) {
     return <div className={`relative w-full overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] transition-colors focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)] ${mono ? "font-mono" : ""}`}>
-      <div ref={previewRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-y-auto whitespace-pre-wrap break-words p-2.5 text-[12px] [scrollbar-width:none]">{value ? <VariableText value={value} /> : null}</div>
-      <textarea rows={rows} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onScroll={(e) => { if (previewRef.current) previewRef.current.scrollTop = e.currentTarget.scrollTop; }} className="relative block w-full resize-none bg-transparent p-2.5 text-[12px] text-transparent caret-sky-400 selection:bg-sky-500/25 focus:outline-none" />
+      <div ref={previewRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-y-auto whitespace-pre-wrap break-words p-2.5 text-[12px] [scrollbar-width:none]">{value ? <VariableText value={value} /> : <span className="text-[var(--text-disabled)]">{placeholder}</span>}</div>
+      <textarea rows={rows} value={value ?? ""} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} onScroll={(e) => { if (previewRef.current) previewRef.current.scrollTop = e.currentTarget.scrollTop; }} className="relative block w-full resize-none bg-transparent p-2.5 text-[12px] text-transparent caret-sky-400 selection:bg-sky-500/25 placeholder:text-[var(--text-disabled)] focus:outline-none disabled:cursor-not-allowed" />
     </div>;
   }
   return (
     <textarea
       rows={rows}
       value={value ?? ""}
+      placeholder={placeholder}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
       className={`w-full p-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors resize-none ${mono ? "font-mono" : ""}`}
     />
@@ -710,32 +713,31 @@ function ConditionConfig({ config, onChange }) {
   );
 }
 
-function ApprovalConfig({ config, onChange }) {
+function HumanApprovalConfig({ config, onChange, variableContext, errors = {}, isReadOnly = false }) {
+  const picker = <VariablePicker {...variableContext} onInsert={(expression) => onChange("message", `${config.message || ""}${expression}`)} />;
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel>Approver Email</FieldLabel>
-        <TextInput
-          value={config.approver}
-          onChange={(v) => onChange("approver", v)}
-        />
+        <VariableFieldLabel picker={picker}>Approval Message</VariableFieldLabel>
+        <TextareaInput value={config.message ?? ""} onChange={(value) => onChange("message", value)} rows={3} variables placeholder="Please review and approve this request." disabled={isReadOnly} />
+        {errors.message && <p role="alert" className="mt-1 text-[10px] text-red-500">{errors.message}</p>}
       </div>
       <div>
-        <FieldLabel>Timeout (hours)</FieldLabel>
-        <TextInput
-          value={String(config.timeout_hours ?? 24)}
-          onChange={(v) => onChange("timeout_hours", Number.parseInt(v, 10) || 24)}
-          mono
-        />
+        <FieldLabel>Timeout</FieldLabel>
+        <input type="number" min="1" step="1" aria-label="Timeout in minutes" value={config.timeout_minutes ?? ""} onChange={(event) => onChange("timeout_minutes", event.target.value === "" ? null : Number(event.target.value))} disabled={isReadOnly} className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none disabled:opacity-60" />
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Automatically handle the approval if no decision is made within this time.</p>
+        {errors.timeout_minutes && <p role="alert" className="mt-1 text-[10px] text-red-500">{errors.timeout_minutes}</p>}
       </div>
-      <div>
-        <FieldLabel>Message</FieldLabel>
-        <TextareaInput
-          value={config.message}
-          onChange={(v) => onChange("message", v)}
-          rows={2}
-        />
-      </div>
+    </div>
+  );
+}
+
+function ApprovalConfig({ config, onChange }) {
+  return (
+    <div className="space-y-3">
+      <div><FieldLabel>Approver Email</FieldLabel><TextInput value={config.approver} onChange={(v) => onChange("approver", v)} /></div>
+      <div><FieldLabel>Timeout (hours)</FieldLabel><TextInput value={String(config.timeout_hours ?? 24)} onChange={(v) => onChange("timeout_hours", Number.parseInt(v, 10) || 24)} mono /></div>
+      <div><FieldLabel>Message</FieldLabel><TextareaInput value={config.message} onChange={(v) => onChange("message", v)} rows={2} /></div>
     </div>
   );
 }
@@ -755,22 +757,29 @@ export default function NodeInspector({
   workflowNodes = [],
   workflowEdges = [],
 }) {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({});
   const [nodeName, setNodeName] = useState("");
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const [webhookGuideOpen, setWebhookGuideOpen] = useState(false);
+  const [approvalErrors, setApprovalErrors] = useState({});
 
   useEffect(() => {
     if (selectedNode) {
       setNodeName(selectedNode.data?.label ?? selectedNode.data?.name ?? "");
-      setFormData({ ...(selectedNode.data?.config ?? {}) });
+      const selectedConfig = { ...(selectedNode.data?.config ?? {}) };
+      if (selectedNode.data?.typeId === "human.approval" && !selectedConfig.approver_user_id && user?.id) {
+        selectedConfig.approver_user_id = user.id;
+      }
+      setFormData(selectedConfig);
       setHasLocalChanges(false);
+      setApprovalErrors({});
     } else {
       setNodeName("");
       setFormData({});
       setHasLocalChanges(false);
     }
-  }, [selectedNode?.id, workflowVersionId]); // Same node ids are reused across workflow versions.
+  }, [selectedNode?.id, workflowVersionId, user?.id]); // Same node ids are reused across workflow versions.
 
   // Empty state
   if (!selectedNode) {
@@ -811,6 +820,22 @@ export default function NodeInspector({
   const handleSave = (e) => {
     e?.preventDefault();
     if (isReadOnly) return;
+    if (typeId === "human.approval") {
+      const timeout = formData.timeout_minutes;
+      const nextErrors = {};
+      const approverUserId = formData.approver_user_id || user?.id;
+      if (!String(approverUserId ?? "").trim()) nextErrors.approver_user_id = "Your signed-in user could not be determined. Please refresh your session and try again.";
+      if (!String(formData.message ?? "").trim()) nextErrors.message = "Approval message is required.";
+      if (timeout !== null && timeout !== undefined && timeout !== "" && (!Number.isInteger(Number(timeout)) || Number(timeout) <= 0)) nextErrors.timeout_minutes = "Timeout must be greater than 0 minutes.";
+      setApprovalErrors(nextErrors);
+      if (Object.keys(nextErrors).length) return;
+      const normalizedTimeout = timeout === "" || timeout == null ? null : Number(timeout);
+      const configuration = { approver_user_id: approverUserId, message: formData.message, timeout_minutes: normalizedTimeout };
+      if (onUpdateNode) onUpdateNode(selectedNode.id, { label: nodeName, name: nodeName, config: configuration });
+      setFormData(configuration);
+      setHasLocalChanges(false);
+      return;
+    }
     if (onUpdateNode) {
       onUpdateNode(selectedNode.id, {
         label: nodeName,
@@ -859,7 +884,7 @@ export default function NodeInspector({
       case "logic.condition":
         return <ConditionConfig config={formData} onChange={handleFieldChange} />;
       case "human.approval":
-        return <ApprovalConfig config={formData} onChange={handleFieldChange} />;
+        return <HumanApprovalConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} errors={approvalErrors} isReadOnly={isReadOnly} />;
       default:
         return (
           <div className="p-3 rounded-[6px] bg-[var(--elevated)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)]">

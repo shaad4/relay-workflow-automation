@@ -144,11 +144,11 @@ export const NODE_CATEGORIES = [
         name: "Approval Gate",
         category: "Human",
         icon: "👤",
-        description: "Pause workflow for human reviewer approval",
+        description: "Pause the workflow until a human approves or rejects the request",
         defaultConfig: {
-          approver: "",
-          timeout_hours: 24,
+          approver_user_id: null,
           message: "",
+          timeout_minutes: null,
         },
       },
     ],
@@ -167,7 +167,6 @@ const exampleValuesByType = {
   "ai.rag_search": { knowledge_base: "kb_customer_docs", query: "{{input.message}}" },
   "ai.generate": { prompt: "Generate summary of customer ticket" },
   "logic.condition": { field: "status_code", value: "200" },
-  "human.approval": { approver: "admin@company.com", message: "Please approve refund request" },
 };
 
 export function clearExampleNodeConfig(typeId, config) {
