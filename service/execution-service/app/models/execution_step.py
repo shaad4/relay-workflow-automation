@@ -24,8 +24,8 @@ class ExecutionStep(Base):
         index=True,
     )
 
-    node_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    node_id: Mapped[str] = mapped_column(
+        String(100),
         nullable=False,
         index=True,
     )

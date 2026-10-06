@@ -7,6 +7,10 @@ from app.engine.resolver import ExpressionResolver
 from app.grpc.action_client import ActionClient
 from app.grpc.workflow_client import WorkflowClient
 
+from app.db.database import AsyncSessionLocal
+from app.models.execution_step import ExecutionStep
+from app.engine.status import ExecutionStatus
+
 
 async def run_execution(
     execution_id,
@@ -61,9 +65,33 @@ async def run_execution(
             flush=True,
         )
 
-        for node in action_nodes:
+        for sequence, node in enumerate(execution_order, start=1):
             configuration = node.get("configuration", {})
+
+            async with AsyncSessionLocal() as session:
+                execution_step = ExecutionStep(
+                    execution_id=execution_id,
+                    node_id=node["node_id"],
+                    status=ExecutionStatus.PENDING,
+                    sequence=sequence,
+                )
+
+                session.add(execution_step)
+                await session.commit()
+                await session.refresh(execution_step)
+
+
             node_type = node.get("node_type", "")
+
+            print(
+                "Processing node:",
+                node["node_id"],
+                node_type,
+                flush=True,
+            )
+
+            if node_type.startswith("trigger."):
+                continue
 
             if node_type == "action.http_request" and isinstance(configuration.get("headers"), str):
                 headers = {}

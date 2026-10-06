@@ -44,6 +44,9 @@ async def create_execution(event: dict) -> Execution:
             await session.commit()
             await session.refresh(execution)
 
+            execution.status = ExecutionStatus.RUNNING
+            await session.commit()
+
             await run_execution(
                 execution_id=execution.id,
                 workflow_id=event["workflow_id"],
@@ -51,6 +54,11 @@ async def create_execution(event: dict) -> Execution:
                 workspace_id=event["workspace_id"],
                 trigger_data=event.get("payload"),
             )
+
+            execution.status = ExecutionStatus.COMPLETED
+            execution.completed_at = datetime.now(timezone.utc)
+
+            await session.commit()
 
             return execution
 
