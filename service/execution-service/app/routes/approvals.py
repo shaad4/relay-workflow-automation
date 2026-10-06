@@ -1,4 +1,5 @@
 from uuid import UUID
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +9,8 @@ from app.schemas.approvals import ApprovalListResponse, ApprovalResponse
 from app.engine.runner import run_execution
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
+from app.engine.status import ExecutionStatus
+from app.engine.step_status import ExecutionStepStatus
 from app.services.approval_service import (
     approve_approval,
     list_pending_approvals,
@@ -114,6 +117,25 @@ async def approve(
             status_code=404,
             detail="Execution step not found",
         )
+
+    # The human approval step has now been successfully approved.
+    completed_at = datetime.now(timezone.utc)
+
+    execution_step.status = ExecutionStepStatus.COMPLETED
+    execution_step.completed_at = completed_at
+
+    if execution_step.started_at:
+        execution_step.duration_ms = int(
+            (
+                completed_at - execution_step.started_at
+            ).total_seconds()
+            * 1000
+        )
+
+    # The workflow is about to resume.
+    execution.status = ExecutionStatus.RUNNING
+
+    await session.commit()
 
     await run_execution(
         execution_id=execution.id,
