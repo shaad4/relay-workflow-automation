@@ -363,6 +363,11 @@ def test_validate_and_publish_workflow(client, monkeypatch):
 
     monkeypatch.setattr(workflows, "validate_workflow", validate_workflow)
     monkeypatch.setattr(workflows, "publish_workflow", publish_workflow)
+
+    async def activate_webhooks(**_kwargs):
+        return 1
+
+    monkeypatch.setattr(workflows, "activate_workflow_version_webhooks", activate_webhooks)
     base = f"/workflows/{WORKFLOW_ID}/versions/1"
     validated = client.post(f"{base}/validate/")
     published = client.post(f"{base}/publish/")
