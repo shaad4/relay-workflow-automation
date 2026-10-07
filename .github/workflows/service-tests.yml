@@ -54,7 +54,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           if [ "${{ matrix.service }}" = "service/execution-service" ]; then
-            python -m coverage run --source=app.services.execution_service -m pytest
+            python -m coverage run --source=app --omit='*/grpc/generated/*' -m pytest
             python -m coverage report --show-missing --fail-under=80
           elif [ "${{ matrix.service }}" = "service/integration-service" ] || [ "${{ matrix.service }}" = "service/workflow-service" ] || [ "${{ matrix.service }}" = "service/action-service" ]; then
             python -m coverage run --source=app --omit='*/grpc/generated/*' -m pytest
