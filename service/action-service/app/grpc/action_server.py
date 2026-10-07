@@ -96,6 +96,19 @@ class ActionInternalService(
                     params[auth_param] = connection.credential
                     input_data["params"] = params
 
+            if connection.provider == "stripe":
+                if connection.auth_type != "api_key":
+                    raise ValueError(
+                        "Stripe connection requires api_key authentication"
+                    )
+
+                if not connection.credential:
+                    raise ValueError(
+                        "Stripe API key is required"
+                    )
+
+                config["api_key"] = connection.credential
+
             connector = connector_registry.get(
                 request.provider
             )
