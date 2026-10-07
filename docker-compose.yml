@@ -144,8 +144,11 @@ services:
       - ./service/execution-service/.env
 
     depends_on:
-      - action-service
-      - kafka
+      action-service:
+        condition: service_started
+
+      kafka:
+        condition: service_healthy
 
   execution-postgres:
     image: postgres:16
@@ -179,7 +182,6 @@ services:
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
 
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
 
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -190,6 +192,17 @@ services:
 
     volumes:
       - kafka_data:/var/lib/kafka/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
 
 volumes:
