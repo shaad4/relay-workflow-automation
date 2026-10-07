@@ -155,7 +155,7 @@ def test_token_and_secret_generation_and_verification(monkeypatch):
 
 def test_create_webhook_with_secret_and_without(monkeypatch):
     async def validate(**_kwargs):
-        return None
+        return "published", None
 
     monkeypatch.setattr(service, "validate_workflow_version", validate)
     monkeypatch.setattr(service, "generate_public_token", lambda: "public")
@@ -195,7 +195,7 @@ def test_create_webhook_requires_published_version_before_persisting(monkeypatch
 
 def test_create_webhook_rolls_back_integrity_error(monkeypatch):
     async def validate(**_kwargs):
-        return None
+        return "published", None
 
     monkeypatch.setattr(service, "validate_workflow_version", validate)
     failure = IntegrityError("insert", {}, RuntimeError("duplicate"))

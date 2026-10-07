@@ -45,7 +45,7 @@ def make_request(**overrides):
 
 
 def test_execute_action_uses_connection_and_connector(monkeypatch):
-    connection = SimpleNamespace(auth_type="oauth2", credential="refresh-token")
+    connection = SimpleNamespace(provider="mock_payment", auth_type="oauth2", credential="refresh-token")
     get_connection = SimpleNamespace(
         call=None,
     )
@@ -78,7 +78,7 @@ def test_execute_action_with_non_oauth_connection_and_empty_json(monkeypatch):
     monkeypatch.setattr(
         action_server,
         "get_connection",
-        AsyncMockConnectionLookup(SimpleNamespace(auth_type="none", credential="ignored")),
+        AsyncMockConnectionLookup(SimpleNamespace(provider="mock_payment", auth_type="none", credential="ignored")),
     )
 
     class Connector:
@@ -132,7 +132,7 @@ def test_execute_action_rejects_invalid_request_values(monkeypatch, overrides, e
     monkeypatch.setattr(
         action_server,
         "get_connection",
-        AsyncMockConnectionLookup(SimpleNamespace(auth_type="none", credential=None)),
+        AsyncMockConnectionLookup(SimpleNamespace(provider="mock_payment", auth_type="none", credential=None)),
     )
     response = asyncio.run(
         action_server.ActionInternalService().ExecuteAction(make_request(**overrides), None)
@@ -147,7 +147,7 @@ def test_execute_action_reports_connector_errors(monkeypatch):
     monkeypatch.setattr(
         action_server,
         "get_connection",
-        AsyncMockConnectionLookup(SimpleNamespace(auth_type="none", credential=None)),
+        AsyncMockConnectionLookup(SimpleNamespace(provider="mock_payment", auth_type="none", credential=None)),
     )
 
     def fail_lookup(_provider):
