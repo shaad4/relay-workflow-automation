@@ -110,7 +110,7 @@ class ActionInternalService(
                 config["api_key"] = connection.credential
 
             connector = connector_registry.get(
-                request.provider
+                connection.provider
             )
 
             result = await connector.execute(

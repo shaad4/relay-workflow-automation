@@ -531,7 +531,7 @@ function RefundConfig({ config, onChange, variableContext }) {
     setConnectionsError(false);
     try {
       const result = await listConnections();
-      setConnections(connectionRowsOf(result).filter((connection) => connection.provider === "mock_payment"));
+      setConnections(connectionRowsOf(result).filter((connection) => ["mock_payment", "stripe"].includes(connection.provider)));
     } catch {
       setConnectionsError(true);
     } finally {
@@ -563,7 +563,7 @@ function RefundConfig({ config, onChange, variableContext }) {
   useEffect(() => {
     let active = true;
     listConnections().then((result) => {
-      if (active) setConnections(connectionRowsOf(result).filter((connection) => connection.provider === "mock_payment"));
+      if (active) setConnections(connectionRowsOf(result).filter((connection) => ["mock_payment", "stripe"].includes(connection.provider)));
     }).catch(() => {
       if (active) setConnectionsError(true);
     }).finally(() => {
@@ -580,7 +580,7 @@ function RefundConfig({ config, onChange, variableContext }) {
       <section className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Payment connection</label>
-          <span className="text-[9px] text-[var(--text-tertiary)]">Mock payment</span>
+          <span className="text-[9px] text-[var(--text-tertiary)]">Mock Payment · Stripe</span>
         </div>
         {connectionsLoading ? (
           <div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]" aria-label="Loading payment connections" />
@@ -588,7 +588,7 @@ function RefundConfig({ config, onChange, variableContext }) {
           <div className="flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2"><p role="alert" className="text-[10px] text-red-500">Unable to load payment connections.</p><button type="button" onClick={loadPaymentConnections} className="text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Retry</button></div>
         ) : connections.length === 0 ? (
           <div className="space-y-2 rounded-[6px] border border-dashed border-[var(--border-default)] p-2.5">
-            <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Create a workspace connection for the existing mock payment connector.</p>
+            <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Create a workspace payment connection, or connect Stripe from the Connections page.</p>
             <button type="button" onClick={createMockPaymentConnection} disabled={creatingConnection} className="h-8 w-full rounded-[5px] bg-[var(--accent)] px-2 text-[10px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60">{creatingConnection ? "Creating connection…" : "＋ Create mock payment connection"}</button>
             {createConnectionError && <p role="alert" className="text-[10px] text-red-500">Unable to create the payment connection. Try again.</p>}
           </div>
@@ -596,7 +596,7 @@ function RefundConfig({ config, onChange, variableContext }) {
           <>
             <select aria-label="Refund payment connection" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30">
               <option value="">Select a payment connection</option>
-              {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name}</option>)}
+              {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name} · {connection.provider === "stripe" ? "Stripe" : "Mock Payment"}</option>)}
             </select>
             {config.connection_id && !selectedConnection && <p className="text-[10px] text-amber-600 dark:text-amber-400">Payment connection unavailable. Select another one.</p>}
             {selectedConnection && <p className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]">Connected · {selectedConnection.name}</p>}

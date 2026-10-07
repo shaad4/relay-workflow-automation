@@ -247,7 +247,7 @@ async def run_execution(
             elif node_type == "action.email":
                 provider, action = "gmail", "send_email"
             elif node_type == "action.refund":
-                provider, action = "mock_payment", "refund_payment"
+                provider, action = "", "refund_payment"
             else:
                 raise ValueError(
                     f"Unsupported action node type: {node_type}"
