@@ -1,20 +1,24 @@
 from uuid import UUID
 from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_identity
 from app.db.database import AsyncSessionLocal
 from app.schemas.approvals import ApprovalListResponse, ApprovalResponse
+
 from app.engine.runner import run_execution
-from app.models.execution import Execution
-from app.models.execution_step import ExecutionStep
 from app.engine.status import ExecutionStatus
-from app.engine.step_status import ExecutionStepStatus
-from app.engine.exceptions import HumanApprovalRequired, ActionExecutionFailed
+from app.engine.exceptions import (
+    HumanApprovalRequired,
+    ActionExecutionFailed,
+)
+
+from app.models.execution import Execution
+
 from app.services.approval_service import (
-    approve_approval,
-    reject_approval,
+    decide_approval,
     list_pending_approvals,
     get_approval,
 )
@@ -80,35 +84,41 @@ async def get_approval_details(
     return ApprovalResponse.model_validate(approval)
 
 
-@router.post("/{approval_id}/approve/", response_model=ApprovalResponse)
-async def approve(
+async def _handle_approval_decision(
     approval_id: UUID,
-    identity: dict = Depends(get_current_identity),
-    session: AsyncSession = Depends(get_db),
-):
+    decision: str,
+    identity: dict,
+    session: AsyncSession,
+) -> ApprovalResponse:
     try:
-        approval = await approve_approval(
+        result = await decide_approval(
             approval_id=approval_id,
             workspace_id=identity["workspace_id"],
             approver_user_id=identity["user_id"],
+            decision=decision,
             session=session,
         )
 
     except ValueError as exc:
-        if str(exc) == "Approval not found":
+        if str(exc) in {
+            "Approval not found",
+            "Execution not found",
+        }:
             raise HTTPException(
                 status_code=404,
-                detail="Approval not found",
-            )
+                detail=str(exc),
+            ) from exc
 
         raise HTTPException(
             status_code=409,
             detail=str(exc),
-        )
+        ) from exc
+
+    approval = result.approval
 
     execution = await session.get(
         Execution,
-        approval.execution_id,
+        result.execution_id,
     )
 
     if execution is None:
@@ -117,35 +127,17 @@ async def approve(
             detail="Execution not found",
         )
 
-    execution_step = await session.get(
-        ExecutionStep,
-        approval.execution_step_id,
-    )
 
-    if execution_step is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Execution step not found",
-        )
+    start_node_id = result.start_node_id
 
-    # The human approval step has now been successfully approved.
-    completed_at = datetime.now(timezone.utc)
+    # No outgoing edge: the workflow ends here.
+    if start_node_id is None:
+        execution.status = ExecutionStatus.COMPLETED
+        execution.completed_at = datetime.now(timezone.utc)
 
-    execution_step.status = ExecutionStepStatus.COMPLETED
-    execution_step.completed_at = completed_at
+        await _commit_session(session)
 
-    if execution_step.started_at:
-        execution_step.duration_ms = int(
-            (
-                completed_at - execution_step.started_at
-            ).total_seconds()
-            * 1000
-        )
-
-    # The workflow is about to resume.
-    execution.status = ExecutionStatus.RUNNING
-
-    await _commit_session(session)
+        return ApprovalResponse.model_validate(approval)
 
     try:
         await run_execution(
@@ -153,12 +145,13 @@ async def approve(
             workflow_id=str(execution.workflow_id),
             workflow_version_id=str(execution.workflow_version_id),
             workspace_id=str(execution.workspace_id),
-            resume_from_sequence=execution_step.sequence,
-            context_data=execution.context,
+            start_node_id=start_node_id,
+            context_data=result.context_data,
         )
 
     except HumanApprovalRequired:
         execution.status = ExecutionStatus.WAITING_FOR_APPROVAL
+
         await _commit_session(session)
 
         return ApprovalResponse.model_validate(approval)
@@ -183,78 +176,35 @@ async def approve(
     return ApprovalResponse.model_validate(approval)
 
 
+@router.post(
+    "/{approval_id}/approve/",
+    response_model=ApprovalResponse,
+)
+async def approve(
+    approval_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    return await _handle_approval_decision(
+        approval_id=approval_id,
+        decision="approved",
+        identity=identity,
+        session=session,
+    )
 
-@router.post("/{approval_id}/reject/", response_model=ApprovalResponse)
+
+@router.post(
+    "/{approval_id}/reject/",
+    response_model=ApprovalResponse,
+)
 async def reject(
     approval_id: UUID,
     identity: dict = Depends(get_current_identity),
     session: AsyncSession = Depends(get_db),
 ):
-    try:
-        approval = await reject_approval(
-            approval_id=approval_id,
-            workspace_id=identity["workspace_id"],
-            approver_user_id=identity["user_id"],
-            session=session,
-        )
-
-    except ValueError as exc:
-        if str(exc) == "Approval not found":
-            raise HTTPException(
-                status_code=404,
-                detail="Approval not found",
-            )
-
-        raise HTTPException(
-            status_code=409,
-            detail=str(exc),
-        )
-
-    execution = await session.get(
-        Execution,
-        approval.execution_id,
+    return await _handle_approval_decision(
+        approval_id=approval_id,
+        decision="rejected",
+        identity=identity,
+        session=session,
     )
-
-    if execution is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Execution not found",
-        )
-
-    execution_step = await session.get(
-        ExecutionStep,
-        approval.execution_step_id,
-    )
-
-    if execution_step is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Execution step not found",
-        )
-
-    completed_at = datetime.now(timezone.utc)
-
-    execution_step.status = ExecutionStepStatus.FAILED
-    execution_step.completed_at = completed_at
-    execution_step.error = {
-        "message": "Human approval rejected",
-    }
-
-    if execution_step.started_at:
-        execution_step.duration_ms = int(
-            (
-                completed_at - execution_step.started_at
-            ).total_seconds()
-            * 1000
-        )
-
-    execution.status = ExecutionStatus.FAILED
-    execution.completed_at = completed_at
-    execution.error = {
-        "node_id": execution_step.node_id,
-        "message": "Human approval rejected",
-    }
-
-    await _commit_session(session)
-
-    return ApprovalResponse.model_validate(approval)

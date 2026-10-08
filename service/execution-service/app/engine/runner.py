@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+from sqlalchemy import func, select
 
 from app.db.database import AsyncSessionLocal
 from app.engine.context import ExecutionContext
@@ -22,9 +23,12 @@ async def _commit_session(session, add=None, refresh=None):
     try:
         if add is not None:
             session.add(add)
+
         await session.commit()
+
         if refresh is not None:
             await session.refresh(refresh)
+
     except Exception:
         await session.rollback()
         raise
@@ -38,6 +42,7 @@ async def run_execution(
     trigger_data: dict | None = None,
     resume_from_sequence: int | None = None,
     context_data: dict | None = None,
+    start_node_id: str | None = None,
 ):
     workflow_client = WorkflowClient()
     action_client = ActionClient()
@@ -63,12 +68,45 @@ async def run_execution(
             context = ExecutionContext(
                 trigger_data=trigger_data,
             )
+
         resolver = ExpressionResolver(context)
 
         executor = SequentialExecutor(graph)
 
-        execution_order = executor.get_execution_order()
         action_nodes = executor.get_action_nodes()
+
+        if resume_from_sequence is not None:
+            raise ValueError(
+                "Sequence-based resume is deprecated. "
+                "Use start_node_id instead."
+            )
+
+        if start_node_id is not None:
+            current_node = graph.get_node(start_node_id)
+
+            if current_node is None:
+                raise ValueError(
+                    f"Resume node not found: {start_node_id}"
+                )
+        else:
+            current_node = executor.get_start_node()
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(
+                    func.coalesce(
+                        func.max(ExecutionStep.sequence),
+                        0,
+                    )
+                ).where(
+                    ExecutionStep.execution_id == execution_id
+                )
+            )
+
+            sequence = result.scalar_one() + 1
+
+        visited: set[str] = set()
+        execution_order: list[dict] = []
 
         print(
             "Action node definitions:",
@@ -77,20 +115,22 @@ async def run_execution(
         )
 
         print(
-            "Workflow execution order:",
-            [node["node_id"] for node in execution_order],
+            "Starting execution from:",
+            current_node["node_id"],
             flush=True,
         )
 
-        print(
-            "Action nodes:",
-            [node["node_id"] for node in action_nodes],
-            flush=True,
-        )
+        while current_node is not None:
+            node = current_node
+            node_id = node["node_id"]
 
-        for sequence, node in enumerate(execution_order, start=1):
-            if resume_from_sequence is not None and sequence <= resume_from_sequence:
-                continue
+            if node_id in visited:
+                raise ValueError(
+                    f"Cycle detected in workflow at node: {node_id}"
+                )
+
+            visited.add(node_id)
+            execution_order.append(node)
 
             configuration = node.get("configuration", {})
 
@@ -103,7 +143,11 @@ async def run_execution(
                     sequence=sequence,
                 )
 
-                await _commit_session(session, add=execution_step, refresh=execution_step)
+                await _commit_session(
+                    session,
+                    add=execution_step,
+                    refresh=execution_step,
+                )
 
             execution_step_id = execution_step.id
 
@@ -151,6 +195,9 @@ async def run_execution(
                         )
 
                     await _commit_session(session)
+
+                current_node = executor.get_next_node(node_id)
+                sequence += 1
 
                 continue
 
@@ -213,12 +260,16 @@ async def run_execution(
                     )
 
                     if execution is None:
-                        raise ValueError(f"Execution {execution_id} not found")
+                        raise ValueError(
+                            f"Execution {execution_id} not found"
+                        )
 
-                    execution_step.status = ExecutionStepStatus.WAITING_FOR_APPROVAL
+                    execution_step.status = (
+                        ExecutionStepStatus.WAITING_FOR_APPROVAL
+                    )
 
                     execution.context = context.to_dict()
-                    
+
                     approval = HumanApproval(
                         execution_id=execution_id,
                         execution_step_id=execution_step_id,
@@ -231,7 +282,10 @@ async def run_execution(
                         decided_at=None,
                     )
 
-                    await _commit_session(session, add=approval)
+                    await _commit_session(
+                        session,
+                        add=approval,
+                    )
 
                     print(
                         f"Created human approval: {approval.id}",
@@ -254,10 +308,13 @@ async def run_execution(
 
             if node_type == "action.http_request":
                 provider, action = "http", "request"
+
             elif node_type == "action.email":
                 provider, action = "gmail", "send_email"
+
             elif node_type == "action.refund":
                 provider, action = "", "refund_payment"
+
             else:
                 raise ValueError(
                     f"Unsupported action node type: {node_type}"
@@ -350,6 +407,10 @@ async def run_execution(
                         )
 
                     await _commit_session(session)
+
+                current_node = executor.get_next_node(node_id)
+                sequence += 1
+
             else:
                 completed_at = datetime.now(timezone.utc)
 
