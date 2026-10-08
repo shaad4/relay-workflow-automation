@@ -1,6 +1,9 @@
+
+import re
+
 import httpx
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
 
@@ -10,6 +13,8 @@ router = APIRouter(
 )
 
 INTEGRATION_SERVICE_URL = "http://integration-service:8000"
+
+WEBHOOK_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 
 
 HOP_BY_HOP_HEADERS = {
@@ -24,6 +29,14 @@ HOP_BY_HOP_HEADERS = {
     "transfer-encoding",
     "upgrade",
 }
+
+
+def validate_webhook_token(public_token: str) -> None:
+    if not WEBHOOK_TOKEN_PATTERN.fullmatch(public_token):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid webhook token",
+        )
 
 
 async def proxy_public_webhook_request(
@@ -64,7 +77,12 @@ async def proxy_public_webhook_request(
 
 
 @router.api_route("/{public_token}", methods=["POST"])
-async def receive_public_webhook(public_token: str, request: Request):
+async def receive_public_webhook(
+    public_token: str,
+    request: Request,
+):
+    validate_webhook_token(public_token)
+
     return await proxy_public_webhook_request(
         request=request,
         path=public_token,
@@ -72,9 +90,13 @@ async def receive_public_webhook(public_token: str, request: Request):
 
 
 @router.api_route("/{public_token}/test", methods=["POST"])
-async def test_public_webhook(public_token: str, request: Request):
+async def test_public_webhook(
+    public_token: str,
+    request: Request,
+):
+    validate_webhook_token(public_token)
+
     return await proxy_public_webhook_request(
         request=request,
         path=f"{public_token}/test",
     )
-
