@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { getNodeDefinition } from "./nodeDefinitions";
+import { validateNodeConfiguration } from "./configValidation";
 import { createWebhook, deleteWebhook, getWebhookEndpoint, listWebhooks, regenerateWebhookToken, updateWebhook } from "@/services/webhooks";
 import { getWorkflowVersions } from "@/services/workflows";
 import { createConnection, listConnections } from "@/services/connections";
@@ -359,7 +360,7 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
     <div className="space-y-3">
       <section className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Connection <span className="font-normal text-[var(--text-tertiary)]">(optional)</span></label>
+          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Connection <span className="text-red-500" aria-hidden="true">*</span></label>
           <Link href="/connections" className="text-[10px] font-medium text-[var(--accent)] hover:underline">＋ Add connection</Link>
         </div>
         {connectionsLoading ? (
@@ -373,7 +374,7 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
           <Link href="/connections" className="flex h-9 items-center justify-between rounded-[6px] border border-dashed border-[var(--border-default)] px-3 text-[10px] text-[var(--text-tertiary)] hover:border-[var(--accent)]/50 hover:text-[var(--text-secondary)]"><span>No saved HTTP connections</span><span className="font-medium text-[var(--accent)]">Connect one →</span></Link>
         ) : (
           <>
-            <select aria-label="HTTP request connection" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30">
+            <select aria-label="HTTP request connection (required)" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30">
               <option value="">No connection</option>
               {httpConnections.map((connection) => (
                 <option key={connection.id} value={connection.id}>{connection.name}</option>
@@ -473,7 +474,7 @@ function EmailConfig({ config, onChange, variableContext }) {
     <div className="space-y-3">
       <section className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Gmail account</label>
+          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Gmail account <span className="text-red-500" aria-hidden="true">*</span></label>
           <Link href="/connections" className="text-[10px] font-medium text-[var(--accent)] hover:underline">＋ Add connection</Link>
         </div>
         {connectionsLoading ? (
@@ -484,7 +485,7 @@ function EmailConfig({ config, onChange, variableContext }) {
           <Link href="/connections" className="flex h-9 items-center justify-between rounded-[6px] border border-dashed border-[var(--border-default)] px-3 text-[10px] text-[var(--text-tertiary)] hover:border-[var(--accent)]/50 hover:text-[var(--text-secondary)]"><span>No Gmail accounts connected</span><span className="font-medium text-[var(--accent)]">Connect one →</span></Link>
         ) : (
           <>
-            <select aria-label="Gmail sending account" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30"><option value="">Select a Gmail account</option>{connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.config?.email || connection.name}</option>)}</select>
+            <select aria-label="Gmail sending account (required)" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30"><option value="">Select a Gmail account</option>{connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.config?.email || connection.name}</option>)}</select>
             {config.connection_id && !selectedGmail && <p className="text-[10px] text-amber-600 dark:text-amber-400">Gmail account unavailable. Select another one.</p>}
             {selectedGmail && <p className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]">Connected · {selectedGmail.config?.email || selectedGmail.name}</p>}
           </>
@@ -579,7 +580,7 @@ function RefundConfig({ config, onChange, variableContext }) {
     <div className="space-y-3">
       <section className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Payment connection</label>
+          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Payment connection <span className="text-red-500" aria-hidden="true">*</span></label>
           <span className="text-[9px] text-[var(--text-tertiary)]">Mock Payment · Stripe</span>
         </div>
         {connectionsLoading ? (
@@ -768,6 +769,7 @@ export default function NodeInspector({
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const [webhookGuideOpen, setWebhookGuideOpen] = useState(false);
   const [approvalErrors, setApprovalErrors] = useState({});
+  const [configurationErrors, setConfigurationErrors] = useState([]);
 
   useEffect(() => {
     if (selectedNode) {
@@ -779,10 +781,12 @@ export default function NodeInspector({
       setFormData(selectedConfig);
       setHasLocalChanges(false);
       setApprovalErrors({});
+      setConfigurationErrors([]);
     } else {
       setNodeName("");
       setFormData({});
       setHasLocalChanges(false);
+      setConfigurationErrors([]);
     }
   }, [selectedNode?.id, workflowVersionId, user?.id]); // Same node ids are reused across workflow versions.
 
@@ -820,11 +824,18 @@ export default function NodeInspector({
   const handleFieldChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setHasLocalChanges(true);
+    setConfigurationErrors((previous) => previous.filter((error) => error.field !== field));
   };
 
   const handleSave = (e) => {
     e?.preventDefault();
     if (isReadOnly) return;
+    const configToValidate = typeId === "human.approval"
+      ? { ...formData, approver_user_id: formData.approver_user_id || user?.id }
+      : formData;
+    const nextConfigurationErrors = validateNodeConfiguration(typeId, configToValidate);
+    setConfigurationErrors(nextConfigurationErrors);
+    if (nextConfigurationErrors.length) return;
     if (typeId === "human.approval") {
       const timeout = formData.timeout_minutes;
       const nextErrors = {};
@@ -869,6 +880,7 @@ export default function NodeInspector({
           }
           setFormData(nextConfig);
           setHasLocalChanges(true);
+          setConfigurationErrors((previous) => previous.filter((error) => error.field !== "webhook_id"));
           if (onUpdateNode) onUpdateNode(selectedNode.id, { config: nextConfig });
         }} />;
       case "trigger.schedule":
@@ -958,6 +970,14 @@ export default function NodeInspector({
       {/* Config form */}
       <form onSubmit={handleSave} className="shrink-0 p-3">
         <div className="space-y-3">
+        {configurationErrors.length > 0 && (
+          <div role="alert" className="rounded-[6px] border border-red-500/25 bg-red-500/5 p-2.5">
+            <p className="text-[10px] font-semibold text-red-500">Complete the required settings before applying this node:</p>
+            <ul className="mt-1 list-inside list-disc space-y-0.5 text-[10px] text-red-500">
+              {configurationErrors.map((error) => <li key={error.field}>{error.message}</li>)}
+            </ul>
+          </div>
+        )}
         {/* Node label */}
         {typeId !== "trigger.webhook" && <div>
           <FieldLabel>Node Label</FieldLabel>

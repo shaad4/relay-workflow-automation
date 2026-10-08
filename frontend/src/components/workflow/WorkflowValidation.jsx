@@ -84,7 +84,7 @@ export default function WorkflowValidation({
                   Validation Errors
                 </h3>
                 <p className="text-[13px] text-[var(--text-secondary)] mt-0.5">
-                  Please fix the following issues before publishing:
+                  Please fix the following issues before saving or publishing:
                 </p>
               </div>
             </div>

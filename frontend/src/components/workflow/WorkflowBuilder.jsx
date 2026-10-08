@@ -14,6 +14,7 @@ import WorkflowCanvas from "./WorkflowCanvas";
 import NodeInspector from "./NodeInspector";
 import WorkflowValidation from "./WorkflowValidation";
 import { clearExampleNodeConfig, getNodeDefinition } from "./nodeDefinitions";
+import { validateWorkflowConfiguration } from "./configValidation";
 import {
   createWorkflowNode,
   updateWorkflowNode,
@@ -777,7 +778,13 @@ export default function WorkflowBuilder({
 
   // ── SAVE: diff-based sync to backend ─────────────────────────────────────
   const handleSave = useCallback(async () => {
-    if (isCanvasReadOnly || saveState === "saving") return;
+    if (isCanvasReadOnly || saveState === "saving") return false;
+    const configurationErrors = validateWorkflowConfiguration(nodes, edges, { includeStructure: false });
+    if (configurationErrors.length) {
+      setValidationResult({ isValid: false, errors: configurationErrors });
+      setValidationOpen(true);
+      return false;
+    }
     setSaveState("saving");
     setSaveError(null);
 
@@ -1014,10 +1021,12 @@ export default function WorkflowBuilder({
         return !snapshot || JSON.stringify(edge) !== JSON.stringify(snapshot);
       }) || edgesSnap.some((snapshot) => !edges.some((edge) => edge.id === snapshot.id));
       setSaveState(nodesChangedDuringSave || edgesChangedDuringSave ? "unsaved" : "saved");
+      return true;
     } catch (err) {
       console.error("Save failed:", err);
       setSaveState("failed");
       setSaveError(err.message ?? "Save failed. Please try again.");
+      return false;
     }
   }, [
     isCanvasReadOnly,
@@ -1035,11 +1044,15 @@ export default function WorkflowBuilder({
   const handleValidate = useCallback(async () => {
     setIsValidating(true);
     try {
+      const localErrors = validateWorkflowConfiguration(nodes, edges);
+      if (localErrors.length) {
+        setValidationResult({ isValid: false, errors: localErrors });
+        return;
+      }
       // Save first if there are unsaved changes
       if (saveState === "unsaved" || saveState === "failed") {
-        const priorSaveState = saveState;
-        await handleSave();
-        if (priorSaveState === "failed") {
+        const saved = await handleSave();
+        if (!saved) {
           setValidationResult({ isValid: false, errors: [{ code: "SAVE_FAILED", message: "Save failed. Fix the save issue before validating." }] });
           return;
         }
@@ -1087,11 +1100,16 @@ export default function WorkflowBuilder({
     if (isCanvasReadOnly) return;
     setIsPublishing(true);
     try {
+      const localErrors = validateWorkflowConfiguration(nodes, edges);
+      if (localErrors.length) {
+        setValidationResult({ isValid: false, errors: localErrors });
+        setValidationOpen(true);
+        return;
+      }
       // Save first
       if (saveState === "unsaved" || saveState === "failed") {
-        const priorSaveState = saveState;
-        await handleSave();
-        if (priorSaveState === "failed") throw new Error("Save failed. Publish was not started.");
+        const saved = await handleSave();
+        if (!saved) return;
       }
       if (workflowId) {
         const validation = await validateWorkflow(workflowId, versionNumber);
@@ -1128,7 +1146,7 @@ export default function WorkflowBuilder({
     } finally {
       setIsPublishing(false);
     }
-  }, [isCanvasReadOnly, saveState, handleSave, workflowId, versionNumber, onRefresh]);
+  }, [isCanvasReadOnly, saveState, handleSave, workflowId, versionNumber, onRefresh, nodes, edges]);
 
   // ── Edit Workflow (create draft from published) ───────────────────────────
   const handleEditWorkflow = useCallback(async () => {
