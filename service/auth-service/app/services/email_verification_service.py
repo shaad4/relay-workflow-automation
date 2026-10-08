@@ -27,32 +27,36 @@ async def create_verification_token(
 
     now = datetime.now(timezone.utc)
 
-    # Expire all currently active tokens for this user.
-    await session.execute(
-        update(EmailVerificationToken)
-        .where(
-            EmailVerificationToken.user_id == user_id,
-            EmailVerificationToken.used_at.is_(None),
-            EmailVerificationToken.expires_at > now,
-        )
-        .values(expires_at=now)
-    )
-
-    # Create the new token.
-    token = generate_verification_token()
-
-    verification_token = EmailVerificationToken(
-        user_id=user_id,
-        token=token,
-        expires_at=(
-            now
-            + timedelta(
-                minutes=VERIFICATION_TOKEN_EXPIRE_MINUTES
+    try:
+        # Expire all currently active tokens for this user.
+        await session.execute(
+            update(EmailVerificationToken)
+            .where(
+                EmailVerificationToken.user_id == user_id,
+                EmailVerificationToken.used_at.is_(None),
+                EmailVerificationToken.expires_at > now,
             )
-        ),
-    )
+            .values(expires_at=now)
+        )
 
-    session.add(verification_token)
+        # Create the new token.
+        token = generate_verification_token()
+
+        verification_token = EmailVerificationToken(
+            user_id=user_id,
+            token=token,
+            expires_at=(
+                now
+                + timedelta(
+                    minutes=VERIFICATION_TOKEN_EXPIRE_MINUTES
+                )
+            ),
+        )
+
+        session.add(verification_token)
+    except Exception:
+        await session.rollback()
+        raise
 
     return verification_token
 
@@ -73,12 +77,16 @@ async def resend_verification_email(
     if user.email_verified_at is not None:
         return None
 
-    verification_token = await create_verification_token(
-        user.id,
-        session,
-    )
+    try:
+        verification_token = await create_verification_token(
+            user.id,
+            session,
+        )
 
-    await session.commit()
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
     return verification_token, user
 
@@ -122,8 +130,11 @@ async def verify_email_token(
     if user is None:
         raise ValueError("User not found")
 
-    user.email_verified_at = now
-    verification_token.used_at = now
+    try:
+        user.email_verified_at = now
+        verification_token.used_at = now
 
-    await session.commit()
-    
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise

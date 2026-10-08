@@ -28,27 +28,31 @@ async def register_user(
         name=data.workspace_name
     )
 
-    session.add(workspace)
-    await session.flush()
+    try:
+        session.add(workspace)
+        await session.flush()
 
-    user = User(
-        workspace_id=workspace.id,
-        name=data.name,
-        email=data.email,
-        password_hash=password_hash,
-    )
+        user = User(
+            workspace_id=workspace.id,
+            name=data.name,
+            email=data.email,
+            password_hash=password_hash,
+        )
 
-    session.add(user)
+        session.add(user)
 
-    await session.flush()
+        await session.flush()
 
-    verification_token = await create_verification_token(
-        user_id=user.id,
-        session=session
-    )
+        verification_token = await create_verification_token(
+            user_id=user.id,
+            session=session
+        )
 
-    await session.commit()
-    await session.refresh(user)
+        await session.commit()
+        await session.refresh(user)
+    except Exception:
+        await session.rollback()
+        raise
 
     return user, verification_token
 
@@ -82,14 +86,18 @@ async def login_user(
 
     if user.email_verified_at is None:
 
-        verification_token = (
-            await create_verification_token(
-                user_id=user.id,
-                session=session,
+        try:
+            verification_token = (
+                await create_verification_token(
+                    user_id=user.id,
+                    session=session,
+                )
             )
-        )
 
-        await session.commit()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
         raise EmailVerificationRequired(
             token=verification_token.token,
@@ -97,12 +105,16 @@ async def login_user(
             user_name=user.name,
         )
 
-    access_token, refresh_token = await create_refresh_session(
-        user_id=user.id,
-        workspace_id=user.workspace_id,
-        session=session,
-    )
-    await session.commit()
+    try:
+        access_token, refresh_token = await create_refresh_session(
+            user_id=user.id,
+            workspace_id=user.workspace_id,
+            session=session,
+        )
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
     return access_token, refresh_token
 

@@ -37,32 +37,36 @@ async def create_password_reset_token(
 
     now = datetime.now(timezone.utc)
 
-    # Expire existing unused tokens
-    await session.execute(
-        update(PasswordResetToken)
-        .where(
-            PasswordResetToken.user_id == user.id,
-            PasswordResetToken.used_at.is_(None),
-            PasswordResetToken.expires_at > now,
-        )
-        .values(expires_at=now)
-    )
-
-    token = PasswordResetToken(
-        user_id=user.id,
-        token=generate_password_reset_token(),
-        expires_at=(
-            now
-            + timedelta(
-                minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
+    try:
+        # Expire existing unused tokens
+        await session.execute(
+            update(PasswordResetToken)
+            .where(
+                PasswordResetToken.user_id == user.id,
+                PasswordResetToken.used_at.is_(None),
+                PasswordResetToken.expires_at > now,
             )
-        ),
-    )
+            .values(expires_at=now)
+        )
 
-    session.add(token)
+        token = PasswordResetToken(
+            user_id=user.id,
+            token=generate_password_reset_token(),
+            expires_at=(
+                now
+                + timedelta(
+                    minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
+                )
+            ),
+        )
 
-    await session.commit()
-    await session.refresh(token)
+        session.add(token)
+
+        await session.commit()
+        await session.refresh(token)
+    except Exception:
+        await session.rollback()
+        raise
 
     return token, user
 
@@ -109,19 +113,23 @@ async def reset_password(
     if user is None:
         raise ValueError("User not found")
 
-    user.password_hash = hash_password(
-        new_password
-    )
-
-    reset_token.used_at = now
-
-    await session.execute(
-        update(RefreshSession)
-        .where(
-            RefreshSession.user_id == user.id,
-            RefreshSession.revoked_at.is_(None),
+    try:
+        user.password_hash = hash_password(
+            new_password
         )
-        .values(revoked_at=now)
-    )
 
-    await session.commit()
+        reset_token.used_at = now
+
+        await session.execute(
+            update(RefreshSession)
+            .where(
+                RefreshSession.user_id == user.id,
+                RefreshSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise

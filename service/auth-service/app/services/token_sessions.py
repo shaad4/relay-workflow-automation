@@ -29,8 +29,12 @@ async def create_refresh_session(
         current_token_id=token_id,
         expires_at=expires_at,
     )
-    session.add(row)
-    await session.flush()
+    try:
+        session.add(row)
+        await session.flush()
+    except Exception:
+        await session.rollback()
+        raise
 
     access_token = create_access_token(
         {"sub": str(user_id), "workspace_id": str(workspace_id), "sid": str(session_id)}
@@ -67,40 +71,44 @@ async def rotate_refresh_token(
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("Invalid refresh token") from exc
 
-    result = await session.execute(
-        select(RefreshSession)
-        .where(RefreshSession.id == session_id)
-        .with_for_update()
-    )
-    row = result.scalar_one_or_none()
-    now = datetime.now(timezone.utc)
+    try:
+        result = await session.execute(
+            select(RefreshSession)
+            .where(RefreshSession.id == session_id)
+            .with_for_update()
+        )
+        row = result.scalar_one_or_none()
+        now = datetime.now(timezone.utc)
 
-    if row is None or row.user_id != user_id:
-        raise ValueError("Refresh session is no longer valid")
-    if row.revoked_at is not None or row.expires_at <= now:
-        raise ValueError("Refresh session has expired or was revoked")
+        if row is None or row.user_id != user_id:
+            raise ValueError("Refresh session is no longer valid")
+        if row.revoked_at is not None or row.expires_at <= now:
+            raise ValueError("Refresh session has expired or was revoked")
 
-    if row.current_token_id != token_id:
-        # Reuse of a rotated token indicates theft; revoke the whole session.
-        row.revoked_at = now
+        if row.current_token_id != token_id:
+            # Reuse of a rotated token indicates theft; revoke the whole session.
+            row.revoked_at = now
+            await session.commit()
+            raise ValueError("Refresh token reuse detected; session revoked")
+
+        next_token_id = str(uuid.uuid4())
+        row.current_token_id = next_token_id
+        access_token = create_access_token(
+            {"sub": str(user_id), "workspace_id": str(workspace_id), "sid": str(session_id)}
+        )
+        next_refresh_token = create_refresh_token(
+            {
+                "sub": str(user_id),
+                "workspace_id": str(workspace_id),
+                "sid": str(session_id),
+                "jti": next_token_id,
+            },
+            expires_at=row.expires_at,
+        )
         await session.commit()
-        raise ValueError("Refresh token reuse detected; session revoked")
-
-    next_token_id = str(uuid.uuid4())
-    row.current_token_id = next_token_id
-    access_token = create_access_token(
-        {"sub": str(user_id), "workspace_id": str(workspace_id), "sid": str(session_id)}
-    )
-    next_refresh_token = create_refresh_token(
-        {
-            "sub": str(user_id),
-            "workspace_id": str(workspace_id),
-            "sid": str(session_id),
-            "jti": next_token_id,
-        },
-        expires_at=row.expires_at,
-    )
-    await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
     return access_token, next_refresh_token
 
 
@@ -115,15 +123,19 @@ async def revoke_refresh_session(
     except ValueError:
         return False
 
-    result = await session.execute(
-        select(RefreshSession)
-        .where(RefreshSession.id == parsed_id)
-        .with_for_update()
-    )
-    row = result.scalar_one_or_none()
-    if row is None:
-        return False
-    if row.revoked_at is None:
-        row.revoked_at = datetime.now(timezone.utc)
-        await session.commit()
+    try:
+        result = await session.execute(
+            select(RefreshSession)
+            .where(RefreshSession.id == parsed_id)
+            .with_for_update()
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return False
+        if row.revoked_at is None:
+            row.revoked_at = datetime.now(timezone.utc)
+            await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
     return True

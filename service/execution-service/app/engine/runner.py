@@ -17,6 +17,19 @@ from app.engine.approval_status import HumanApprovalStatus
 from app.models.human_approval import HumanApproval
 from app.models.execution import Execution
 
+
+async def _commit_session(session, add=None, refresh=None):
+    try:
+        if add is not None:
+            session.add(add)
+        await session.commit()
+        if refresh is not None:
+            await session.refresh(refresh)
+    except Exception:
+        await session.rollback()
+        raise
+
+
 async def run_execution(
     execution_id,
     workflow_id: str,
@@ -90,9 +103,7 @@ async def run_execution(
                     sequence=sequence,
                 )
 
-                session.add(execution_step)
-                await session.commit()
-                await session.refresh(execution_step)
+                await _commit_session(session, add=execution_step, refresh=execution_step)
 
             execution_step_id = execution_step.id
 
@@ -106,7 +117,7 @@ async def run_execution(
                 execution_step.status = ExecutionStepStatus.RUNNING
                 execution_step.started_at = datetime.now(timezone.utc)
 
-                await session.commit()
+                await _commit_session(session)
 
             node_type = node.get("node_type", "")
 
@@ -139,7 +150,7 @@ async def run_execution(
                             * 1000
                         )
 
-                    await session.commit()
+                    await _commit_session(session)
 
                 continue
 
@@ -220,8 +231,7 @@ async def run_execution(
                         decided_at=None,
                     )
 
-                    session.add(approval)
-                    await session.commit()
+                    await _commit_session(session, add=approval)
 
                     print(
                         f"Created human approval: {approval.id}",
@@ -339,7 +349,7 @@ async def run_execution(
                             * 1000
                         )
 
-                    await session.commit()
+                    await _commit_session(session)
             else:
                 completed_at = datetime.now(timezone.utc)
 
@@ -363,7 +373,7 @@ async def run_execution(
                             * 1000
                         )
 
-                    await session.commit()
+                    await _commit_session(session)
 
                     raise ActionExecutionFailed(
                         node_id=node["node_id"],

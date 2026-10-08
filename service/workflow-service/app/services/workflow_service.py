@@ -20,9 +20,8 @@ async def create_workflow(
         description=data.description,
     )
 
-    session.add(workflow)
-
     try:
+        session.add(workflow)
         await session.flush()
 
         version = WorkflowVersion(
@@ -286,9 +285,8 @@ async def create_draft_version(
         description=latest_version.description,
     )
 
-    session.add(new_version)
-
     try:
+        session.add(new_version)
         await session.flush()
 
         # Copy nodes from the latest version.
@@ -399,9 +397,8 @@ async def create_workflow_node(
         configuration=data.configuration,
     )
 
-    session.add(node)
-
     try:
+        session.add(node)
         await session.commit()
         await session.refresh(node)
     except Exception:
@@ -583,9 +580,8 @@ async def delete_workflow_node(
     if node is None:
         return None
 
-    await session.delete(node)
-
     try:
+        await session.delete(node)
         await session.commit()
     except Exception:
         await session.rollback()
@@ -659,9 +655,8 @@ async def create_workflow_edge(
         condition=data.condition,
     )
 
-    session.add(edge)
-
     try:
+        session.add(edge)
         await session.commit()
         await session.refresh(edge)
     except Exception:
@@ -842,9 +837,8 @@ async def delete_workflow_edge(
     if edge is None:
         return None
 
-    await session.delete(edge)
-
     try:
+        await session.delete(edge)
         await session.commit()
     except Exception:
         await session.rollback()

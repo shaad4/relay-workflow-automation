@@ -2,7 +2,6 @@ import httpx
 from uuid import UUID
 
 from sqlalchemy import select, update, delete
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.connection import Connection
@@ -23,15 +22,14 @@ async def create_connection(
         config=data.config,
     )
 
-    session.add(connection)
-
     try:
+        session.add(connection)
         await session.commit()
         await session.refresh(connection)
 
         return connection
 
-    except SQLAlchemyError:
+    except Exception:
         await session.rollback()
         raise
 
@@ -75,25 +73,29 @@ async def update_connection(
     if not update_data:
         return None
 
-    result = await session.execute(
-        update(Connection)
-        .where(
-            Connection.id == connection_id,
-            Connection.workspace_id == workspace_id,
+    try:
+        result = await session.execute(
+            update(Connection)
+            .where(
+                Connection.id == connection_id,
+                Connection.workspace_id == workspace_id,
+            )
+            .values(**update_data)
+            .returning(Connection)
         )
-        .values(**update_data)
-        .returning(Connection)
-    )
 
-    connection = result.scalar_one_or_none()
+        connection = result.scalar_one_or_none()
 
-    if connection is None:
+        if connection is None:
+            await session.rollback()
+            return None
+
+        await session.commit()
+
+        return connection
+    except Exception:
         await session.rollback()
-        return None
-
-    await session.commit()
-
-    return connection
+        raise
 
 
 async def delete_connection(
@@ -101,20 +103,24 @@ async def delete_connection(
     workspace_id: UUID,
     session: AsyncSession,
 ) -> bool:
-    result = await session.execute(
-        delete(Connection).where(
-            Connection.id == connection_id,
-            Connection.workspace_id == workspace_id,
+    try:
+        result = await session.execute(
+            delete(Connection).where(
+                Connection.id == connection_id,
+                Connection.workspace_id == workspace_id,
+            )
         )
-    )
 
-    if result.rowcount == 0:
+        if result.rowcount == 0:
+            await session.rollback()
+            return False
+
+        await session.commit()
+
+        return True
+    except Exception:
         await session.rollback()
-        return False
-
-    await session.commit()
-
-    return True
+        raise
 
 
 async def test_connection(

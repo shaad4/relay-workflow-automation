@@ -115,8 +115,12 @@ async def start_gmail_oauth(
             expires_at=expires_at,
         )
 
-        session.add(oauth_state)
-        await session.commit()
+        try:
+            session.add(oauth_state)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
     params = {
         "client_id": client_id,
@@ -184,8 +188,12 @@ async def gmail_oauth_callback(
             )
 
         if oauth_state.expires_at <= datetime.now(timezone.utc):
-            await session.delete(oauth_state)
-            await session.commit()
+            try:
+                await session.delete(oauth_state)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
             raise HTTPException(
                 status_code=400,
@@ -225,14 +233,18 @@ async def gmail_oauth_callback(
             },
         )
 
-        session.add(connection)
+        try:
+            session.add(connection)
 
-        # OAuth state is single-use.
-        await session.delete(oauth_state)
+            # OAuth state is single-use.
+            await session.delete(oauth_state)
 
-        await session.commit()
+            await session.commit()
 
-        await session.refresh(connection)
+            await session.refresh(connection)
+        except Exception:
+            await session.rollback()
+            raise
 
     return {
         "message": "Gmail connected successfully",

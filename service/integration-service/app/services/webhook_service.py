@@ -4,7 +4,6 @@ import uuid
 from pwdlib import PasswordHash
 
 from sqlalchemy import delete, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.grpc.workflow_client import WorkflowGrpcClient
@@ -103,12 +102,11 @@ async def create_webhook(
         activate_on_publish=version_status == "draft",
     )
 
-    session.add(webhook)
-
     try:
+        session.add(webhook)
         await session.commit()
         await session.refresh(webhook)
-    except IntegrityError:
+    except Exception:
         await session.rollback()
         raise
 
@@ -190,13 +188,12 @@ async def update_webhook(
             workspace_id=workspace_id,
         )
 
-    for field, value in update_data.items():
-        setattr(webhook, field, value)
-
     try:
+        for field, value in update_data.items():
+            setattr(webhook, field, value)
         await session.commit()
         await session.refresh(webhook)
-    except IntegrityError:
+    except Exception:
         await session.rollback()
         raise
 
@@ -221,9 +218,8 @@ async def delete_webhook(
     if webhook is None:
         return False
 
-    await session.delete(webhook)
-
     try:
+        await session.delete(webhook)
         await session.commit()
     except Exception:
         await session.rollback()
@@ -299,12 +295,11 @@ async def regenerate_webhook_token(
     if webhook is None:
         return None
 
-    webhook.public_token = generate_public_token()
-
     try:
+        webhook.public_token = generate_public_token()
         await session.commit()
         await session.refresh(webhook)
-    except IntegrityError:
+    except Exception:
         await session.rollback()
         raise
 

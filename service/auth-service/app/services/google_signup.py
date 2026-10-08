@@ -32,10 +32,13 @@ async def create_google_signup_session(
         ),
     )
 
-    session.add(signup_session)
-
-    await session.commit()
-    await session.refresh(signup_session)
+    try:
+        session.add(signup_session)
+        await session.commit()
+        await session.refresh(signup_session)
+    except Exception:
+        await session.rollback()
+        raise
 
     return signup_session
 
@@ -118,49 +121,53 @@ async def complete_google_signup(
             "An account with this email already exists"
         )
 
-    # 7. Create workspace
-    workspace = Workspace(
-        name=workspace_name
-    )
+    try:
+        # 7. Create workspace
+        workspace = Workspace(
+            name=workspace_name
+        )
 
-    session.add(workspace)
+        session.add(workspace)
 
-    # Make sure workspace.id is available
-    await session.flush()
+        # Make sure workspace.id is available
+        await session.flush()
 
-    # 8. Google users don't set a password.
-    # Generate a random password hash so the existing
-    # non-null password_hash column remains satisfied.
-    random_password = secrets.token_urlsafe(32)
-    password_hash = hash_password(random_password)
+        # 8. Google users don't set a password.
+        # Generate a random password hash so the existing
+        # non-null password_hash column remains satisfied.
+        random_password = secrets.token_urlsafe(32)
+        password_hash = hash_password(random_password)
 
-    # 9. Create Relay user
-    user = User(
-        workspace_id=workspace.id,
-        name=signup_session.name,
-        email=signup_session.email,
-        password_hash=password_hash,
-        google_id=signup_session.google_id,
-        email_verified_at=datetime.now(timezone.utc),
-    )
+        # 9. Create Relay user
+        user = User(
+            workspace_id=workspace.id,
+            name=signup_session.name,
+            email=signup_session.email,
+            password_hash=password_hash,
+            google_id=signup_session.google_id,
+            email_verified_at=datetime.now(timezone.utc),
+        )
 
-    session.add(user)
+        session.add(user)
 
-    await session.flush()
+        await session.flush()
 
-    # 10. Consume the signup session
-    signup_session.used_at = datetime.now(timezone.utc)
+        # 10. Consume the signup session
+        signup_session.used_at = datetime.now(timezone.utc)
 
-    # 11. Create Relay tokens
-    access_token, refresh_token = await create_refresh_session(
-        user_id=user.id,
-        workspace_id=user.workspace_id,
-        session=session,
-    )
+        # 11. Create Relay tokens
+        access_token, refresh_token = await create_refresh_session(
+            user_id=user.id,
+            workspace_id=user.workspace_id,
+            session=session,
+        )
 
-    # 12. Commit everything together
-    await session.commit()
+        # 12. Commit everything together
+        await session.commit()
 
-    await session.refresh(user)
+        await session.refresh(user)
+    except Exception:
+        await session.rollback()
+        raise
 
     return user, access_token, refresh_token

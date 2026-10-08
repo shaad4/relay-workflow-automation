@@ -26,6 +26,14 @@ router = APIRouter(
 )
 
 
+async def _commit_session(session: AsyncSession) -> None:
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
@@ -137,7 +145,7 @@ async def approve(
     # The workflow is about to resume.
     execution.status = ExecutionStatus.RUNNING
 
-    await session.commit()
+    await _commit_session(session)
 
     try:
         await run_execution(
@@ -151,7 +159,7 @@ async def approve(
 
     except HumanApprovalRequired:
         execution.status = ExecutionStatus.WAITING_FOR_APPROVAL
-        await session.commit()
+        await _commit_session(session)
 
         return ApprovalResponse.model_validate(approval)
 
@@ -163,14 +171,14 @@ async def approve(
             "message": exc.error,
         }
 
-        await session.commit()
+        await _commit_session(session)
 
         return ApprovalResponse.model_validate(approval)
 
     execution.status = ExecutionStatus.COMPLETED
     execution.completed_at = datetime.now(timezone.utc)
 
-    await session.commit()
+    await _commit_session(session)
 
     return ApprovalResponse.model_validate(approval)
 
@@ -247,6 +255,6 @@ async def reject(
         "message": "Human approval rejected",
     }
 
-    await session.commit()
+    await _commit_session(session)
 
     return ApprovalResponse.model_validate(approval)

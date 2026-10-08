@@ -26,10 +26,13 @@ async def create_google_login_session(
         ),
     )
 
-    session.add(login_session)
-
-    await session.commit()
-    await session.refresh(login_session)
+    try:
+        session.add(login_session)
+        await session.commit()
+        await session.refresh(login_session)
+    except Exception:
+        await session.rollback()
+        raise
 
     return login_session
 
@@ -38,50 +41,54 @@ async def consume_google_login_session(
     login_session_id: uuid.UUID,
     session: AsyncSession,
 ):
-    result = await session.execute(
-        select(GoogleLoginSession)
-        .where(GoogleLoginSession.id == login_session_id)
-        .with_for_update()
-    )
-
-    login_session = result.scalar_one_or_none()
-
-    if not login_session:
-        raise ValueError(
-            "Invalid Google login session"
+    try:
+        result = await session.execute(
+            select(GoogleLoginSession)
+            .where(GoogleLoginSession.id == login_session_id)
+            .with_for_update()
         )
 
-    if login_session.used_at is not None:
-        raise ValueError(
-            "Google login session has already been used"
+        login_session = result.scalar_one_or_none()
+
+        if not login_session:
+            raise ValueError(
+                "Invalid Google login session"
+            )
+
+        if login_session.used_at is not None:
+            raise ValueError(
+                "Google login session has already been used"
+            )
+
+        if login_session.expires_at <= datetime.now(timezone.utc):
+            raise ValueError(
+                "Google login session has expired"
+            )
+
+        result = await session.execute(
+            select(User).where(
+                User.id == login_session.user_id
+            )
         )
 
-    if login_session.expires_at <= datetime.now(timezone.utc):
-        raise ValueError(
-            "Google login session has expired"
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise ValueError(
+                "Relay user not found"
+            )
+
+        login_session.used_at = datetime.now(timezone.utc)
+
+        access_token, refresh_token = await create_refresh_session(
+            user_id=user.id,
+            workspace_id=user.workspace_id,
+            session=session,
         )
 
-    result = await session.execute(
-        select(User).where(
-            User.id == login_session.user_id
-        )
-    )
-
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise ValueError(
-            "Relay user not found"
-        )
-
-    login_session.used_at = datetime.now(timezone.utc)
-
-    access_token, refresh_token = await create_refresh_session(
-        user_id=user.id,
-        workspace_id=user.workspace_id,
-        session=session,
-    )
-
-    await session.commit()
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
     return access_token, refresh_token
