@@ -34,6 +34,7 @@ class FakeSession:
         self.flushes = 0
         self.refreshes = 0
         self.deleted = []
+        self.rollbacks = 0
 
     async def execute(self, _statement):
         return next(self.results)
@@ -51,6 +52,9 @@ class FakeSession:
 
     async def commit(self):
         self.commits += 1
+
+    async def rollback(self):
+        self.rollbacks += 1
 
     async def refresh(self, _value):
         self.refreshes += 1
@@ -226,6 +230,7 @@ def test_rotate_refresh_token_reuse_revokes_session(monkeypatch):
 
     assert row.revoked_at is not None
     assert session.commits == 1
+    assert session.rollbacks == 1
 
 
 def test_verification_token_success_and_failure_paths(monkeypatch):
@@ -367,8 +372,10 @@ def test_google_login_session_create_consume_and_invalid(monkeypatch):
         (SimpleNamespace(used_at=datetime.now(timezone.utc)), "already been used"),
         (SimpleNamespace(used_at=None, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)), "expired"),
     ]:
+        invalid_session = FakeSession([Result(row)])
         with pytest.raises(ValueError, match=expected):
-            asyncio.run(google_login.consume_google_login_session(uuid4(), FakeSession([Result(row)])))
+            asyncio.run(google_login.consume_google_login_session(uuid4(), invalid_session))
+        assert invalid_session.rollbacks == 1
 
 
 def test_google_signup_session_complete_and_rejections(monkeypatch):
