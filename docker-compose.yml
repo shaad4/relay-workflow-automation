@@ -1,243 +1,180 @@
+name: relay-workflow-automation
 
 services:
-
   # AUTH DATABASE
-
   auth-postgres:
     image: postgres:16
     container_name: relay-auth-postgres
-
     environment:
-      POSTGRES_DB: ${AUTH_DB_NAME:?AUTH_DB_NAME is required}
-      POSTGRES_USER: ${AUTH_DB_USER:?AUTH_DB_USER is required}
-      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required}
-
+      POSTGRES_DB: ${AUTH_DB_NAME:?required}
+      POSTGRES_USER: ${AUTH_DB_USER:?required}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:5434:5432"
-
+      - "127.0.0.1:${AUTH_DB_PORT:-5434}:5432"
     volumes:
       - auth_postgres_data:/var/lib/postgresql/data
 
-
   # AUTH SERVICE
-
   auth-service:
     build:
       context: ./service/auth-service
-
     container_name: relay-auth-service
-
     ports:
-      - "8000:8000"
-
+      - "${AUTH_SERVICE_PORT:-8000}:8000"
     env_file:
       - ./service/auth-service/.env
-
     depends_on:
-      - auth-postgres
-
+      auth-postgres:
+        condition: service_started
 
   # API GATEWAY
-
   api-gateway:
     build:
       context: ./service/api-gateway
-
     container_name: relay-api-gateway
-
     ports:
-      - "8001:8000"
-
+      - "${API_GATEWAY_PORT:-8001}:8000"
     env_file:
       - ./service/api-gateway/.env
-
     depends_on:
-      - auth-service
-
+      auth-service:
+        condition: service_started
 
   # WORKFLOW SERVICE
-
   workflow-service:
     build:
       context: ./service/workflow-service
-
     container_name: relay-workflow-service
-
     ports:
-      - "8002:8000"
-
+      - "${WORKFLOW_SERVICE_PORT:-8002}:8000"
     env_file:
       - ./service/workflow-service/.env
-
     depends_on:
-      - auth-service
-      - workflow-postgres
-      - integration-service
-
+      auth-service:
+        condition: service_started
+      workflow-postgres:
+        condition: service_started
+      integration-service:
+        condition: service_started
 
   # WORKFLOW DATABASE
-
   workflow-postgres:
     image: postgres:16
     container_name: relay-workflow-postgres
-
     environment:
-      POSTGRES_DB: ${WORKFLOW_DB_NAME:?WORKFLOW_DB_NAME is required}
-      POSTGRES_USER: ${WORKFLOW_DB_USER:?WORKFLOW_DB_USER is required}
-      POSTGRES_PASSWORD: ${WORKFLOW_DB_PASSWORD:?WORKFLOW_DB_PASSWORD is required}
-
+      POSTGRES_DB: ${WORKFLOW_DB_NAME:?required}
+      POSTGRES_USER: ${WORKFLOW_DB_USER:?required}
+      POSTGRES_PASSWORD: ${WORKFLOW_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:5433:5432"
-
+      - "127.0.0.1:${WORKFLOW_DB_PORT:-5433}:5432"
     volumes:
       - workflow_postgres_data:/var/lib/postgresql/data
 
-
   # INTEGRATION SERVICE
-
   integration-service:
     build:
       context: ./service/integration-service
-
     container_name: relay-integration-service
-
     ports:
-      - "8003:8000"
-
+      - "${INTEGRATION_SERVICE_PORT:-8003}:8000"
     env_file:
       - ./service/integration-service/.env
-
     environment:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
-
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       integration-postgres:
         condition: service_started
 
-
   # INTEGRATION DATABASE
-
   integration-postgres:
     image: postgres:16
     container_name: relay-integration-postgres
-
     environment:
-      POSTGRES_DB: ${INTEGRATION_DB_NAME:?INTEGRATION_DB_NAME is required}
-      POSTGRES_USER: ${INTEGRATION_DB_USER:?INTEGRATION_DB_USER is required}
-      POSTGRES_PASSWORD: ${INTEGRATION_DB_PASSWORD:?INTEGRATION_DB_PASSWORD is required}
-
+      POSTGRES_DB: ${INTEGRATION_DB_NAME:?required}
+      POSTGRES_USER: ${INTEGRATION_DB_USER:?required}
+      POSTGRES_PASSWORD: ${INTEGRATION_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:5435:5432"
-
+      - "127.0.0.1:${INTEGRATION_DB_PORT:-5435}:5432"
     volumes:
       - integration_postgres_data:/var/lib/postgresql/data
 
-
   # ACTION SERVICE
-
   action-service:
     build:
       context: ./service/action-service
-
     container_name: relay-action-service
-
     ports:
-      - "8004:8000"
-
+      - "${ACTION_SERVICE_PORT:-8004}:8000"
     env_file:
       - ./service/action-service/.env
-
     depends_on:
-      - action-postgres
-
+      action-postgres:
+        condition: service_started
 
   # ACTION DATABASE
-
   action-postgres:
     image: postgres:16
     container_name: relay-action-postgres
-
     environment:
-      POSTGRES_DB: ${ACTION_DB_NAME:?ACTION_DB_NAME is required}
-      POSTGRES_USER: ${ACTION_DB_USER:?ACTION_DB_USER is required}
-      POSTGRES_PASSWORD: ${ACTION_DB_PASSWORD:?ACTION_DB_PASSWORD is required}
-
+      POSTGRES_DB: ${ACTION_DB_NAME:?required}
+      POSTGRES_USER: ${ACTION_DB_USER:?required}
+      POSTGRES_PASSWORD: ${ACTION_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:5436:5432"
-
+      - "127.0.0.1:${ACTION_DB_PORT:-5436}:5432"
     volumes:
       - action_postgres_data:/var/lib/postgresql/data
 
-
   # EXECUTION SERVICE
-
   execution-service:
     build:
       context: ./service/execution-service
-
     container_name: relay-execution-service
-
     ports:
-      - "8005:8000"
-
+      - "${EXECUTION_SERVICE_PORT:-8005}:8000"
     env_file:
       - ./service/execution-service/.env
-
     environment:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
-
     depends_on:
       action-service:
         condition: service_started
       execution-postgres:
         condition: service_started
-      kafka:
-        condition: service_healthy
-
+      kafka-init:
+        condition: service_completed_successfully
 
   # EXECUTION DATABASE
-
   execution-postgres:
     image: postgres:16
     container_name: relay-execution-postgres
-
     environment:
-      POSTGRES_DB: ${EXECUTION_DB_NAME:?EXECUTION_DB_NAME is required}
-      POSTGRES_USER: ${EXECUTION_DB_USER:?EXECUTION_DB_USER is required}
-      POSTGRES_PASSWORD: ${EXECUTION_DB_PASSWORD:?EXECUTION_DB_PASSWORD is required}
-
+      POSTGRES_DB: ${EXECUTION_DB_NAME:?required}
+      POSTGRES_USER: ${EXECUTION_DB_USER:?required}
+      POSTGRES_PASSWORD: ${EXECUTION_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:5437:5432"
-
+      - "127.0.0.1:${EXECUTION_DB_PORT:-5437}:5432"
     volumes:
       - execution_postgres_data:/var/lib/postgresql/data
 
-
-  # KAFKA
-
+  # KAFKA BROKER
   kafka:
     image: apache/kafka:4.0.1
     container_name: relay-kafka
-
     restart: unless-stopped
 
     environment:
       KAFKA_NODE_ID: ${KAFKA_NODE_ID:-1}
       KAFKA_PROCESS_ROLES: broker,controller
-
       KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-
+      KAFKA_CONTROLLER_QUORUM_VOTERS: ${KAFKA_NODE_ID:-1}@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: ${KAFKA_AUTO_CREATE_TOPICS_ENABLE:-false}
 
     volumes:
@@ -245,18 +182,41 @@ services:
 
     healthcheck:
       test:
-        [
-          "CMD-SHELL",
-          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"
-        ]
+        - CMD-SHELL
+        - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1
       interval: 5s
       timeout: 5s
       retries: 12
       start_period: 10s
 
+  # KAFKA TOPIC INITIALIZER
+  kafka-init:
+    image: apache/kafka:4.0.1
+    container_name: relay-kafka-init
+    restart: "no"
+
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:9092 \
+          --create \
+          --if-not-exists \
+          --topic workflow.triggered \
+          --partitions 1 \
+          --replication-factor 1
+
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:9092 \
+          --describe \
+          --topic workflow.triggered
 
 # PERSISTENT VOLUMES
-
 volumes:
   auth_postgres_data:
   workflow_postgres_data:

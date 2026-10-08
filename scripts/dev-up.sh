@@ -5,18 +5,19 @@ set -Eeuo pipefail
 # ============================================================
 # Relay — GitHub Codespaces Development Startup
 # ============================================================
-# Development-only workaround for Docker legacy/nftables
-# firewall conflicts. NOT intended for production.
+# Development only. NOT intended for production.
 #
 # Usage:
 #   ./scripts/dev-up.sh
+#
+# Kafka topic initialization is handled by Docker Compose
+# through the kafka-init service.
 # ============================================================
 
 cd "$(dirname "$0")/.."
 
 NETWORK="relay-workflow-automation_default"
 KAFKA_CONTAINER="relay-kafka"
-KAFKA_TOPIC="workflow.triggered"
 
 echo "========================================"
 echo " Starting Relay Development Environment"
@@ -26,7 +27,7 @@ echo "========================================"
 # 1. Start infrastructure
 # ------------------------------------------------------------
 
-echo "[1/8] Starting PostgreSQL and Kafka..."
+echo "[1/7] Starting PostgreSQL and Kafka..."
 
 docker compose up -d \
   auth-postgres \
@@ -40,7 +41,7 @@ docker compose up -d \
 # 2. Detect Docker bridge
 # ------------------------------------------------------------
 
-echo "[2/8] Detecting Docker network..."
+echo "[2/7] Detecting Docker network..."
 
 NETWORK_ID=$(docker network inspect \
   -f '{{.Id}}' "$NETWORK")
@@ -62,7 +63,7 @@ echo "Subnet: $SUBNET"
 # 3. Configure Codespaces firewall
 # ------------------------------------------------------------
 
-echo "[3/8] Applying Docker networking workaround..."
+echo "[3/7] Applying Docker networking workaround..."
 
 add_rule() {
   local table="$1"
@@ -76,12 +77,12 @@ add_rule() {
   fi
 }
 
-# Allow container-to-container traffic.
+# Allow communication between containers.
 add_rule filter FORWARD \
   -i "$BRIDGE" -o "$BRIDGE" \
   -j ACCEPT
 
-# Allow outbound traffic from containers.
+# Allow outbound traffic.
 add_rule filter FORWARD \
   -i "$BRIDGE" ! -o "$BRIDGE" \
   -j ACCEPT
@@ -92,7 +93,7 @@ add_rule filter FORWARD \
   -m conntrack --ctstate RELATED,ESTABLISHED \
   -j ACCEPT
 
-# NAT for outbound connections.
+# NAT outbound connections.
 add_rule nat POSTROUTING \
   -s "$SUBNET" ! -o "$BRIDGE" \
   -j MASQUERADE
@@ -100,10 +101,10 @@ add_rule nat POSTROUTING \
 echo "Docker firewall rules configured."
 
 # ------------------------------------------------------------
-# 4. Wait for Kafka
+# 4. Wait for Kafka health
 # ------------------------------------------------------------
 
-echo "[4/8] Waiting for Kafka..."
+echo "[4/7] Waiting for Kafka..."
 
 KAFKA_READY=false
 
@@ -128,42 +129,32 @@ fi
 echo "Kafka is healthy."
 
 # ------------------------------------------------------------
-# 5. Initialize Kafka topics
+# 5. Initialize dependencies and start services
 # ------------------------------------------------------------
 
-echo "[5/8] Ensuring Kafka topics exist..."
+echo "[5/7] Starting Relay application services..."
 
-docker exec "$KAFKA_CONTAINER" \
-  /opt/kafka/bin/kafka-topics.sh \
-  --bootstrap-server localhost:9092 \
-  --create \
-  --if-not-exists \
-  --topic "$KAFKA_TOPIC" \
-  --partitions 1 \
-  --replication-factor 1
-
-# Verify topic metadata is available before starting consumers.
-docker exec "$KAFKA_CONTAINER" \
-  /opt/kafka/bin/kafka-topics.sh \
-  --bootstrap-server localhost:9092 \
-  --describe \
-  --topic "$KAFKA_TOPIC"
-
-echo "Kafka topic $KAFKA_TOPIC is ready."
-
-# ------------------------------------------------------------
-# 6. Start application services
-# ------------------------------------------------------------
-
-echo "[6/8] Starting Relay application services..."
-
+# Compose runs kafka-init before Integration and Execution.
 docker compose up -d
 
+# Verify that kafka-init finished successfully.
+INIT_STATUS=$(docker inspect \
+  -f '{{.State.Status}}:{{.State.ExitCode}}' \
+  relay-kafka-init)
+
+if [ "$INIT_STATUS" != "exited:0" ]; then
+  echo "ERROR: Kafka initialization failed: $INIT_STATUS"
+  docker compose logs kafka-init
+  exit 1
+fi
+
+echo "Kafka topic initialization completed."
+
 # ------------------------------------------------------------
-# 7. Wait for application readiness
+# 6. Wait for service readiness
 # ------------------------------------------------------------
 
-echo "[7/8] Waiting for service readiness..."
+echo "[6/7] Waiting for service readiness..."
 
 wait_for_http() {
   local name="$1"
@@ -172,14 +163,12 @@ wait_for_http() {
   echo "Waiting for $name..."
 
   for attempt in $(seq 1 30); do
-
     if docker compose exec -T api-gateway \
       python -c "
 import httpx
 response = httpx.get('http://${host}:8000/docs', timeout=3)
 response.raise_for_status()
 " >/dev/null 2>&1; then
-
       echo "$name: READY"
       return 0
     fi
@@ -198,26 +187,23 @@ wait_for_http "Action Service" "action-service"
 wait_for_http "Execution Service" "execution-service"
 
 # ------------------------------------------------------------
-# 8. Verify network connectivity
+# 7. Verify network connectivity
 # ------------------------------------------------------------
 
-echo "[8/8] Verifying network connectivity..."
+echo "[7/7] Verifying network connectivity..."
 
-# Kafka TCP connectivity
 docker compose exec -T api-gateway python -c '
 import socket
 with socket.create_connection(("kafka", 9092), 5):
     print("Kafka TCP: OK")
 '
 
-# Outbound internet connectivity
 docker compose exec -T auth-service python -c '
 import socket
 with socket.create_connection(("8.8.8.8", 443), 5):
     print("Outbound Internet TCP: OK")
 '
 
-# External DNS resolution
 docker compose exec -T auth-service python -c '
 import socket
 print("External DNS: OK (" + socket.gethostbyname("smtp.gmail.com") + ")")
@@ -228,7 +214,7 @@ echo "========================================"
 echo " Relay Container Status"
 echo "========================================"
 
-docker compose ps
+docker compose ps -a
 
 echo ""
 echo "========================================"
