@@ -779,12 +779,6 @@ export default function WorkflowBuilder({
   // ── SAVE: diff-based sync to backend ─────────────────────────────────────
   const handleSave = useCallback(async () => {
     if (isCanvasReadOnly || saveState === "saving") return false;
-    const configurationErrors = validateWorkflowConfiguration(nodes, edges, { includeStructure: false });
-    if (configurationErrors.length) {
-      setValidationResult({ isValid: false, errors: configurationErrors });
-      setValidationOpen(true);
-      return false;
-    }
     setSaveState("saving");
     setSaveError(null);
 
