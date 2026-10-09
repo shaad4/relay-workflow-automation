@@ -22,7 +22,7 @@
 
 ## 🚀 What is Relay?
 
-Relay is a **multi-tenant workflow automation platform** for processes that are too complex for a simple `Event → Action` rule. A company builds a workflow once in a visual editor, publishes it, and Relay runs it whenever the trigger fires — pulling data from APIs, retrieving company knowledge with **RAG**, making **structured AI decisions**, asking for **human approval**, and **recovering** when something fails.
+Relay is a **multi-tenant workflow automation platform** for processes that are too complex for a simple `Event → Action` rule. A company builds a workflow once in a visual editor, publishes it, and Relay runs it whenever the trigger fires — pulling data from APIs, retrieving company knowledge with **RAG**, making **structured AI decisions**, asking for **human approval**, and **recovering** when something fails .. .
 
 > Relay never moves money itself. It calls the payment provider's API; the provider performs the refund.
 
