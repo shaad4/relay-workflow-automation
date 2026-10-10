@@ -169,7 +169,7 @@ services:
 
   # RAG DATABASE
   rag-postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: relay-rag-postgres
     environment:
       POSTGRES_DB: ${RAG_DB_NAME:?required}
