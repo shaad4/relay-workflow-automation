@@ -158,6 +158,29 @@ services:
     volumes:
       - execution_postgres_data:/var/lib/postgresql/data
 
+
+  # RAG SERVICE
+  rag-service:
+    build:
+      context: ./service/rag-service
+    container_name: relay-rag-service
+    ports:
+      - "127.0.0.1:${RAG_SERVICE_PORT:-8006}:8000"
+
+  # RAG DATABASE
+  rag-postgres:
+    image: postgres:16
+    container_name: relay-rag-postgres
+    environment:
+      POSTGRES_DB: ${RAG_DB_NAME:?required}
+      POSTGRES_USER: ${RAG_DB_USER:?required}
+      POSTGRES_PASSWORD: ${RAG_DB_PASSWORD:?required}
+    ports:
+      - "127.0.0.1:${RAG_DB_PORT:-5438}:5432"
+    volumes:
+      - rag_postgres_data:/var/lib/postgresql/data
+
+
   # KAFKA BROKER
   kafka:
     image: apache/kafka:4.0.1
@@ -223,4 +246,5 @@ volumes:
   integration_postgres_data:
   action_postgres_data:
   execution_postgres_data:
+  rag_postgres_data:
   kafka_data:
