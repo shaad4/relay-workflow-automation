@@ -166,7 +166,12 @@ services:
     container_name: relay-rag-service
     ports:
       - "127.0.0.1:${RAG_SERVICE_PORT:-8006}:8000"
-
+    env_file:
+      - ./service/rag-service/.env
+    depends_on:
+      rag-postgres:
+        condition: service_started
+        
   # RAG DATABASE
   rag-postgres:
     image: pgvector/pgvector:pg16
