@@ -10,3 +10,4 @@ grpcio-tools
 protobuf
 supabase
 python-multipart
+pypdf
