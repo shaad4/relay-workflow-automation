@@ -7,6 +7,8 @@ from sqlalchemy import (
     ForeignKey,
     BigInteger,
     Index,
+    ForeignKeyConstraint,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -30,7 +32,6 @@ class Document(Base):
 
     knowledge_base_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
         nullable=False,
     )
 
@@ -72,9 +73,20 @@ class Document(Base):
     )
 
     __table_args__ = (
-        Index(
-            "ix_documents_workspace_kb",
-            "workspace_id",
-            "knowledge_base_id",
-        ),
-    )
+    Index(
+        "ix_documents_workspace_kb",
+        "workspace_id",
+        "knowledge_base_id",
+    ),
+    ForeignKeyConstraint(
+        ["knowledge_base_id", "workspace_id"],
+        ["knowledge_bases.id", "knowledge_bases.workspace_id"],
+        ondelete="CASCADE",
+        name="fk_documents_knowledge_base_workspace",
+    ),
+    UniqueConstraint(
+        "id",
+        "workspace_id",
+        name="uq_documents_id_workspace",
+    ),
+)
