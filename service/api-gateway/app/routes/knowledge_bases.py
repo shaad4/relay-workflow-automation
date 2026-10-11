@@ -30,6 +30,11 @@ async def create_knowledge_base(request: Request):
     return await proxy_rag_request(request)
 
 
+@router.get("/")
+async def list_knowledge_bases(request: Request):
+    return await proxy_rag_request(request)
+
+
 async def proxy_rag_request(request: Request):
     url = f"{RAG_SERVICE_URL}/knowledge-bases/"
 
