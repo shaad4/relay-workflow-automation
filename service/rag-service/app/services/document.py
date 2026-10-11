@@ -1,6 +1,5 @@
 import uuid
 from pathlib import Path
-from fastapi import UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from app.services.file_validator import validate_document
