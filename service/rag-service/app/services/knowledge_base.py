@@ -53,3 +53,25 @@ class KnowledgeBaseService:
             knowledge_base_id=knowledge_base_id,
             workspace_id=workspace_id,
         )
+    
+
+    async def delete(
+        self,
+        knowledge_base_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> bool:
+        try:
+            deleted = await self.repository.delete(
+                knowledge_base_id=knowledge_base_id,
+                workspace_id=workspace_id,
+            )
+
+            if not deleted:
+                return False
+
+            await self.db.commit()
+            return True
+
+        except Exception:
+            await self.db.rollback()
+            raise

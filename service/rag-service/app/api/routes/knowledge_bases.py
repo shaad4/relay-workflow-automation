@@ -74,3 +74,29 @@ async def get_knowledge_base(
         )
 
     return knowledge_base
+
+
+
+@router.delete(
+    "/{knowledge_base_id}/",
+    status_code=204,
+)
+async def delete_knowledge_base(
+    knowledge_base_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    service = KnowledgeBaseService(db)
+
+    deleted = await service.delete(
+        knowledge_base_id=knowledge_base_id,
+        workspace_id=UUID(identity["workspace_id"]),
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail="Knowledge base not found",
+        )
+
+    return None

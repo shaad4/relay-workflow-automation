@@ -65,3 +65,23 @@ class KnowledgeBaseRepository:
         result = await self.db.execute(statement)
 
         return result.scalar_one_or_none()
+
+
+    async def delete(
+        self,
+        knowledge_base_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> bool:
+
+        knowledge_base = await self.get_by_id(
+            knowledge_base_id=knowledge_base_id,
+            workspace_id=workspace_id,
+        )
+
+        if knowledge_base is None:
+            return False
+
+        await self.db.delete(knowledge_base)
+        await self.db.flush()
+
+        return True
