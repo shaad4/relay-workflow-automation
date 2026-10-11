@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     DateTime,
-    ForeignKey,
     Index,
     Integer,
     Text,
+    ForeignKeyConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -31,7 +31,6 @@ class DocumentChunk(Base):
 
     document_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=False,
     )
 
@@ -57,9 +56,15 @@ class DocumentChunk(Base):
     )
 
     __table_args__ = (
-        Index(
-            "ix_document_chunks_workspace_document",
-            "workspace_id",
-            "document_id",
-        ),
-    )
+    Index(
+        "ix_document_chunks_workspace_document",
+        "workspace_id",
+        "document_id",
+    ),
+    ForeignKeyConstraint(
+        ["document_id", "workspace_id"],
+        ["documents.id", "documents.workspace_id"],
+        ondelete="CASCADE",
+        name="fk_document_chunks_document_workspace",
+    ),
+)
