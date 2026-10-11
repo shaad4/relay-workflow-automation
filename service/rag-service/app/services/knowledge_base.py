@@ -32,3 +32,13 @@ class KnowledgeBaseService:
         except Exception:
             await self.db.rollback()
             raise
+
+
+    async def list_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+    ) -> list[KnowledgeBase]:
+
+        return await self.repository.list_by_workspace(
+            workspace_id=workspace_id,
+        )

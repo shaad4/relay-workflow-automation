@@ -34,3 +34,18 @@ async def create_knowledge_base(
         workspace_id=UUID(identity["workspace_id"]),
         data=data,
     )
+
+
+@router.get(
+    "/",
+    response_model=list[KnowledgeBaseResponse],
+)
+async def list_knowledge_bases(
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    service = KnowledgeBaseService(db)
+
+    return await service.list_by_workspace(
+        workspace_id=UUID(identity["workspace_id"]),
+    )
