@@ -40,3 +40,18 @@ class SupabaseStorage:
         self.client.storage.from_(
             self.bucket
         ).remove([storage_path])
+
+    def exists(self, storage_path: str) -> bool:
+        folder, filename = storage_path.rsplit("/", 1)
+
+        objects = self.client.storage.from_(
+            self.bucket
+        ).list(
+            path=folder,
+            options={"search": filename},
+        )
+
+        return any(
+            obj["name"] == filename
+            for obj in objects
+        )
