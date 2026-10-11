@@ -62,6 +62,18 @@ async def delete_knowledge_base(
     )
 
 
+@router.post("/{knowledge_base_id}/documents/")
+async def upload_document(
+    request: Request,
+    knowledge_base_id: UUID,
+):
+    return await proxy_rag_request(
+        request,
+        path=f"{knowledge_base_id}/documents",
+    )
+
+
+
 
 # --------------------------------------------------
 # RAG Service Proxy
