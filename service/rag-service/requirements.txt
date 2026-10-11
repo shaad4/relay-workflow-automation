@@ -8,3 +8,4 @@ pgvector
 grpcio
 grpcio-tools
 protobuf
+supabase
