@@ -6,11 +6,12 @@ from starlette.concurrency import run_in_threadpool
 from app.services.file_validator import validate_document
 from app.storage.supabase_storage import SupabaseStorage
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.document import DocumentRepository
 from app.repositories.knowledge_base import KnowledgeBaseRepository
+from app.models.document import Document
 
 
 class DocumentService:
@@ -65,3 +66,63 @@ class DocumentService:
         )
 
         return storage_path, len(content)
+
+
+    async def upload_document(
+        self,
+        file: UploadFile,
+        workspace_id: uuid.UUID,
+        knowledge_base_id: uuid.UUID,
+    ) -> Document:
+
+        # 1. Verify knowledge base ownership
+        await self.validate_knowledge_base(
+            knowledge_base_id=knowledge_base_id,
+            workspace_id=workspace_id,
+        )
+
+        # 2. Generate document ID
+        document_id = uuid.uuid4()
+
+        storage_path = None
+
+        try:
+            # 3. Upload file to Supabase
+            storage_path, file_size = await self.upload_to_storage(
+                file=file,
+                workspace_id=workspace_id,
+                knowledge_base_id=knowledge_base_id,
+                document_id=document_id,
+            )
+
+            # 4. Create document metadata
+            document = await self.repository.create(
+                document_id=document_id,
+                workspace_id=workspace_id,
+                knowledge_base_id=knowledge_base_id,
+                filename=file.filename,
+                content_type=file.content_type,
+                file_size=file_size,
+                storage_path=storage_path,
+            )
+
+            # 5. Commit database transaction
+            await self.db.commit()
+
+            return document
+
+        except Exception:
+            await self.db.rollback()
+
+            # Remove uploaded file if database operation fails
+            if storage_path is not None:
+                try:
+                    await run_in_threadpool(
+                        self.storage.delete,
+                        storage_path,
+                    )
+                except Exception:
+                    # TODO: Log cleanup failure for retry
+                    pass
+
+            raise

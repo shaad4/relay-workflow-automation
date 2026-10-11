@@ -13,6 +13,7 @@ class DocumentRepository:
 
     async def create(
         self,
+        document_id: uuid.UUID,
         workspace_id: uuid.UUID,
         knowledge_base_id: uuid.UUID,
         filename: str,
@@ -22,6 +23,7 @@ class DocumentRepository:
     ) -> Document:
 
         document = Document(
+            id=document_id,
             workspace_id=workspace_id,
             knowledge_base_id=knowledge_base_id,
             filename=filename,
