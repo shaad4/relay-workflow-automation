@@ -1,9 +1,15 @@
 from fastapi import FastAPI
 
+from app.api.routes.knowledge_bases import (
+    router as knowledge_base_router,
+)
+
 app = FastAPI(
     title="Relay RAG Service",
     version="1.0.0",
 )
+
+app.include_router(knowledge_base_router)
 
 
 @app.get("/health")
