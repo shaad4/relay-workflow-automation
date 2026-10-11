@@ -51,6 +51,17 @@ async def get_knowledge_base(
         path=str(knowledge_base_id),
     )
 
+@router.delete("/{knowledge_base_id}/")
+async def delete_knowledge_base(
+    request: Request,
+    knowledge_base_id: UUID,
+):
+    return await proxy_rag_request(
+        request,
+        path=str(knowledge_base_id),
+    )
+
+
 
 # --------------------------------------------------
 # RAG Service Proxy
