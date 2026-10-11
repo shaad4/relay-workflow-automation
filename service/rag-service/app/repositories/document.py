@@ -20,6 +20,7 @@ class DocumentRepository:
         content_type: str,
         file_size: int,
         storage_path: str,
+        status: str = "uploading",
     ) -> Document:
 
         document = Document(
@@ -30,7 +31,7 @@ class DocumentRepository:
             content_type=content_type,
             file_size=file_size,
             storage_path=storage_path,
-            status="pending",
+            status=status,
         )
 
         self.db.add(document)
@@ -38,4 +39,17 @@ class DocumentRepository:
         await self.db.flush()
         await self.db.refresh(document)
 
+        return document
+
+
+    async def update_status(
+        self,
+        document: Document,
+        status: str,
+        error_message: str | None = None,
+    ) -> Document:
+        document.status = status
+        document.error_message = error_message
+
+        await self.db.flush()
         return document

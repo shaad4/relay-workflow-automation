@@ -68,6 +68,7 @@ class DocumentService:
         return storage_path, len(content)
 
 
+   
     async def upload_document(
         self,
         file: UploadFile,
@@ -75,54 +76,65 @@ class DocumentService:
         knowledge_base_id: uuid.UUID,
     ) -> Document:
 
-        # 1. Verify knowledge base ownership
+        # 1. Validate knowledge base ownership
         await self.validate_knowledge_base(
             knowledge_base_id=knowledge_base_id,
             workspace_id=workspace_id,
         )
 
-        # 2. Generate document ID
+        # 2. Validate file before creating DB record
+        content = await validate_document(file)
+
         document_id = uuid.uuid4()
+        extension = Path(file.filename).suffix.lower()
 
-        storage_path = None
+        storage_path = (
+            f"workspaces/{workspace_id}/"
+            f"knowledge-bases/{knowledge_base_id}/"
+            f"documents/{document_id}{extension}"
+        )
 
+        # 3. Create durable uploading record
+        document = await self.repository.create(
+            document_id=document_id,
+            workspace_id=workspace_id,
+            knowledge_base_id=knowledge_base_id,
+            filename=file.filename,
+            content_type=file.content_type,
+            file_size=len(content),
+            storage_path=storage_path,
+            status="uploading",
+        )
+
+        await self.db.commit()
+
+        # 4. Upload file to Supabase
         try:
-            # 3. Upload file to Supabase
-            storage_path, file_size = await self.upload_to_storage(
-                file=file,
-                workspace_id=workspace_id,
-                knowledge_base_id=knowledge_base_id,
-                document_id=document_id,
-            )
-
-            # 4. Create document metadata
-            document = await self.repository.create(
-                document_id=document_id,
-                workspace_id=workspace_id,
-                knowledge_base_id=knowledge_base_id,
-                filename=file.filename,
-                content_type=file.content_type,
-                file_size=file_size,
+            await run_in_threadpool(
+                self.storage.upload,
+                file_content=content,
                 storage_path=storage_path,
+                content_type=file.content_type,
             )
 
-            # 5. Commit database transaction
-            await self.db.commit()
+        except Exception:
+            # Leave the durable record for reconciliation.
+            # The remote upload may have succeeded despite a timeout.
+            await self.db.rollback()
+            raise
 
-            return document
+        # 5. Mark document ready for ingestion
+        try:
+            await self.repository.update_status(
+                document=document,
+                status="pending",
+            )
+
+            await self.db.commit()
 
         except Exception:
             await self.db.rollback()
-
-            # Remove uploaded file if database operation fails
-            if storage_path is not None:
-                try:
-                    await run_in_threadpool(
-                        self.storage.delete,
-                        storage_path,
-                    )
-                except Exception:
-                    # TODO: Log cleanup failure for retry
-                    pass
-
+            # Keep the uploading record for reconciliation.
             raise
+
+        return document
