@@ -5,3 +5,6 @@ greenlet
 asyncpg
 alembic
 pgvector
+grpcio
+grpcio-tools
+protobuf

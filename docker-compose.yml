@@ -169,9 +169,11 @@ services:
     env_file:
       - ./service/rag-service/.env
     depends_on:
+      auth-service:
+        condition: service_started
       rag-postgres:
         condition: service_started
-        
+
   # RAG DATABASE
   rag-postgres:
     image: pgvector/pgvector:pg16
