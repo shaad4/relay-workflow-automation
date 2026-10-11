@@ -1,16 +1,19 @@
+
 import uuid
 from pathlib import Path
-from starlette.concurrency import run_in_threadpool
-
-from app.services.file_validator import validate_document
-from app.storage.supabase_storage import SupabaseStorage
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
+from app.models.document import Document
 from app.repositories.document import DocumentRepository
 from app.repositories.knowledge_base import KnowledgeBaseRepository
-from app.models.document import Document
+from app.services.file_validator import (
+    CONTENT_TYPES,
+    validate_document,
+)
+from app.storage.supabase_storage import SupabaseStorage
 
 
 class DocumentService:
@@ -20,7 +23,6 @@ class DocumentService:
         self.repository = DocumentRepository(db)
         self.knowledge_base_repository = KnowledgeBaseRepository(db)
         self.storage = SupabaseStorage()
-
 
     async def validate_knowledge_base(
         self,
@@ -38,7 +40,7 @@ class DocumentService:
                 status_code=404,
                 detail="Knowledge base not found",
             )
-   
+
     async def upload_document(
         self,
         file: UploadFile,
@@ -52,11 +54,16 @@ class DocumentService:
             workspace_id=workspace_id,
         )
 
-        # 2. Validate file before creating DB record
+        # 2. Validate uploaded file
         content = await validate_document(file)
 
+        # 3. Generate document identity and storage path
         document_id = uuid.uuid4()
-        extension = Path(file.filename).suffix.lower()
+        filename = file.filename or ""
+        extension = Path(filename).suffix.lower()
+
+        # Normalize MIME type for PDF, TXT and Markdown
+        normalized_content_type = CONTENT_TYPES[extension]
 
         storage_path = (
             f"workspaces/{workspace_id}/"
@@ -64,36 +71,41 @@ class DocumentService:
             f"documents/{document_id}{extension}"
         )
 
-        # 3. Create durable uploading record
-        document = await self.repository.create(
-            document_id=document_id,
-            workspace_id=workspace_id,
-            knowledge_base_id=knowledge_base_id,
-            filename=file.filename,
-            content_type=file.content_type,
-            file_size=len(content),
-            storage_path=storage_path,
-            status="uploading",
-        )
+        # 4. Create durable uploading record
+        try:
+            document = await self.repository.create(
+                document_id=document_id,
+                workspace_id=workspace_id,
+                knowledge_base_id=knowledge_base_id,
+                filename=filename,
+                content_type=normalized_content_type,
+                file_size=len(content),
+                storage_path=storage_path,
+                status="uploading",
+            )
 
-        await self.db.commit()
+            await self.db.commit()
 
-        # 4. Upload file to Supabase
+        except Exception:
+            await self.db.rollback()
+            raise
+
+        # 5. Upload original file to Supabase Storage
         try:
             await run_in_threadpool(
                 self.storage.upload,
                 file_content=content,
                 storage_path=storage_path,
-                content_type=file.content_type,
+                content_type=normalized_content_type,
             )
 
         except Exception:
-            # Leave the durable record for reconciliation.
-            # The remote upload may have succeeded despite a timeout.
+            # Preserve uploading status for future recovery.
+            # A timeout does not prove the remote upload failed.
             await self.db.rollback()
             raise
 
-        # 5. Mark document ready for ingestion
+        # 6. Mark document pending for ingestion
         try:
             await self.repository.update_status(
                 document=document,
@@ -104,7 +116,7 @@ class DocumentService:
 
         except Exception:
             await self.db.rollback()
-            # Keep the uploading record for reconciliation.
+            # Preserve uploading record for future recovery.
             raise
 
         return document
