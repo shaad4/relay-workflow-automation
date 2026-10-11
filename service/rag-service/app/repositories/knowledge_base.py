@@ -46,3 +46,22 @@ class KnowledgeBaseRepository:
         result = await self.db.execute(statement)
 
         return list(result.scalars().all())
+
+
+    async def get_by_id(
+        self,
+        knowledge_base_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> KnowledgeBase | None:
+
+        statement = (
+            select(KnowledgeBase)
+            .where(
+                KnowledgeBase.id == knowledge_base_id,
+                KnowledgeBase.workspace_id == workspace_id,
+            )
+        )
+
+        result = await self.db.execute(statement)
+
+        return result.scalar_one_or_none()

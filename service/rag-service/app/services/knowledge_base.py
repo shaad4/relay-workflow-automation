@@ -42,3 +42,14 @@ class KnowledgeBaseService:
         return await self.repository.list_by_workspace(
             workspace_id=workspace_id,
         )
+
+    async def get_by_id(
+        self,
+        knowledge_base_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> KnowledgeBase | None:
+
+        return await self.repository.get_by_id(
+            knowledge_base_id=knowledge_base_id,
+            workspace_id=workspace_id,
+        )

@@ -1,5 +1,6 @@
 
 import os
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -11,7 +12,8 @@ router = APIRouter(prefix="/knowledge-bases")
 RAG_SERVICE_URL = os.getenv(
     "RAG_SERVICE_URL",
     "http://rag-service:8000",
-)
+).rstrip("/")
+
 
 HOP_BY_HOP_HEADERS = {
     "connection",
@@ -25,6 +27,10 @@ HOP_BY_HOP_HEADERS = {
 }
 
 
+# --------------------------------------------------
+# Knowledge Base Routes
+# --------------------------------------------------
+
 @router.post("/")
 async def create_knowledge_base(request: Request):
     return await proxy_rag_request(request)
@@ -35,14 +41,67 @@ async def list_knowledge_bases(request: Request):
     return await proxy_rag_request(request)
 
 
-async def proxy_rag_request(request: Request):
-    url = f"{RAG_SERVICE_URL}/knowledge-bases/"
+@router.get("/{knowledge_base_id}/")
+async def get_knowledge_base(
+    request: Request,
+    knowledge_base_id: UUID,
+):
+    return await proxy_rag_request(
+        request,
+        path=str(knowledge_base_id),
+    )
+
+
+# --------------------------------------------------
+# RAG Service Proxy
+# --------------------------------------------------
+
+async def proxy_rag_request(
+    request: Request,
+    path: str = "",
+):
+    # Validate and encode path segments
+    path_segments = path.split("/") if path else []
+
+    if any(segment in {".", ".."} for segment in path_segments):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid RAG path",
+        )
+
+    from urllib.parse import quote
+
+    encoded_path = "/".join(
+        quote(segment, safe="")
+        for segment in path_segments
+    )
+
+    base_url = f"{RAG_SERVICE_URL}/knowledge-bases"
+
+    url = (
+        f"{base_url}/{encoded_path}/"
+        if encoded_path
+        else f"{base_url}/"
+    )
+
+    # Forward request headers
+    excluded_request_headers = HOP_BY_HOP_HEADERS | {
+        "host",
+        "content-length",
+    }
+
+    # Headers listed in Connection are also hop-by-hop
+    connection_headers = {
+        name.strip().lower()
+        for name in request.headers.get("connection", "").split(",")
+        if name.strip()
+    }
 
     headers = {
         key: value
         for key, value in request.headers.items()
-        if key.lower() not in HOP_BY_HOP_HEADERS
-        and key.lower() not in {"host", "content-length"}
+        if key.lower()
+        not in excluded_request_headers | connection_headers
     }
 
     try:
@@ -64,14 +123,23 @@ async def proxy_rag_request(request: Request):
             detail="RAG Service unavailable",
         ) from exc
 
+    # Filter response headers
+    excluded_response_headers = HOP_BY_HOP_HEADERS | {
+        "content-length",
+        "content-encoding",
+    }
+
+    response_connection_headers = {
+        name.strip().lower()
+        for name in response.headers.get("connection", "").split(",")
+        if name.strip()
+    }
+
     response_headers = {
         key: value
         for key, value in response.headers.items()
-        if key.lower() not in HOP_BY_HOP_HEADERS
-        and key.lower() not in {
-            "content-length",
-            "content-encoding",
-        }
+        if key.lower()
+        not in excluded_response_headers | response_connection_headers
     }
 
     return Response(
