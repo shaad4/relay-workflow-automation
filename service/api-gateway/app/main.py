@@ -14,6 +14,8 @@ from app.routes.public_webhooks import router as public_webhooks_router
 
 from app.routes.connections import router as connections_router
 from app.routes.approvals import router as approvals_router
+from app.routes.knowledge_bases import router as knowledge_base_router
+
 
 load_dotenv()
 
@@ -67,6 +69,7 @@ app.include_router(integration_router)
 app.include_router(public_webhooks_router)
 app.include_router(connections_router)
 app.include_router(approvals_router)
+app.include_router(knowledge_base_router)
 
 
 @app.get("/health")

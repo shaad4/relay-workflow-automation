@@ -39,6 +39,8 @@ services:
     depends_on:
       auth-service:
         condition: service_started
+      rag-service:
+        condition: service_started
 
   # WORKFLOW SERVICE
   workflow-service:
