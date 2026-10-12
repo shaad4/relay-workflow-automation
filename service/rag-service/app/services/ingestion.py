@@ -119,3 +119,88 @@ class IngestionService:
         except Exception:
             await self.db.rollback()
             raise
+
+
+
+    async def ingest_document(
+        self,
+        document_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> int:
+        """Process a document and persist its embeddings."""
+
+        document = await self.document_repository.get_by_id(
+            document_id=document_id,
+            workspace_id=workspace_id,
+        )
+
+        if document is None:
+            raise ValueError("Document not found")
+
+        if document.status != "pending":
+            raise ValueError("Document is not pending ingestion")
+
+        try:
+            # 1. Parse, clean and chunk
+            await self.document_repository.update_status(
+                document, "parsing"
+            )
+            await self.db.commit()
+
+            # prepare_document currently requires pending.
+            # Use the processing pipeline directly here.
+            content = await run_in_threadpool(
+                self.storage.download,
+                document.storage_path,
+            )
+
+            chunks = await run_in_threadpool(
+                process_document,
+                content,
+                document.content_type,
+            )
+
+            await self.document_repository.update_status(
+                document, "chunking"
+            )
+            await self.db.commit()
+
+            # 2. Generate embeddings
+            await self.document_repository.update_status(
+                document, "embedding"
+            )
+            await self.db.commit()
+
+            embeddings = await self.prepare_embeddings(chunks)
+
+            # 3. Save chunks and mark ready atomically
+            await self.chunk_repository.create_chunks(
+                document_id=document_id,
+                workspace_id=workspace_id,
+                chunks=chunks,
+                embeddings=embeddings,
+            )
+
+            await self.document_repository.update_status(
+                document, "ready"
+            )
+
+            await self.db.commit()
+
+            return len(chunks)
+
+        except Exception:
+            await self.db.rollback()
+
+            try:
+                await self.document_repository.update_status(
+                    document,
+                    "failed",
+                    error_message="Document ingestion failed",
+                )
+                await self.db.commit()
+            except Exception:
+                await self.db.rollback()
+                raise
+
+            raise
