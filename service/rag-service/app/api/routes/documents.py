@@ -93,3 +93,31 @@ async def list_documents(
         workspace_id=UUID(identity["workspace_id"]),
         knowledge_base_id=knowledge_base_id,
     )
+
+
+
+@router.delete(
+    "/{knowledge_base_id}/documents/{document_id}/",
+    status_code=204,
+)
+async def delete_document(
+    knowledge_base_id: UUID,
+    document_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    service = DocumentService(db)
+
+    deleted = await service.delete_document(
+        document_id=document_id,
+        workspace_id=UUID(identity["workspace_id"]),
+        knowledge_base_id=knowledge_base_id,
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    return None
