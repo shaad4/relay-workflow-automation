@@ -96,3 +96,24 @@ class DocumentRepository:
         result = await self.db.execute(statement)
 
         return result.scalar_one_or_none() is not None
+
+
+    async def list_by_knowledge_base(
+        self,
+        workspace_id: uuid.UUID,
+        knowledge_base_id: uuid.UUID,
+    ) -> list[Document]:
+        """List documents belonging to a workspace's knowledge base."""
+
+        statement = (
+            select(Document)
+            .where(
+                Document.workspace_id == workspace_id,
+                Document.knowledge_base_id == knowledge_base_id,
+            )
+            .order_by(Document.created_at.desc())
+        )
+
+        result = await self.db.execute(statement)
+
+        return list(result.scalars().all())

@@ -120,3 +120,23 @@ class DocumentService:
             raise
 
         return document
+
+
+    async def list_documents(
+        self,
+        workspace_id: uuid.UUID,
+        knowledge_base_id: uuid.UUID,
+    ) -> list[Document]:
+        """List documents belonging to a knowledge base."""
+
+        # Verify knowledge base belongs to workspace
+        await self.validate_knowledge_base(
+            knowledge_base_id=knowledge_base_id,
+            workspace_id=workspace_id,
+        )
+
+        # Retrieve documents
+        return await self.repository.list_by_knowledge_base(
+            workspace_id=workspace_id,
+            knowledge_base_id=knowledge_base_id,
+        )

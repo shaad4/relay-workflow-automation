@@ -76,3 +76,20 @@ async def upload_document(
     # 3. Return pending document
     return document
 
+
+
+@router.get(
+    "/{knowledge_base_id}/documents/",
+    response_model=list[DocumentResponse],
+)
+async def list_documents(
+    knowledge_base_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    service = DocumentService(db)
+
+    return await service.list_documents(
+        workspace_id=UUID(identity["workspace_id"]),
+        knowledge_base_id=knowledge_base_id,
+    )
