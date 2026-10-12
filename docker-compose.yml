@@ -203,6 +203,31 @@ services:
       timeout: 3s
       retries: 5
 
+  # RAG CELERY WORKER
+  rag-celery-worker:
+    build:
+      context: ./service/rag-service
+
+    container_name: relay-rag-celery-worker
+
+    command: >
+      celery -A app.celery_app:celery_app
+      worker
+      --loglevel=info
+      --queues=rag_ingestion
+      --concurrency=1
+
+    env_file:
+      - ./service/rag-service/.env
+
+    depends_on:
+      rag-redis:
+        condition: service_healthy
+      rag-postgres:
+        condition: service_started
+
+    restart: unless-stopped
+
 
   # KAFKA BROKER
   kafka:
