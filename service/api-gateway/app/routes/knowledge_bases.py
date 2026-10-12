@@ -82,6 +82,15 @@ async def search_knowledge_base(
         path=f"{knowledge_base_id}/search",
     )
 
+@router.get("/{knowledge_base_id}/documents/")
+async def list_documents(
+    request: Request,
+    knowledge_base_id: UUID,
+):
+    return await proxy_rag_request(
+        request,
+        path=f"{knowledge_base_id}/documents",
+    )
 
 
 # --------------------------------------------------
