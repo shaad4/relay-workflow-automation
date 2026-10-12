@@ -189,6 +189,20 @@ services:
     volumes:
       - rag_postgres_data:/var/lib/postgresql/data
 
+  # RAG CELERY BROKER
+  rag-redis:
+    image: redis:7-alpine
+    container_name: relay-rag-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - rag_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 
   # KAFKA BROKER
   kafka:
@@ -256,4 +270,5 @@ volumes:
   action_postgres_data:
   execution_postgres_data:
   rag_postgres_data:
+  rag_redis_data:
   kafka_data:
