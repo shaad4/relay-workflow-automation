@@ -105,6 +105,20 @@ async def delete_document(
         path=f"{knowledge_base_id}/documents/{document_id}",
     )
 
+@router.post(
+    "/{knowledge_base_id}/documents/{document_id}/retry/"
+)
+async def retry_document(
+    request: Request,
+    knowledge_base_id: UUID,
+    document_id: UUID,
+):
+    return await proxy_rag_request(
+        request,
+        path=f"{knowledge_base_id}/documents/{document_id}/retry",
+    )
+
+
 # --------------------------------------------------
 # RAG Service Proxy
 # --------------------------------------------------
