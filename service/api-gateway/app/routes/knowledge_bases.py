@@ -92,6 +92,18 @@ async def list_documents(
         path=f"{knowledge_base_id}/documents",
     )
 
+@router.delete(
+    "/{knowledge_base_id}/documents/{document_id}/"
+)
+async def delete_document(
+    request: Request,
+    knowledge_base_id: UUID,
+    document_id: UUID,
+):
+    return await proxy_rag_request(
+        request,
+        path=f"{knowledge_base_id}/documents/{document_id}",
+    )
 
 # --------------------------------------------------
 # RAG Service Proxy
