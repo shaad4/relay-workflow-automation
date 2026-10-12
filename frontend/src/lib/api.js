@@ -68,14 +68,19 @@ export async function apiRequest(
   endpoint,
   options = {}
 ) {
-  const request = (requestOptions) => fetch(`${API_URL}${endpoint}`, {
-    ...requestOptions,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(requestOptions.headers || {}),
-    },
-  });
+  const request = (requestOptions) => {
+    const headers = new Headers(requestOptions.headers);
+    if (typeof FormData !== "undefined" && requestOptions.body instanceof FormData) {
+      headers.delete("Content-Type");
+    } else if (!headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    return fetch(`${API_URL}${endpoint}`, {
+      ...requestOptions,
+      credentials: "include",
+      headers,
+    });
+  };
 
   let response = await request(options);
   let text = await response.text();
@@ -88,6 +93,9 @@ export async function apiRequest(
       response = await request(options);
       text = await response.text();
       data = parseResponse(response, text);
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent("relay:session-expired"));
+      }
     }
   }
 

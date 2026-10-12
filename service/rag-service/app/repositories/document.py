@@ -1,7 +1,6 @@
 
 import uuid
 
-from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -165,6 +164,95 @@ class DocumentRepository:
                 status="pending",
                 error_message=None,
             )
+            .returning(Document.id)
+        )
+
+        result = await self.db.execute(statement)
+
+        return result.scalar_one_or_none() is not None
+
+
+    async def complete_ingestion(
+        self,
+        document_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> bool:
+        """Mark document ready only if it is still embedding."""
+
+        statement = (
+            update(Document)
+            .where(
+                Document.id == document_id,
+                Document.workspace_id == workspace_id,
+                Document.status == "embedding",
+            )
+            .values(
+                status="ready",
+                error_message=None,
+            )
+            .returning(Document.id)
+        )
+
+        result = await self.db.execute(statement)
+
+        return result.scalar_one_or_none() is not None
+
+
+    async def fail_ingestion(
+        self,
+        document_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        error_message: str = "Document ingestion failed",
+    ) -> bool:
+        """Fail a document only while it is actively processing."""
+
+        statement = (
+            update(Document)
+            .where(
+                Document.id == document_id,
+                Document.workspace_id == workspace_id,
+                Document.status.in_([
+                    "parsing",
+                    "chunking",
+                    "embedding",
+                ]),
+            )
+            .values(
+                status="failed",
+                error_message=error_message,
+            )
+            .returning(Document.id)
+        )
+
+        result = await self.db.execute(statement)
+
+        return result.scalar_one_or_none() is not None
+
+    async def transition_ingestion_status(
+        self,
+        document_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        expected_status: str,
+        new_status: str,
+    ) -> bool:
+        """Update ingestion status only if current status matches."""
+
+        allowed_transitions = {
+            ("parsing", "chunking"),
+            ("chunking", "embedding"),
+        }
+
+        if (expected_status, new_status) not in allowed_transitions:
+            raise ValueError("Invalid ingestion status transition")
+
+        statement = (
+            update(Document)
+            .where(
+                Document.id == document_id,
+                Document.workspace_id == workspace_id,
+                Document.status == expected_status,
+            )
+            .values(status=new_status)
             .returning(Document.id)
         )
 
