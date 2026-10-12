@@ -2,7 +2,7 @@
 import uuid
 
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document
@@ -74,3 +74,25 @@ class DocumentRepository:
         result = await self.db.execute(statement)
 
         return result.scalar_one_or_none()
+
+    async def claim_for_ingestion(
+        self,
+        document_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> bool:
+        """Atomically claim a pending document for ingestion."""
+
+        statement = (
+            update(Document)
+            .where(
+                Document.id == document_id,
+                Document.workspace_id == workspace_id,
+                Document.status == "pending",
+            )
+            .values(status="parsing")
+            .returning(Document.id)
+        )
+
+        result = await self.db.execute(statement)
+
+        return result.scalar_one_or_none() is not None
