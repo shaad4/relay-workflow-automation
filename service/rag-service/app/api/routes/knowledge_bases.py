@@ -11,6 +11,9 @@ from app.schemas.knowledge_base import (
 )
 from app.services.knowledge_base import KnowledgeBaseService
 
+from app.schemas.search import SearchRequest, SearchResponse
+from app.services.retrieval import RetrievalService
+
 
 router = APIRouter(
     prefix="/knowledge-bases",
@@ -100,3 +103,52 @@ async def delete_knowledge_base(
         )
 
     return None
+
+
+
+@router.post(
+    "/{knowledge_base_id}/search/",
+    response_model=SearchResponse,
+)
+async def search_knowledge_base(
+    knowledge_base_id: UUID,
+    data: SearchRequest,
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    service = RetrievalService(db)
+
+    # Validate query before calling the embedding API
+    query = data.query.strip()
+
+    if not query:
+        raise HTTPException(
+            status_code=422,
+            detail="Search query cannot be empty",
+        )
+
+    # Verify knowledge base ownership
+    knowledge_base = await service.knowledge_base_repository.get_by_id(
+        knowledge_base_id=knowledge_base_id,
+        workspace_id=UUID(identity["workspace_id"]),
+    )
+
+    if knowledge_base is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Knowledge base not found",
+        )
+
+    results = await service.retrieve(
+        workspace_id=UUID(identity["workspace_id"]),
+        knowledge_base_id=knowledge_base_id,
+        query=query,
+        top_k=data.top_k,
+    )
+
+    return SearchResponse(
+        knowledge_base_id=knowledge_base_id,
+        query=query,
+        results=results,
+    )
+

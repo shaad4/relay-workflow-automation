@@ -72,6 +72,15 @@ async def upload_document(
         path=f"{knowledge_base_id}/documents",
     )
 
+@router.post("/{knowledge_base_id}/search/")
+async def search_knowledge_base(
+    request: Request,
+    knowledge_base_id: UUID,
+):
+    return await proxy_rag_request(
+        request,
+        path=f"{knowledge_base_id}/search",
+    )
 
 
 
