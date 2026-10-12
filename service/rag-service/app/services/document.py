@@ -140,3 +140,75 @@ class DocumentService:
             workspace_id=workspace_id,
             knowledge_base_id=knowledge_base_id,
         )
+
+
+    
+    async def delete_document(
+        self,
+        document_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        knowledge_base_id: uuid.UUID,
+    ) -> bool:
+        """Delete a document and its associated storage object."""
+
+        # 1. Verify knowledge base ownership
+        await self.validate_knowledge_base(
+            knowledge_base_id=knowledge_base_id,
+            workspace_id=workspace_id,
+        )
+
+        # 2. Retrieve document
+        document = await self.repository.get_by_id(
+            document_id=document_id,
+            workspace_id=workspace_id,
+        )
+
+        if (
+            document is None
+            or document.knowledge_base_id != knowledge_base_id
+        ):
+            return False
+
+        # 3. Prevent deletion during active ingestion
+        if document.status in {
+            "uploading",
+            "parsing",
+            "chunking",
+            "embedding",
+        }:
+            raise HTTPException(
+                status_code=409,
+                detail="Document is currently processing",
+            )
+
+        # 4. Delete original file from Supabase
+        try:
+            await run_in_threadpool(
+                self.storage.delete,
+                document.storage_path,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Failed to delete document from storage",
+            ) from exc
+
+        # 5. Delete database record
+        try:
+            deleted = await self.repository.delete(
+                document_id=document_id,
+                workspace_id=workspace_id,
+                knowledge_base_id=knowledge_base_id,
+            )
+
+            if not deleted:
+                await self.db.rollback()
+                return False
+
+            await self.db.commit()
+            return True
+
+        except Exception:
+            await self.db.rollback()
+            raise
+

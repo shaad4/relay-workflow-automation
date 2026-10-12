@@ -117,3 +117,31 @@ class DocumentRepository:
         result = await self.db.execute(statement)
 
         return list(result.scalars().all())
+
+    async def delete(
+        self,
+        document_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        knowledge_base_id: uuid.UUID,
+    ) -> bool:
+        """Delete a document belonging to a workspace and knowledge base."""
+
+        statement = (
+            select(Document)
+            .where(
+                Document.id == document_id,
+                Document.workspace_id == workspace_id,
+                Document.knowledge_base_id == knowledge_base_id,
+            )
+        )
+
+        result = await self.db.execute(statement)
+        document = result.scalar_one_or_none()
+
+        if document is None:
+            return False
+
+        await self.db.delete(document)
+        await self.db.flush()
+
+        return True
