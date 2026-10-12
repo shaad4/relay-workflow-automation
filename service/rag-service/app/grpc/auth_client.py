@@ -2,7 +2,7 @@ import os
 
 import grpc
 
-from app.grpc.generated import auth_pb2, auth_pb2_grpc
+from app.grpc.generated.auth import auth_pb2, auth_pb2_grpc
 
 
 AUTH_GRPC_TARGET = os.getenv(
