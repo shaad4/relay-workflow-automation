@@ -3,7 +3,6 @@ import uuid
 
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document
@@ -56,3 +55,22 @@ class DocumentRepository:
 
         await self.db.flush()
         return document
+
+    async def get_by_id(
+        self,
+        document_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> Document | None:
+        """Retrieve a document belonging to a workspace."""
+
+        statement = (
+            select(Document)
+            .where(
+                Document.id == document_id,
+                Document.workspace_id == workspace_id,
+            )
+        )
+
+        result = await self.db.execute(statement)
+
+        return result.scalar_one_or_none()
