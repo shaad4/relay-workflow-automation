@@ -12,3 +12,4 @@ supabase
 python-multipart
 pypdf
 langchain-text-splitters
+openai
