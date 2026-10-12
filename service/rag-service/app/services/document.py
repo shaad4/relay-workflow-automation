@@ -212,3 +212,62 @@ class DocumentService:
             await self.db.rollback()
             raise
 
+    
+    async def retry_document(
+        self,
+        document_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        knowledge_base_id: uuid.UUID,
+    ) -> bool:
+        """Reset a failed document to pending for reprocessing."""
+
+        # 1. Validate knowledge base ownership
+        await self.validate_knowledge_base(
+            knowledge_base_id=knowledge_base_id,
+            workspace_id=workspace_id,
+        )
+
+        # 2. Retrieve the document
+        document = await self.repository.get_by_id(
+            document_id=document_id,
+            workspace_id=workspace_id,
+        )
+
+        if (
+            document is None
+            or document.knowledge_base_id != knowledge_base_id
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found",
+            )
+
+        # 3. Only failed documents can be retried
+        if document.status != "failed":
+            raise HTTPException(
+                status_code=409,
+                detail="Only failed documents can be retried",
+            )
+
+        # 4. Atomically reset failed -> pending
+        try:
+            reset = await self.repository.reset_failed_document(
+                document_id=document_id,
+                workspace_id=workspace_id,
+            )
+
+            if not reset:
+                await self.db.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail="Document is no longer eligible for retry",
+                )
+
+            await self.db.commit()
+
+            return True
+
+        except Exception:
+            await self.db.rollback()
+            raise
+

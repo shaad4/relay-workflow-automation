@@ -145,3 +145,29 @@ class DocumentRepository:
         await self.db.flush()
 
         return True
+
+
+    async def reset_failed_document(
+        self,
+        document_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> bool:
+        """Atomically reset a failed document for retry."""
+
+        statement = (
+            update(Document)
+            .where(
+                Document.id == document_id,
+                Document.workspace_id == workspace_id,
+                Document.status == "failed",
+            )
+            .values(
+                status="pending",
+                error_message=None,
+            )
+            .returning(Document.id)
+        )
+
+        result = await self.db.execute(statement)
+
+        return result.scalar_one_or_none() is not None

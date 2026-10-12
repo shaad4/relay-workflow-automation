@@ -121,3 +121,68 @@ async def delete_document(
         )
 
     return None
+
+
+
+@router.post(
+    "/{knowledge_base_id}/documents/{document_id}/retry/",
+    status_code=202,
+)
+async def retry_document(
+    knowledge_base_id: UUID,
+    document_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    workspace_id = UUID(identity["workspace_id"])
+
+    service = DocumentService(db)
+
+    # 1. Validate ownership and reset failed -> pending
+    await service.retry_document(
+        document_id=document_id,
+        workspace_id=workspace_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+
+    # 2. Queue ingestion through Celery
+    try:
+        task = await run_in_threadpool(
+            ingest_document_task.delay,
+            str(document_id),
+            str(workspace_id),
+        )
+
+    except Exception as exc:
+        # Restore failed only if the document is still pending.
+        # The broker may have accepted the task before an error.
+        from sqlalchemy import update
+        from app.models.document import Document
+
+        try:
+            await db.execute(
+                update(Document)
+                .where(
+                    Document.id == document_id,
+                    Document.workspace_id == workspace_id,
+                    Document.status == "pending",
+                )
+                .values(
+                    status="failed",
+                    error_message="Unable to queue ingestion",
+                )
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to queue document ingestion",
+        ) from exc
+
+    return {
+        "document_id": str(document_id),
+        "status": "queued",
+        "task_id": task.id,
+    }
