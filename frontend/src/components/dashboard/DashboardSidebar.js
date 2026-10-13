@@ -224,7 +224,7 @@ export default function DashboardSidebar({
           )}
           <nav aria-label="Resource Navigation" className="space-y-1">
             {resourceNavItems.map((item) => {
-              const isActive = pathname === item.href || (item.href === "/connections" && pathname.startsWith("/connections/"));
+              const isActive = pathname === item.href || (item.href === "/connections" && pathname.startsWith("/connections/")) || (item.href === "/dashboard/knowledge-bases" && pathname.startsWith("/dashboard/knowledge-bases/"));
               const isConnections = item.label === "Connections";
               return (
                 <div key={item.href}>

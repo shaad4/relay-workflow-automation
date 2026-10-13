@@ -39,6 +39,8 @@ services:
     depends_on:
       auth-service:
         condition: service_started
+      rag-service:
+        condition: service_started
 
   # WORKFLOW SERVICE
   workflow-service:
@@ -126,17 +128,24 @@ services:
     volumes:
       - action_postgres_data:/var/lib/postgresql/data
 
+  
   # EXECUTION SERVICE
   execution-service:
     build:
       context: ./service/execution-service
+
     container_name: relay-execution-service
+
     ports:
       - "${EXECUTION_SERVICE_PORT:-8005}:8000"
+
     env_file:
       - ./service/execution-service/.env
+
     environment:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      RAG_GRPC_ADDRESS: rag-service:50056
+
     depends_on:
       action-service:
         condition: service_started
@@ -144,6 +153,9 @@ services:
         condition: service_started
       kafka-init:
         condition: service_completed_successfully
+      rag-service:
+        condition: service_started
+
 
   # EXECUTION DATABASE
   execution-postgres:
@@ -157,6 +169,75 @@ services:
       - "127.0.0.1:${EXECUTION_DB_PORT:-5437}:5432"
     volumes:
       - execution_postgres_data:/var/lib/postgresql/data
+
+
+  # RAG SERVICE
+  rag-service:
+    build:
+      context: ./service/rag-service
+    container_name: relay-rag-service
+    ports:
+      - "127.0.0.1:${RAG_SERVICE_PORT:-8006}:8000"
+    env_file:
+      - ./service/rag-service/.env
+    depends_on:
+      auth-service:
+        condition: service_started
+      rag-postgres:
+        condition: service_started
+
+  # RAG DATABASE
+  rag-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: relay-rag-postgres
+    environment:
+      POSTGRES_DB: ${RAG_DB_NAME:?required}
+      POSTGRES_USER: ${RAG_DB_USER:?required}
+      POSTGRES_PASSWORD: ${RAG_DB_PASSWORD:?required}
+    ports:
+      - "127.0.0.1:${RAG_DB_PORT:-5438}:5432"
+    volumes:
+      - rag_postgres_data:/var/lib/postgresql/data
+
+  # RAG CELERY BROKER
+  rag-redis:
+    image: redis:7-alpine
+    container_name: relay-rag-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - rag_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # RAG CELERY WORKER
+  rag-celery-worker:
+    build:
+      context: ./service/rag-service
+
+    container_name: relay-rag-celery-worker
+
+    command: >
+      celery -A app.celery_app:celery_app
+      worker
+      --loglevel=info
+      --queues=rag_ingestion
+      --concurrency=1
+
+    env_file:
+      - ./service/rag-service/.env
+
+    depends_on:
+      rag-redis:
+        condition: service_healthy
+      rag-postgres:
+        condition: service_started
+
+    restart: unless-stopped
+
 
   # KAFKA BROKER
   kafka:
@@ -223,4 +304,6 @@ volumes:
   integration_postgres_data:
   action_postgres_data:
   execution_postgres_data:
+  rag_postgres_data:
+  rag_redis_data:
   kafka_data:

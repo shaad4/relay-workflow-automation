@@ -8,13 +8,15 @@ import {
   addEdge,
 } from "@xyflow/react";
 
+import { workflowSaveSnapshot, workflowChangedDuringSave } from "./workflowSaveState";
 import WorkflowToolbar from "./WorkflowToolbar";
 import NodeLibrary from "./NodeLibrary";
 import WorkflowCanvas from "./WorkflowCanvas";
 import NodeInspector from "./NodeInspector";
 import WorkflowValidation from "./WorkflowValidation";
 import { clearExampleNodeConfig, getNodeDefinition } from "./nodeDefinitions";
-import { validateWorkflowConfiguration } from "./configValidation";
+import { normalizeRAGConfiguration, ragKnowledgeBaseId, validateWorkflowConfiguration } from "./configValidation";
+import { listKnowledgeBases } from "@/services/knowledgeBases";
 import {
   createWorkflowNode,
   updateWorkflowNode,
@@ -102,6 +104,24 @@ function EdgeInspector({ edge, isReadOnly, onConditionChange, onDelete, onClose 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data transformation helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+async function validateRAGKnowledgeBases(nodes) {
+  const ragNodes = nodes.filter((node) => node.data?.typeId === "ai.rag_search");
+  if (!ragNodes.length) return [];
+  try {
+    const knowledgeBases = await listKnowledgeBases();
+    if (!Array.isArray(knowledgeBases)) throw new Error("Invalid knowledge base list");
+    const availableIds = new Set(knowledgeBases.map((item) => item.id));
+    return ragNodes.filter((node) => !availableIds.has(ragKnowledgeBaseId(node.data.config))).map((node) => ({
+      code: "NODE_CONFIG_KNOWLEDGE_BASE_ID",
+      nodeId: node.data.nodeId,
+      field: "knowledge_base_id",
+      message: `${node.data.label || "RAG Search"}: Knowledge base is unavailable. Choose another knowledge base.`,
+    }));
+  } catch {
+    return [{ code: "KNOWLEDGE_BASE_CHECK_FAILED", message: "Unable to verify knowledge bases. Please retry validation before publishing." }];
+  }
+}
 
 function removeNodeOutputReferences(value, nodeId) {
   if (typeof value === "string") {
@@ -342,6 +362,9 @@ export default function WorkflowBuilder({
   const [redoStack, setRedoStack] = useState([]);
   const historyFrameRef = useRef(null);
   const historyTimerRef = useRef(null);
+  const editRevisionRef = useRef(0);
+  const savingRef = useRef(false);
+  const publishingRef = useRef(false);
   const canvasStateRef = useRef({ nodes: rfNodes, edges: rfEdges });
   const allowNextPopRef = useRef(false);
   // saveState: 'saved' | 'unsaved' | 'saving' | 'failed'
@@ -481,6 +504,7 @@ export default function WorkflowBuilder({
 
   // ── Mark unsaved helper ───────────────────────────────────────────────────
   const markUnsaved = useCallback(() => {
+    editRevisionRef.current += 1;
     setSaveState((prev) => (prev !== "saving" ? "unsaved" : prev));
   }, []);
 
@@ -508,7 +532,7 @@ export default function WorkflowBuilder({
   }, [setNodes, setEdges, markUnsaved]);
 
   const handleUndo = useCallback(() => {
-    if (isCanvasReadOnly) return;
+    if (isCanvasReadOnly || publishingRef.current) return;
     let history = undoStack;
     if (historyTimerRef.current && historyFrameRef.current) {
       clearTimeout(historyTimerRef.current);
@@ -525,7 +549,7 @@ export default function WorkflowBuilder({
   }, [undoStack, isCanvasReadOnly, applyHistorySnapshot]);
 
   const handleRedo = useCallback(() => {
-    if (redoStack.length === 0 || isCanvasReadOnly) return;
+    if (redoStack.length === 0 || isCanvasReadOnly || publishingRef.current) return;
     const next = redoStack[redoStack.length - 1];
     setRedoStack((stack) => stack.slice(0, -1));
     setUndoStack((stack) => [...stack, canvasStateRef.current]);
@@ -543,7 +567,7 @@ export default function WorkflowBuilder({
   // ── Node: drop from library ───────────────────────────────────────────────
   const handleDropNode = useCallback(
     (nodeDef, position) => {
-      if (isCanvasReadOnly) return;
+      if (isCanvasReadOnly || publishingRef.current) return;
       if (nodeDef.typeId?.startsWith("trigger.") && nodes.some((node) => node.data?.typeId?.startsWith("trigger."))) {
         showBuilderNotice("A workflow can only have one trigger. Remove the existing trigger before adding another.");
         return;
@@ -590,7 +614,7 @@ export default function WorkflowBuilder({
   // ── Node: drag-stop (position update, local only) ─────────────────────────
   const handleNodeDragStop = useCallback(
     () => {
-      if (isCanvasReadOnly) return;
+      if (isCanvasReadOnly || publishingRef.current) return;
       if (!historyFrameRef.current) historyFrameRef.current = canvasStateRef.current;
       if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
       const frame = historyFrameRef.current;
@@ -608,7 +632,7 @@ export default function WorkflowBuilder({
   }, [isCanvasReadOnly]);
 
   const handleReconnect = useCallback((oldEdge, connection) => {
-    if (isCanvasReadOnly) return;
+    if (isCanvasReadOnly || publishingRef.current) return;
     recordHistory();
     setEdges((current) => current.map((edge) => edge.id === oldEdge.id ? {
       ...edge,
@@ -621,7 +645,7 @@ export default function WorkflowBuilder({
   }, [isCanvasReadOnly, markUnsaved, setEdges, recordHistory]);
 
   const handleEdgeConditionChange = useCallback((value) => {
-    if (isCanvasReadOnly || !selectedEdgeId) return;
+    if (isCanvasReadOnly || publishingRef.current || !selectedEdgeId) return;
     recordHistory();
     setEdges((current) => current.map((edge) => edge.id === selectedEdgeId
       ? { ...edge, data: { ...edge.data, condition: value || null }, label: value || "" }
@@ -630,7 +654,7 @@ export default function WorkflowBuilder({
   }, [isCanvasReadOnly, selectedEdgeId, setEdges, markUnsaved, recordHistory]);
 
   const handleDeleteEdge = useCallback((id) => {
-    if (isCanvasReadOnly) return;
+    if (isCanvasReadOnly || publishingRef.current) return;
     recordHistory();
     setEdges((current) => current.filter((edge) => edge.id !== id));
     setSelectedEdgeId(null);
@@ -640,7 +664,7 @@ export default function WorkflowBuilder({
   // ── Node: update config from inspector (local only) ───────────────────────
   const handleUpdateNodeData = useCallback(
     (id, newData) => {
-      if (isCanvasReadOnly) return;
+      if (isCanvasReadOnly || publishingRef.current) return;
       recordHistory();
       setNodes((nds) =>
         nds.map((n) =>
@@ -657,7 +681,7 @@ export default function WorkflowBuilder({
   // ── Node: delete (local only) ─────────────────────────────────────────────
   const handleDeleteNode = useCallback(
     (id) => {
-      if (isCanvasReadOnly) return;
+      if (isCanvasReadOnly || publishingRef.current) return;
       recordHistory();
       const deletedNode = nodes.find((node) => node.id === id);
       const deletedLogicalId = deletedNode?.data?.nodeId || deletedNode?.id || id;
@@ -678,7 +702,7 @@ export default function WorkflowBuilder({
   );
 
   const handleDuplicateNode = useCallback((id) => {
-    if (isCanvasReadOnly) return;
+    if (isCanvasReadOnly || publishingRef.current) return;
     const original = nodes.find((node) => node.id === id);
     if (!original) return;
     recordHistory();
@@ -726,7 +750,7 @@ export default function WorkflowBuilder({
   // ── Edge: connect (local only) ────────────────────────────────────────────
   const handleConnect = useCallback(
     (connection) => {
-      if (isCanvasReadOnly) return;
+      if (isCanvasReadOnly || publishingRef.current) return;
       recordHistory();
       const tempEdgeId = `temp-edge-${Date.now()}`;
       const newEdge = {
@@ -746,9 +770,13 @@ export default function WorkflowBuilder({
   // ── Edge: changes (local; deletes mark unsaved) ───────────────────────────
   const handleEdgesChange = useCallback(
     (changes) => {
+      if (isCanvasReadOnly || publishingRef.current) {
+        onEdgesChange(changes.filter((change) => change.type === "select"));
+        return;
+      }
       if (changes.some((change) => change.type === "remove")) recordHistory();
       onEdgesChange(changes);
-      if (isCanvasReadOnly) return;
+      if (isCanvasReadOnly || publishingRef.current) return;
       const hasRemoval = changes.some((c) => c.type === "remove");
       if (hasRemoval) markUnsaved();
     },
@@ -756,13 +784,17 @@ export default function WorkflowBuilder({
   );
 
   const handleNodeChanges = useCallback((changes) => {
+    if (isCanvasReadOnly || publishingRef.current) {
+      onNodesChange(changes.filter((change) => change.type === "select" || change.type === "dimensions"));
+      return;
+    }
     const removedIds = new Set(changes.filter((change) => change.type === "remove").map((change) => change.id));
     const removedLogicalIds = nodes
       .filter((node) => removedIds.has(node.id))
       .map((node) => node.data?.nodeId || node.id);
     if (removedIds.size) recordHistory();
     onNodesChange(changes);
-    if (isCanvasReadOnly) return;
+    if (isCanvasReadOnly || publishingRef.current) return;
     if (removedLogicalIds.length) {
       setNodes((currentNodes) => currentNodes.map((node) => {
         let config = node.data?.config;
@@ -777,16 +809,27 @@ export default function WorkflowBuilder({
   }, [nodes, onNodesChange, isCanvasReadOnly, markUnsaved, recordHistory, setNodes]);
 
   // ── SAVE: diff-based sync to backend ─────────────────────────────────────
-  const handleSave = useCallback(async () => {
-    if (isCanvasReadOnly || saveState === "saving") return false;
+  const handleSave = useCallback(async ({ forPublish = false } = {}) => {
+    if (isCanvasReadOnly || savingRef.current || (publishingRef.current && !forPublish)) return false;
+    const ragErrors = validateWorkflowConfiguration(nodes.filter((node) => node.data?.typeId === "ai.rag_search"), [], { includeStructure: false });
+    if (ragErrors.length) {
+      setValidationResult({ isValid: false, errors: ragErrors });
+      setValidationOpen(true);
+      return false;
+    }
+    savingRef.current = true;
+    const savedRevision = editRevisionRef.current;
     setSaveState("saving");
     setSaveError(null);
 
     // Snapshot local state at this moment
     // Note: nodes/edges from closure captured at call time
     // We need latest — use functional form trick below via ref
-    const nodesSnap = [...nodes];
+    const nodesSnap = nodes.map((node) => node.data?.typeId === "ai.rag_search"
+      ? { ...node, data: { ...node.data, config: normalizeRAGConfiguration(node.data.config) } }
+      : node);
     const edgesSnap = [...edges];
+    const savedSnapshot = workflowSaveSnapshot(nodesSnap, edgesSnap);
     const srvNodes = serverNodesRef.current;
     const srvEdges = serverEdgesRef.current;
 
@@ -834,6 +877,7 @@ export default function WorkflowBuilder({
 
     // Map: tempNodeId → realUUID (populated as we create nodes)
     const tempToReal = {};
+    const tempEdgeToReal = {};
 
     try {
       // ── 1. Create new nodes ──────────────────────────────────────────────
@@ -917,7 +961,6 @@ export default function WorkflowBuilder({
         }
       }
 
-      const tempEdgeToReal = {};
       for (const edge of newEdges) {
         const sourceRfId = tempToReal[edge.source] ?? edge.source;
         const targetRfId = tempToReal[edge.target] ?? edge.target;
@@ -965,6 +1008,17 @@ export default function WorkflowBuilder({
         };
       }
 
+      // Changes made while this request was in flight remain unsaved.
+      const changed = workflowChangedDuringSave(savedSnapshot, canvasStateRef.current, savedRevision, editRevisionRef.current);
+      setSaveState(changed ? "unsaved" : "saved");
+      return !changed;
+    } catch (err) {
+      console.error("Save failed:", err);
+      setSaveState("failed");
+      setSaveError(err.message ?? "Save failed. Please try again.");
+      return false;
+    } finally {
+      savingRef.current = false;
       // ── 7. Replace temp IDs in React Flow state ──────────────────────────
       if (Object.keys(tempToReal).length > 0 || Object.keys(tempEdgeToReal).length > 0) {
         setNodes((prev) =>
@@ -1000,45 +1054,32 @@ export default function WorkflowBuilder({
         })),
       })));
         // Update selectedNodeId if it was a temp node
-        if (selectedNodeId && tempToReal[selectedNodeId]) {
-          setSelectedNodeId(tempToReal[selectedNodeId]);
-        }
+        setSelectedNodeId((current) => tempToReal[current] ?? current);
       }
 
-      // Changes made while this request was in flight remain unsaved.
-      const nodesChangedDuringSave = nodes.some((node) => {
-        const snapshot = nodesSnap.find((item) => item.id === node.id);
-        return !snapshot || JSON.stringify(node) !== JSON.stringify(snapshot);
-      }) || nodesSnap.some((snapshot) => !nodes.some((node) => node.id === snapshot.id));
-      const edgesChangedDuringSave = edges.some((edge) => {
-        const snapshot = edgesSnap.find((item) => item.id === edge.id);
-        return !snapshot || JSON.stringify(edge) !== JSON.stringify(snapshot);
-      }) || edgesSnap.some((snapshot) => !edges.some((edge) => edge.id === snapshot.id));
-      setSaveState(nodesChangedDuringSave || edgesChangedDuringSave ? "unsaved" : "saved");
-      return true;
-    } catch (err) {
-      console.error("Save failed:", err);
-      setSaveState("failed");
-      setSaveError(err.message ?? "Save failed. Please try again.");
-      return false;
     }
   }, [
     isCanvasReadOnly,
-    saveState,
     nodes,
     edges,
     workflowId,
     versionNumber,
-    selectedNodeId,
     setNodes,
     setEdges,
   ]);
 
   // ── Validate ──────────────────────────────────────────────────────────────
   const handleValidate = useCallback(async () => {
+    if (savingRef.current || publishingRef.current) {
+      setValidationResult({ isValid: false, errors: [{ code: "SAVE_IN_PROGRESS", message: "Wait for saving or publishing to finish, then retry validation." }] });
+      setValidationOpen(true);
+      return;
+    }
+    const validationRevision = editRevisionRef.current;
     setIsValidating(true);
     try {
       const localErrors = validateWorkflowConfiguration(nodes, edges);
+      if (!localErrors.length) localErrors.push(...await validateRAGKnowledgeBases(nodes));
       if (localErrors.length) {
         setValidationResult({ isValid: false, errors: localErrors });
         return;
@@ -1052,37 +1093,16 @@ export default function WorkflowBuilder({
         }
       }
 
-      let res = null;
-      if (workflowId) {
-        try {
-          res = await validateWorkflow(workflowId, versionNumber);
-        } catch (err) {
-          console.warn("API Validate error, falling back to local validation:", err);
-        }
+      if (!workflowId) throw new Error("Workflow is unavailable.");
+      const res = await validateWorkflow(workflowId, versionNumber);
+      if (typeof res?.valid !== "boolean") throw new Error("Invalid validation response.");
+      if (editRevisionRef.current !== validationRevision) {
+        setValidationResult({ isValid: false, errors: [{ code: "WORKFLOW_CHANGED", message: "Workflow changed during validation. Save your changes and retry validation." }] });
+        return;
       }
-
-      if (res && res.valid !== undefined) {
-        setValidationResult({
-          isValid: Boolean(res.valid),
-          errors: res.errors ?? [],
-        });
-      } else {
-        // Local structural validation fallback
-        const hasTrigger = nodes.some((n) => n.data.typeId?.startsWith("trigger."));
-        if (!hasTrigger) {
-          setValidationResult({
-            isValid: false,
-            errors: [{ code: "NO_TRIGGER", message: "Workflow must have at least one Trigger node." }],
-          });
-        } else if (nodes.length > 1 && edges.length === 0) {
-          setValidationResult({
-            isValid: false,
-            errors: [{ code: "DISCONNECTED_NODES", message: "All nodes must be connected with edges before publishing." }],
-          });
-        } else {
-          setValidationResult({ isValid: true, errors: [] });
-        }
-      }
+      setValidationResult({ isValid: res.valid, errors: res.errors ?? [] });
+    } catch {
+      setValidationResult({ isValid: false, errors: [{ code: "VALIDATION_UNAVAILABLE", message: "Unable to validate this workflow. Check your connection and retry validation." }] });
     } finally {
       setIsValidating(false);
       setValidationOpen(true);
@@ -1091,10 +1111,18 @@ export default function WorkflowBuilder({
 
   // ── Publish ───────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async () => {
-    if (isCanvasReadOnly) return;
+    if (isCanvasReadOnly || publishingRef.current) return;
+    if (savingRef.current) {
+      setValidationResult({ isValid: false, errors: [{ code: "SAVE_IN_PROGRESS", message: "Wait for the current save to finish, then retry publishing." }] });
+      setValidationOpen(true);
+      return;
+    }
+    publishingRef.current = true;
+    const publishRevision = editRevisionRef.current;
     setIsPublishing(true);
     try {
       const localErrors = validateWorkflowConfiguration(nodes, edges);
+      if (!localErrors.length) localErrors.push(...await validateRAGKnowledgeBases(nodes));
       if (localErrors.length) {
         setValidationResult({ isValid: false, errors: localErrors });
         setValidationOpen(true);
@@ -1102,11 +1130,13 @@ export default function WorkflowBuilder({
       }
       // Save first
       if (saveState === "unsaved" || saveState === "failed") {
-        const saved = await handleSave();
+        const saved = await handleSave({ forPublish: true });
         if (!saved) return;
       }
+      if (!workflowId) throw new Error("Workflow is unavailable. Reload and retry.");
       if (workflowId) {
         const validation = await validateWorkflow(workflowId, versionNumber);
+        if (typeof validation?.valid !== "boolean") throw new Error("Invalid validation response.");
         if (!validation.valid) {
           setValidationResult({
             isValid: false,
@@ -1115,29 +1145,20 @@ export default function WorkflowBuilder({
           setValidationOpen(true);
           return;
         }
-        await publishWorkflow(workflowId, versionNumber);
+        if (editRevisionRef.current !== publishRevision) throw new Error("Workflow changed during validation. Save your changes and retry publishing.");
+        const published = await publishWorkflow(workflowId, versionNumber);
+        if (published?.status !== "published") throw new Error("Publishing was not confirmed.");
       }
       setCurrentVersionStatus("published");
       onRefresh();
     } catch (err) {
-      console.error("Publish failed:", err);
-      if (String(err?.message || "").toLowerCase().includes("validation")) {
-        let errors = [{
-          code: "PUBLISH_VALIDATION_FAILED",
-          message: err.message || "Workflow validation failed. Review the workflow requirements and try again.",
-        }];
-
-        try {
-          const validation = await validateWorkflow(workflowId, versionNumber);
-          if (validation.errors?.length) errors = validation.errors;
-        } catch (validationError) {
-          console.warn("Could not load publish validation details:", validationError);
-        }
-
-        setValidationResult({ isValid: false, errors });
-        setValidationOpen(true);
-      }
+      setValidationResult({ isValid: false, errors: [{
+        code: "PUBLISH_FAILED",
+        message: err?.status ? `Publishing failed: ${err.message}` : "Publishing could not be confirmed. Check your connection, reload the version, and retry. Any changes made during validation must be saved first.",
+      }] });
+      setValidationOpen(true);
     } finally {
+      publishingRef.current = false;
       setIsPublishing(false);
     }
   }, [isCanvasReadOnly, saveState, handleSave, workflowId, versionNumber, onRefresh, nodes, edges]);
@@ -1335,7 +1356,7 @@ export default function WorkflowBuilder({
             onNodeDragStop={handleNodeDragStop}
             onNodeDragStart={handleNodeDragStart}
             onContextMenu={handleCanvasContextMenu}
-            isReadOnly={isCanvasReadOnly}
+            isReadOnly={isCanvasReadOnly || isPublishing}
           />
 
           {contextMenu && (
@@ -1380,7 +1401,7 @@ export default function WorkflowBuilder({
               onUpdateNode={handleUpdateNodeData}
               onDeleteNode={handleDeleteNode}
               onClose={() => setIsInspectorOpen(false)}
-              isReadOnly={isCanvasReadOnly}
+              isReadOnly={isCanvasReadOnly || isPublishing}
               workflowId={workflowId}
               workflowVersionId={version?.id}
               workflowNodes={nodes}

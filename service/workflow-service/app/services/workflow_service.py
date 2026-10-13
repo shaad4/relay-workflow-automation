@@ -3,9 +3,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import ValidationError
 
 from app.models import Workflow, WorkflowVersion, WorkflowEdge, WorkflowNode
 from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
+from app.schemas.node_configuration import RagSearchConfig
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
 from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
 
@@ -847,12 +849,14 @@ async def delete_workflow_edge(
     return True
 
 
+
 async def validate_workflow(
     workflow_id: UUID,
     version_number: int,
     workspace_id: str,
     session: AsyncSession,
 ):
+    # 1. Validate workflow ownership
     workflow_result = await session.execute(
         select(Workflow).where(
             Workflow.id == workflow_id,
@@ -865,6 +869,7 @@ async def validate_workflow(
     if workflow is None:
         return None
 
+    # 2. Retrieve workflow version
     version_result = await session.execute(
         select(WorkflowVersion).where(
             WorkflowVersion.workflow_id == workflow_id,
@@ -877,6 +882,7 @@ async def validate_workflow(
     if version is None:
         return None
 
+    # 3. Retrieve workflow nodes
     node_result = await session.execute(
         select(WorkflowNode).where(
             WorkflowNode.workflow_version_id == version.id,
@@ -885,6 +891,7 @@ async def validate_workflow(
 
     nodes = node_result.scalars().all()
 
+    # 4. Retrieve workflow edges
     edge_result = await session.execute(
         select(WorkflowEdge).where(
             WorkflowEdge.workflow_version_id == version.id,
@@ -898,25 +905,71 @@ async def validate_workflow(
 
     node_ids = {node.node_id for node in nodes}
 
-    # Check that the workflow has at least one node.
+    # 5. Validate that workflow contains nodes
     if not nodes:
         errors.append(
             {
                 "code": "NO_NODES",
-                "message": "Workflow must contain at least one node.",
+                "message": (
+                    "Workflow must contain at least one node."
+                ),
             }
         )
 
-    # Check for duplicate node IDs.
+    # 6. Check duplicate node IDs
     if len(node_ids) != len(nodes):
         errors.append(
             {
                 "code": "DUPLICATE_NODE_ID",
-                "message": "Workflow contains duplicate node IDs.",
+                "message": (
+                    "Workflow contains duplicate node IDs."
+                ),
             }
         )
 
-    # Check that every edge references existing nodes.
+    # 7. Validate RAG Search node configurations
+    for node in nodes:
+        if node.node_type != "ai.rag_search":
+            continue
+
+        try:
+            RagSearchConfig.model_validate(
+                node.configuration or {}
+            )
+
+        except ValidationError as exc:
+            for error in exc.errors():
+                field = ".".join(
+                    str(part)
+                    for part in error["loc"]
+                ) or "configuration"
+
+                errors.append(
+                    {
+                        "code": "INVALID_RAG_CONFIGURATION",
+                        "node_id": node.node_id,
+                        "message": (
+                            f"RAG Search node '{node.node_id}': "
+                            f"{field} - {error['msg']}"
+                        ),
+                    }
+                )
+
+    # Only node types dispatched by the current runner are executable.
+    trigger_types = {"trigger.webhook", "trigger.manual", "trigger.schedule"}
+    supported_types = trigger_types | {
+        "action.http_request", "action.email", "action.refund",
+        "human.approval", "ai.rag_search",
+    }
+    triggers = [node for node in nodes if node.node_type in trigger_types]
+    if len(triggers) != 1:
+        errors.append({"code": "INVALID_TRIGGER", "message": "Workflow must have exactly one supported trigger."})
+    for node in nodes:
+        if node.node_type not in supported_types:
+            errors.append({"code": "UNSUPPORTED_NODE_TYPE", "node_id": node.node_id,
+                           "message": f"Node '{node.node_id}' uses unsupported type '{node.node_type}'."})
+
+    # 8. Validate edge references
     for edge in edges:
         if edge.source_node_id not in node_ids:
             errors.append(
@@ -940,11 +993,55 @@ async def validate_workflow(
                 }
             )
 
+    outgoing = {node_id: [] for node_id in node_ids}
+    indegree = {node_id: 0 for node_id in node_ids}
+    for edge in edges:
+        if edge.source_node_id in node_ids and edge.target_node_id in node_ids:
+            outgoing[edge.source_node_id].append(edge)
+            indegree[edge.target_node_id] += 1
+    for node in nodes:
+        branches = outgoing[node.node_id]
+        if node.node_type == "human.approval":
+            conditions = [edge.condition for edge in branches]
+            invalid = any(value not in {"approved", "rejected"} for value in conditions) or len(set(conditions)) != len(conditions)
+        else:
+            invalid = len(branches) > 1
+        if invalid:
+            errors.append({"code": "INVALID_BRANCHING", "node_id": node.node_id,
+                           "message": f"Node '{node.node_id}' has unsupported or ambiguous outgoing branches."})
+
+    # Kahn's algorithm checks all nodes, including disconnected cycles.
+    pending = [node_id for node_id, count in indegree.items() if count == 0]
+    visited = set()
+    while pending:
+        node_id = pending.pop()
+        visited.add(node_id)
+        for edge in outgoing[node_id]:
+            indegree[edge.target_node_id] -= 1
+            if indegree[edge.target_node_id] == 0:
+                pending.append(edge.target_node_id)
+    if len(visited) != len(node_ids):
+        errors.append({"code": "WORKFLOW_CYCLE", "message": "Workflow must not contain cycles."})
+
+    if len(triggers) == 1:
+        reachable = set()
+        pending = [triggers[0].node_id]
+        while pending:
+            node_id = pending.pop()
+            if node_id in reachable:
+                continue
+            reachable.add(node_id)
+            pending.extend(edge.target_node_id for edge in outgoing[node_id])
+        if reachable != node_ids:
+            errors.append({"code": "DISCONNECTED_NODES", "message": "Every node must be reachable from the trigger."})
+
+    # 9. Return validation result
     return {
         "valid": not errors,
         "errors": errors,
         "warnings": warnings,
     }
+
 
 
 async def publish_workflow(

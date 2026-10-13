@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Any
 
 
@@ -20,7 +21,7 @@ class ExecutionContext:
         data: dict[str, Any],
     ) -> "ExecutionContext":
         context = cls()
-        context.data = data
+        context.data = deepcopy(data)
         return context
 
     def get(self, path: str) -> Any:

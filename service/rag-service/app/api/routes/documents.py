@@ -1,0 +1,188 @@
+import logging
+from uuid import UUID
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    UploadFile,
+    HTTPException
+)
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.tasks.ingestion import ingest_document_task
+from starlette.concurrency import run_in_threadpool
+
+from app.db.database import get_db
+from app.dependencies import get_current_identity
+from app.schemas.document import DocumentResponse
+from app.services.document import DocumentService
+
+logger = logging.getLogger(__name__)
+
+
+router = APIRouter(
+    prefix="/knowledge-bases",
+    tags=["Documents"],
+)
+
+
+
+@router.post(
+    "/{knowledge_base_id}/documents/",
+    response_model=DocumentResponse,
+    status_code=201,
+)
+async def upload_document(
+    knowledge_base_id: UUID,
+    file: UploadFile = File(...),
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    service = DocumentService(db)
+
+    workspace_id = UUID(identity["workspace_id"])
+
+    # 1. Upload to Supabase and save document metadata
+    document = await service.upload_document(
+        file=file,
+        workspace_id=workspace_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+
+    # 2. Queue ingestion after successful upload
+    try:
+        await run_in_threadpool(
+            ingest_document_task.delay,
+            str(document.id),
+            str(workspace_id),
+        )
+
+    except Exception:
+        logger.exception(
+            "Failed to queue document ingestion: %s",
+            document.id,
+        )
+
+        # The document remains pending for retry.
+        # Never report that ingestion was queued successfully.
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Document uploaded successfully, "
+                "but ingestion could not be queued"
+            ),
+        )
+
+    # 3. Return pending document
+    return document
+
+
+
+@router.get(
+    "/{knowledge_base_id}/documents/",
+    response_model=list[DocumentResponse],
+)
+async def list_documents(
+    knowledge_base_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    service = DocumentService(db)
+
+    return await service.list_documents(
+        workspace_id=UUID(identity["workspace_id"]),
+        knowledge_base_id=knowledge_base_id,
+    )
+
+
+
+@router.delete(
+    "/{knowledge_base_id}/documents/{document_id}/",
+    status_code=204,
+)
+async def delete_document(
+    knowledge_base_id: UUID,
+    document_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    service = DocumentService(db)
+
+    deleted = await service.delete_document(
+        document_id=document_id,
+        workspace_id=UUID(identity["workspace_id"]),
+        knowledge_base_id=knowledge_base_id,
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    return None
+
+
+
+@router.post(
+    "/{knowledge_base_id}/documents/{document_id}/retry/",
+    status_code=202,
+)
+async def retry_document(
+    knowledge_base_id: UUID,
+    document_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    workspace_id = UUID(identity["workspace_id"])
+
+    service = DocumentService(db)
+
+    # 1. Validate ownership and reset failed -> pending
+    await service.retry_document(
+        document_id=document_id,
+        workspace_id=workspace_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+
+    # 2. Queue ingestion through Celery
+    try:
+        task = await run_in_threadpool(
+            ingest_document_task.delay,
+            str(document_id),
+            str(workspace_id),
+        )
+
+    except Exception as exc:
+        # Restore failed only if the document is still pending.
+        # The broker may have accepted the task before an error.
+        from sqlalchemy import update
+        from app.models.document import Document
+
+        try:
+            await db.execute(
+                update(Document)
+                .where(
+                    Document.id == document_id,
+                    Document.workspace_id == workspace_id,
+                    Document.status == "pending",
+                )
+                .values(
+                    status="failed",
+                    error_message="Unable to queue ingestion",
+                )
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to queue document ingestion",
+        ) from exc
+
+    return {
+        "document_id": str(document_id),
+        "status": "queued",
+        "task_id": task.id,
+    }

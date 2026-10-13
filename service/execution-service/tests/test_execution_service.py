@@ -31,7 +31,7 @@ class FakeSession:
         self.commits += 1
 
     async def refresh(self, _value):
-        _value.id = uuid4()
+        _value.id = _value.id or uuid4()
         return None
 
     async def rollback(self):
@@ -96,6 +96,7 @@ def test_published_event_creates_record_and_runs_pinned_version(monkeypatch):
 
     async def run(**kwargs):
         runner_calls.append(kwargs)
+        return {"context": {"nodes": {}}}
 
     monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
     monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
@@ -175,7 +176,7 @@ def test_execution_waits_for_human_approval(monkeypatch):
     assert execution.status == execution_service.ExecutionStatus.WAITING_FOR_APPROVAL
     assert execution.completed_at is None
     assert session.commits == 3
-    assert session.rollbacks == 0
+    assert session.rollbacks == 1
 
 
 def test_action_failure_is_recorded_on_execution(monkeypatch):
@@ -202,7 +203,7 @@ def test_action_failure_is_recorded_on_execution(monkeypatch):
     assert execution.completed_at is not None
     assert execution.error == {"node_id": "payment-node", "message": "gateway unavailable"}
     assert session.commits == 3
-    assert session.rollbacks == 0
+    assert session.rollbacks == 1
 
 
 def test_unexpected_database_error_rolls_back_and_propagates(monkeypatch):
@@ -227,3 +228,40 @@ def test_unexpected_database_error_rolls_back_and_propagates(monkeypatch):
         asyncio.run(execution_service.create_execution(target))
 
     assert session.rollbacks == 1
+
+
+def test_generic_runner_failure_marks_execution_failed(monkeypatch):
+    session = FakeSession()
+    class WorkflowClient:
+        async def validate_workflow_version(self, **kwargs):
+            return SimpleNamespace(valid=True, status="published", workflow_status="active")
+        async def close(self): pass
+    async def fail(**kwargs): raise RuntimeError("private provider detail")
+    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
+    monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
+    monkeypatch.setattr(execution_service, "run_execution", fail)
+    execution = asyncio.run(execution_service.create_execution(event()))
+    assert execution.status == execution_service.ExecutionStatus.FAILED
+    assert execution.completed_at is not None
+    assert execution.error == {"message": "Workflow execution failed"}
+    assert session.rollbacks == 1
+
+
+def test_final_write_failure_preserves_returned_context(monkeypatch):
+    class Session(FakeSession):
+        async def commit(self):
+            self.commits += 1
+            if self.commits == 3: raise RuntimeError("write failed")
+    session = Session()
+    class WorkflowClient:
+        async def validate_workflow_version(self, **kwargs):
+            return SimpleNamespace(valid=True, status="published", workflow_status="active")
+        async def close(self): pass
+    output = {"nodes": {"rag": {"chunks": [], "context": "policy"}}}
+    async def run(**kwargs): return {"context": output}
+    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
+    monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
+    monkeypatch.setattr(execution_service, "run_execution", run)
+    execution = asyncio.run(execution_service.create_execution(event()))
+    assert execution.status == execution_service.ExecutionStatus.FAILED
+    assert execution.context == output and execution.completed_at is not None

@@ -1,7 +1,24 @@
 const required = (value) => String(value ?? "").trim().length > 0;
 const containsExpression = (value) => /\{\{[^{}]+\}\}/.test(String(value ?? ""));
 
+// Preserve conflicts until the user explicitly chooses a knowledge base.
+export function ragKnowledgeBaseId(config = {}) {
+  if (!config || typeof config !== "object") return undefined;
+  return Object.hasOwn(config, "knowledge_base_id") ? config.knowledge_base_id : config.knowledge_base;
+}
+
+export function normalizeRAGConfiguration(config = {}) {
+  if (!config || typeof config !== "object" || Array.isArray(config)) config = {};
+  const normalized = { ...config, knowledge_base_id: ragKnowledgeBaseId(config) ?? "" };
+  if (!Object.hasOwn(config, "knowledge_base_id") || !Object.hasOwn(config, "knowledge_base") || config.knowledge_base_id === config.knowledge_base) {
+    delete normalized.knowledge_base;
+  }
+  delete normalized.workspace_id;
+  return normalized;
+}
+
 export function validateNodeConfiguration(typeId, config = {}) {
+  if (!config || typeof config !== "object" || Array.isArray(config)) config = {};
   const errors = [];
   const requireField = (field, label) => {
     if (!required(config[field])) errors.push({ field, message: `${label} is required.` });
@@ -56,11 +73,18 @@ export function validateNodeConfiguration(typeId, config = {}) {
       requireField("prompt", "Prompt");
       requireField("model", "Model");
       break;
-    case "ai.rag_search":
-      requireField("knowledge_base", "Knowledge base");
-      requireField("query", "Search query");
-      if (!Number.isInteger(Number(config.top_k ?? 5)) || Number(config.top_k ?? 5) <= 0) errors.push({ field: "top_k", message: "Top K must be a positive whole number." });
+    case "ai.rag_search": {
+      const kbId = ragKnowledgeBaseId(config);
+      if (Object.hasOwn(config, "knowledge_base_id") && Object.hasOwn(config, "knowledge_base") && config.knowledge_base_id !== config.knowledge_base) {
+        errors.push({ field: "knowledge_base_id", message: "Conflicting knowledge base IDs. Choose a knowledge base to resolve this." });
+      } else if (typeof kbId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(kbId)) {
+        errors.push({ field: "knowledge_base_id", message: "Choose a knowledge base with a valid UUID." });
+      }
+      if (typeof config.query !== "string" || !config.query.trim()) errors.push({ field: "query", message: "Search query is required." });
+      else if (config.query.length > 2000) errors.push({ field: "query", message: "Search query must be 2,000 characters or fewer." });
+      if (!Number.isInteger(config.top_k) || config.top_k < 1 || config.top_k > 20) errors.push({ field: "top_k", message: "Top results must be a whole number from 1 to 20." });
       break;
+    }
     case "logic.condition":
       requireField("field", "Field or variable");
       requireField("operator", "Operator");
@@ -114,6 +138,7 @@ export function validateWorkflowConfiguration(nodes = [], edges = [], { includeS
     const label = node.data?.label || typeId;
     for (const error of validateNodeConfiguration(typeId, node.data?.config)) {
       errors.push({
+        field: error.field,
         code: `NODE_CONFIG_${error.field.toUpperCase()}`,
         nodeId: node.data?.nodeId ?? node.id,
         message: `${label}: ${error.message}`,

@@ -115,6 +115,7 @@ async def _handle_approval_decision(
         ) from exc
 
     approval = result.approval
+    approval_response = ApprovalResponse.model_validate(approval)
 
     execution = await session.get(
         Execution,
@@ -137,10 +138,11 @@ async def _handle_approval_decision(
 
         await _commit_session(session)
 
-        return ApprovalResponse.model_validate(approval)
+        return approval_response
 
+    runner_result = None
     try:
-        await run_execution(
+        runner_result = await run_execution(
             execution_id=execution.id,
             workflow_id=str(execution.workflow_id),
             workflow_version_id=str(execution.workflow_version_id),
@@ -149,14 +151,21 @@ async def _handle_approval_decision(
             context_data=result.context_data,
         )
 
+        execution.context = runner_result["context"]
+        execution.status = ExecutionStatus.COMPLETED
+        execution.completed_at = datetime.now(timezone.utc)
+        await _commit_session(session)
+
     except HumanApprovalRequired:
+        await session.rollback()
         execution.status = ExecutionStatus.WAITING_FOR_APPROVAL
 
         await _commit_session(session)
 
-        return ApprovalResponse.model_validate(approval)
+        return approval_response
 
     except ActionExecutionFailed as exc:
+        await session.rollback()
         execution.status = ExecutionStatus.FAILED
         execution.completed_at = datetime.now(timezone.utc)
         execution.error = {
@@ -166,14 +175,18 @@ async def _handle_approval_decision(
 
         await _commit_session(session)
 
-        return ApprovalResponse.model_validate(approval)
+        return approval_response
 
-    execution.status = ExecutionStatus.COMPLETED
-    execution.completed_at = datetime.now(timezone.utc)
+    except Exception:
+        await session.rollback()
+        if runner_result is not None:
+            execution.context = runner_result["context"]
+        execution.status = ExecutionStatus.FAILED
+        execution.completed_at = datetime.now(timezone.utc)
+        execution.error = {"message": "Workflow resume failed"}
+        await _commit_session(session)
 
-    await _commit_session(session)
-
-    return ApprovalResponse.model_validate(approval)
+    return approval_response
 
 
 @router.post(

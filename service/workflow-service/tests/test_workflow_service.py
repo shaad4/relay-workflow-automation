@@ -283,6 +283,7 @@ def test_validate_workflow_reports_empty_workflow_and_invalid_edges():
     assert result["valid"] is False
     assert {error["code"] for error in result["errors"]} == {
         "NO_NODES",
+        "INVALID_TRIGGER",
         "INVALID_EDGE_SOURCE",
         "INVALID_EDGE_TARGET",
     }
@@ -301,7 +302,7 @@ def test_publish_workflow_updates_version_and_workflow():
             Result(scalar=draft),
             Result(scalar=active_workflow),
             Result(scalar=draft),
-            Result(scalars=[SimpleNamespace(node_id="start")]),
+            Result(scalars=[SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={})]),
             Result(scalars=[]),
         ]
     )
@@ -441,7 +442,7 @@ def test_create_workflow_edge_checks_nodes_then_creates_edge():
         [
             Result(scalar=SimpleNamespace(id=WORKFLOW_ID)),
             Result(scalar=draft),
-            Result(scalar=SimpleNamespace(node_id="start")),
+            Result(scalar=SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={})),
             Result(scalar=SimpleNamespace(node_id="finish")),
         ]
     )
@@ -461,8 +462,8 @@ def test_create_workflow_edge_checks_nodes_then_creates_edge():
 
 def test_validate_workflow_reports_duplicate_node_ids():
     nodes = [
-        SimpleNamespace(node_id="start"),
-        SimpleNamespace(node_id="start"),
+        SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={}),
+        SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={}),
     ]
     session = FakeSession(
         [
@@ -642,7 +643,7 @@ def test_mutation_failures_roll_back(operation, result_count):
         "node": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=None)],
         "edge": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=object()), Result(scalar=object())],
         "draft": [Result(scalar=workflow), Result(scalars=[draft]), Result(scalars=[]), Result(scalars=[])],
-        "publish": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=workflow), Result(scalar=draft), Result(scalars=[SimpleNamespace(node_id="ok")]), Result(scalars=[])],
+        "publish": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=workflow), Result(scalar=draft), Result(scalars=[SimpleNamespace(node_id="ok", node_type="trigger.webhook", configuration={})]), Result(scalars=[])],
     }
     session = FakeSession(results_by_operation[operation], fail_commit=True)
     with pytest.raises(RuntimeError, match="commit failed"):
@@ -676,7 +677,7 @@ def test_list_get_workflows_and_missing_update():
 def test_list_nodes_and_missing_version():
     workflow = SimpleNamespace(id=WORKFLOW_ID)
     version = SimpleNamespace(id=VERSION_ID)
-    node_rows = [SimpleNamespace(node_id="start")]
+    node_rows = [SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={})]
     session = FakeSession(
         [Result(scalar=workflow), Result(scalar=version), Result(scalars=node_rows)]
     )
@@ -725,7 +726,7 @@ def test_update_and_delete_edge_successful_paths():
             Result(scalar=workflow),
             Result(scalar=draft),
             Result(scalar=edge),
-            Result(scalar=SimpleNamespace(node_id="start")),
+            Result(scalar=SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={})),
             Result(scalar=SimpleNamespace(node_id="finish")),
         ]
     )
