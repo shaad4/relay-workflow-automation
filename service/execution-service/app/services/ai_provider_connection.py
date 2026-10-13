@@ -1,3 +1,4 @@
+from __future__ import annotations
 
 import uuid
 
@@ -8,6 +9,7 @@ from app.repositories.ai_provider_connection import (
     AIProviderConnectionRepository,
 )
 from app.ai.connection_test import test_ai_provider_connection
+from app.ai.model_catalog import list_provider_models
 
 SUPPORTED_PROVIDERS = {
     "openai",
@@ -197,3 +199,22 @@ class AIProviderConnectionService:
             provider=provider,
             api_key=api_key,
         )
+
+    
+    async def list_models(
+        self,
+        connection_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> list[dict]:
+        """List models for an active workspace AI connection."""
+
+        provider, api_key = await self.get_execution_credentials(
+            connection_id=connection_id,
+            workspace_id=workspace_id,
+        )
+
+        return await list_provider_models(
+            provider=provider,
+            api_key=api_key,
+        )
+

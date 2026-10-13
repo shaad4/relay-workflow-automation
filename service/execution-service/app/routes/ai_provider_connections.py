@@ -200,3 +200,33 @@ async def test_ai_connection(
         "success": success,
         "message": "AI provider connection verified",
     }
+
+
+
+@router.get("/{connection_id}/models/")
+async def get_ai_connection_models(
+    connection_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    service = AIProviderConnectionService(session)
+
+    try:
+        models = await service.list_models(
+            connection_id=connection_id,
+            workspace_id=UUID(identity["workspace_id"]),
+        )
+
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="AI connection is invalid or unavailable",
+        )
+
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to retrieve provider models",
+        )
+
+    return {"models": models}

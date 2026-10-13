@@ -131,3 +131,15 @@ async def test_ai_connection(
         request,
         f"{connection_id}/test",
     )
+
+
+
+@router.get("/{connection_id}/models/")
+async def get_ai_connection_models(
+    connection_id: str,
+    request: Request,
+):
+    return await proxy_ai_connection_request(
+        request,
+        f"{connection_id}/models",
+    )
