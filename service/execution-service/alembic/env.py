@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.db.base import Base
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
+from app.models.ai_provider_connection import AIProviderConnection
 
 config = context.config
 
