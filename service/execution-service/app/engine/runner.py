@@ -17,6 +17,7 @@ from app.models.execution_step import ExecutionStep
 from app.engine.approval_status import HumanApprovalStatus
 from app.models.human_approval import HumanApproval
 from app.models.execution import Execution
+from app.engine.handlers.rag_search import execute_rag_search
 
 
 async def _commit_session(session, add=None, refresh=None):
@@ -46,7 +47,7 @@ async def mark_step_failed(
         if step is None:
             return
 
-        if step.status == ExecutionStepStatus.FAILED:
+        if step.status != ExecutionStepStatus.RUNNING:
             return
 
         completed_at = datetime.now(timezone.utc)
@@ -249,6 +250,60 @@ async def run_execution(
                 configuration["headers"] = headers
 
             resolved_configuration = resolver.resolve(configuration)
+
+
+            # Execute RAG Search node
+            if node_type == "ai.rag_search":
+                try:
+                    result = await execute_rag_search(
+                        configuration=resolved_configuration,
+                        workspace_id=workspace_id,
+                    )
+
+                except Exception:
+                    await mark_step_failed(
+                        execution_step_id,
+                        "RAG Search execution failed",
+                    )
+                    raise
+
+                # Store output for downstream nodes
+                context.set_node_output(
+                    node_id,
+                    result,
+                )
+
+                # Persist execution step result
+                completed_at = datetime.now(timezone.utc)
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    execution_step.status = (
+                        ExecutionStepStatus.COMPLETED
+                    )
+                    execution_step.output = result
+                    execution_step.completed_at = completed_at
+
+                    if execution_step.started_at:
+                        execution_step.duration_ms = int(
+                            (
+                                completed_at
+                                - execution_step.started_at
+                            ).total_seconds() * 1000
+                        )
+
+                    await _commit_session(session)
+
+                # Continue to the next workflow node
+                current_node = executor.get_next_node(node_id)
+                sequence += 1
+
+                continue
+
 
             # Human Approval does not use Action Service or a connection.
             if node_type == "human.approval":
