@@ -38,19 +38,13 @@ class RagSearchConfig(BaseModel):
 
         data = data.copy()
 
-        legacy_id = data.pop("knowledge_base", None)
-        current_id = data.get("knowledge_base_id")
-
-        if legacy_id is not None:
-            if (
-                current_id is not None
-                and str(current_id) != str(legacy_id)
-            ):
-                raise ValueError(
-                    "Conflicting knowledge base identifiers"
-                )
-
-            data["knowledge_base_id"] = legacy_id
+        if "knowledge_base" in data:
+            legacy_id = data.pop("knowledge_base")
+            if "knowledge_base_id" in data:
+                if data["knowledge_base_id"] != legacy_id:
+                    raise ValueError("Conflicting knowledge base identifiers")
+            else:
+                data["knowledge_base_id"] = legacy_id
 
         return data
 

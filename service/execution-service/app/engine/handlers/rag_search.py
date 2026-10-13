@@ -13,19 +13,10 @@ async def execute_rag_search(
     if not isinstance(configuration, dict):
         raise ValueError("Invalid RAG node configuration")
 
-    # Support both canonical and legacy configuration keys
-    knowledge_base_id = configuration.get(
-        "knowledge_base_id"
-    )
-    legacy_id = configuration.get("knowledge_base")
-
-    if knowledge_base_id and legacy_id:
-        if str(knowledge_base_id) != str(legacy_id):
-            raise ValueError(
-                "Conflicting knowledge base identifiers"
-            )
-
-    knowledge_base_id = knowledge_base_id or legacy_id
+    if "knowledge_base_id" in configuration and "knowledge_base" in configuration:
+        if configuration["knowledge_base_id"] != configuration["knowledge_base"]:
+            raise ValueError("Conflicting knowledge base identifiers")
+    knowledge_base_id = configuration.get("knowledge_base_id") if "knowledge_base_id" in configuration else configuration.get("knowledge_base")
 
     if not knowledge_base_id:
         raise ValueError("Knowledge base ID is required")

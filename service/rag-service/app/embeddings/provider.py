@@ -7,8 +7,8 @@ class EmbeddingProvider:
     def __init__(self):
         self.client = AsyncOpenAI(
             api_key=os.environ["OPENAI_API_KEY"],
-            timeout=30.0,
-            max_retries=2,
+            timeout=8.0,
+            max_retries=1,
         )
 
         self.model = os.getenv(

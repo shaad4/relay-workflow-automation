@@ -408,8 +408,9 @@ class RunnerSession:
     async def __aenter__(self): return self
     async def __aexit__(self, *_args): return False
     def add(self, item):
-        item.id = uuid4(); self.item = item; self.state.setdefault("steps", []).append(item)
+        item.id = item.id or uuid4(); self.item = item; self.state.setdefault("steps", []).append(item)
     async def commit(self): pass
+    async def rollback(self): pass
     async def execute(self, _statement):
         current_max = max((step.sequence for step in self.state.get("steps", []) if hasattr(step, "sequence")), default=0)
         return SimpleNamespace(scalar_one=lambda: current_max)
@@ -544,6 +545,8 @@ def test_approval_routes_lists_details_approves_rejects_and_maps_errors(monkeypa
             return execution
         return step
     async def commit(): session.commits += 1
+    async def rollback(): pass
+    session.rollback = rollback
     session.get, session.commit = db_get, commit
 
     listed = asyncio.run(approval_routes.get_approvals(identity, session))
@@ -557,7 +560,7 @@ def test_approval_routes_lists_details_approves_rejects_and_maps_errors(monkeypa
     assert getattr(caught.value, "status_code", None) == 404
     monkeypatch.setattr(approval_routes, "get_approval", get_row)
 
-    async def run(**_kwargs): return None
+    async def run(**_kwargs): return {"context": {"nodes": {"rag": {"chunks": [], "context": "retrieved"}}}}
     monkeypatch.setattr(approval_routes, "run_execution", run)
     response = asyncio.run(approval_routes.approve(approval.id, identity, session))
     assert response.id == approval.id
@@ -588,6 +591,8 @@ def test_approval_route_resume_outcomes_and_missing_records(monkeypatch):
     session = SimpleNamespace(commits=0)
     async def db_get(model, _id): return execution if model is Execution else step
     async def commit(): session.commits += 1
+    async def rollback(): pass
+    session.rollback = rollback
     session.get, session.commit = db_get, commit
     async def approved(**kwargs): return approval_result(approval, execution, step, kwargs["decision"], "next")
     async def run(**_kwargs): raise HumanApprovalRequired("h2")
@@ -601,6 +606,21 @@ def test_approval_route_resume_outcomes_and_missing_records(monkeypatch):
     monkeypatch.setattr(approval_routes, "run_execution", failed)
     asyncio.run(approval_routes.approve(approval.id, identity, session))
     assert execution.status == ExecutionStatus.FAILED and execution.error["node_id"] == "a"
+
+    async def rag_success(**kwargs):
+        assert kwargs["context_data"]["_resume"]["start_node_id"] == "next"
+        return {"context": {"nodes": {"rag": {"chunks": [], "context": "policy"}}}}
+    monkeypatch.setattr(approval_routes, "run_execution", rag_success)
+    asyncio.run(approval_routes.approve(approval.id, identity, session))
+    assert execution.status == ExecutionStatus.COMPLETED
+    assert execution.context["nodes"]["rag"]["context"] == "policy"
+
+    async def rag_failure(**kwargs): raise RuntimeError("private provider failure")
+    monkeypatch.setattr(approval_routes, "run_execution", rag_failure)
+    asyncio.run(approval_routes.approve(approval.id, identity, session))
+    assert execution.status == ExecutionStatus.FAILED and execution.completed_at is not None
+    assert execution.error == {"message": "Workflow resume failed"}
+
 
     async def no_branch(**kwargs): return approval_result(approval, execution, step, kwargs["decision"], None)
     monkeypatch.setattr(approval_routes, "decide_approval", no_branch)

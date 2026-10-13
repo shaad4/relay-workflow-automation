@@ -63,3 +63,12 @@ test('representative existing node configurations remain valid', () => {
     ['human.approval', { approver_user_id: id, message: 'Approve?', timeout_minutes: 5 }],
   ]) assert.deepEqual(validateNodeConfiguration(type, config), []);
 });
+
+test('null and empty aliases cannot silently override a valid identifier', () => {
+  for (const conflict of [
+    { ...valid, knowledge_base: null },
+    { ...valid, knowledge_base: '' },
+    { ...valid, knowledge_base_id: null, knowledge_base: id },
+    { ...valid, knowledge_base_id: '', knowledge_base: id },
+  ]) assert.ok(errors(conflict).some(error => error.field === 'knowledge_base_id'));
+});

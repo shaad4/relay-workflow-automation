@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
@@ -47,7 +47,7 @@ function GmailIcon({ className = "h-5 w-5" }) {
 function StripeIcon({ className = "h-5 w-5" }) {
   return <svg className={className} viewBox="0 0 48 48" role="img" aria-label="Stripe"><rect width="48" height="48" rx="10" fill="#635BFF"/><path fill="#fff" d="M22.1 18.2c0-1.1.9-1.5 2.3-1.5 2.1 0 4.7.6 6.8 1.7v-6.6a18 18 0 0 0-6.8-1.3c-5.6 0-9.3 2.9-9.3 7.8 0 7.6 10.4 6.4 10.4 9.7 0 1.3-1.1 1.7-2.6 1.7-2.3 0-5.3-1-7.7-2.4v6.7c2.6 1.1 5.2 1.6 7.7 1.6 5.8 0 9.7-2.8 9.7-7.8-.1-8.2-10.5-6.8-10.5-9.6Z"/></svg>;
 }
-export default function ConnectionsPage() {
+function ConnectionsContent() {
   const { isInitializing } = useAuth();
   const searchParams = useSearchParams();
   const [items, setItems] = useState([]);
@@ -254,4 +254,8 @@ export default function ConnectionsPage() {
 
     {modal === "test" && testResult && <Modal title={testResult.success ? "Connection test successful" : "Connection test failed"} onClose={closeModal} wide><div className="space-y-4"><div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3"><span className="text-[12px] text-[var(--text-secondary)]">Status</span><span className={`font-mono text-[13px] ${testResult.success ? "text-[var(--text-primary)]" : "text-red-500"}`}>{testResult.statusCode ?? "Unavailable"}</span></div><p className="text-[12px] text-[var(--text-secondary)]">{testResult.message || "Connection test completed."}</p>{testResult.response !== undefined && testResult.response !== null && <div><h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Response</h3><pre className="max-w-full overflow-x-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-md border border-[var(--border-subtle)] bg-[var(--input-bg)] p-3 font-mono text-[11px] leading-5 text-[var(--text-secondary)]">{safeResponse(testResult.response)}</pre></div>}<div className="flex justify-end border-t border-[var(--border-subtle)] pt-4">{!testResult.success && selected && <button type="button" onClick={() => runTest(selected)} className={`${secondaryClass} mr-auto`}>Retry</button>}<button type="button" onClick={closeModal} className={secondaryClass}>Close</button></div></div></Modal>}
   </div><style jsx global>{`@keyframes connection-fade-in { from { opacity: 0; } to { opacity: 1; } } @keyframes connection-dialog-in { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } } @keyframes connection-drawer-in { from { opacity: .7; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } } @keyframes connection-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } } .connection-overlay { animation: connection-fade-in 140ms ease-out both; } .connection-dialog { animation: connection-dialog-in 180ms ease-out both; } .connection-drawer { animation: connection-drawer-in 180ms ease-out both; } .connection-toast { animation: connection-toast-in 200ms ease-out both; } .connection-result { animation: connection-dialog-in 180ms ease-out both; } @media (prefers-reduced-motion: reduce) { .connection-overlay, .connection-dialog, .connection-drawer, .connection-toast, .connection-result { animation: none; } }`}</style></DashboardShell></ProtectedRoute>;
+}
+
+export default function ConnectionsPage() {
+  return <Suspense fallback={null}><ConnectionsContent /></Suspense>;
 }

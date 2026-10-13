@@ -12,6 +12,14 @@ from app.grpc.workflow_client import WorkflowClient
 from app.models.execution import Execution
 
 
+async def _commit_session(session):
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+
 async def create_execution(event: dict) -> Execution:
 
     # 1. Validate workflow and version
@@ -59,13 +67,14 @@ async def create_execution(event: dict) -> Execution:
 
         session.add(execution)
 
-        await session.commit()
+        await _commit_session(session)
         await session.refresh(execution)
 
         # 3. Mark execution as running
         execution.status = ExecutionStatus.RUNNING
-        await session.commit()
+        await _commit_session(session)
 
+        result = None
         try:
             # 4. Execute workflow
             result = await run_execution(
@@ -76,21 +85,28 @@ async def create_execution(event: dict) -> Execution:
                 trigger_data=event.get("payload"),
             )
 
+            execution.context = result["context"]
+            execution.status = ExecutionStatus.COMPLETED
+            execution.completed_at = datetime.now(timezone.utc)
+            await _commit_session(session)
+
         except HumanApprovalRequired:
             # 5. Pause execution for human approval
             await session.rollback()
+            await session.refresh(execution)
 
             execution.status = (
                 ExecutionStatus.WAITING_FOR_APPROVAL
             )
 
-            await session.commit()
+            await _commit_session(session)
 
             return execution
 
         except ActionExecutionFailed as exc:
             # 6. Handle known action failure
             await session.rollback()
+            await session.refresh(execution)
 
             execution.status = ExecutionStatus.FAILED
             execution.completed_at = datetime.now(
@@ -102,14 +118,17 @@ async def create_execution(event: dict) -> Execution:
                 "message": exc.error,
             }
 
-            await session.commit()
+            await _commit_session(session)
 
             return execution
 
         except Exception:
             # 7. Handle unexpected execution failure
             await session.rollback()
+            await session.refresh(execution)
 
+            if result is not None:
+                execution.context = result["context"]
             execution.status = ExecutionStatus.FAILED
             execution.completed_at = datetime.now(
                 timezone.utc
@@ -119,19 +138,8 @@ async def create_execution(event: dict) -> Execution:
                 "message": "Workflow execution failed",
             }
 
-            await session.commit()
+            await _commit_session(session)
 
             return execution
-
-        # 8. Persist final execution context
-        execution.context = result["context"]
-
-        # 9. Mark execution as completed
-        execution.status = ExecutionStatus.COMPLETED
-        execution.completed_at = datetime.now(
-            timezone.utc
-        )
-
-        await session.commit()
 
         return execution

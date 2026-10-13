@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 
@@ -47,7 +47,7 @@ async def mark_step_failed(
         if step is None:
             return
 
-        if step.status != ExecutionStepStatus.RUNNING:
+        if step.status not in {ExecutionStepStatus.PENDING, ExecutionStepStatus.RUNNING}:
             return
 
         completed_at = datetime.now(timezone.utc)
@@ -64,7 +64,7 @@ async def mark_step_failed(
                 * 1000
             )
 
-        await session.commit()
+        await _commit_session(session)
 
 
 async def run_execution(
@@ -79,6 +79,8 @@ async def run_execution(
 ):
     workflow_client = WorkflowClient()
     action_client = ActionClient()
+    context = None
+    execution_step_id = None
 
     try:
         response = await workflow_client.get_workflow_definition(
@@ -154,6 +156,7 @@ async def run_execution(
         )
 
         while current_node is not None:
+            execution_step_id = None
             node = current_node
             node_id = node["node_id"]
 
@@ -167,9 +170,12 @@ async def run_execution(
 
             configuration = node.get("configuration", {})
 
+            # Allocate the ID before commit so even refresh failures can close the step.
+            execution_step_id = uuid4()
             # Create execution step
             async with AsyncSessionLocal() as session:
                 execution_step = ExecutionStep(
+                    id=execution_step_id,
                     execution_id=execution_id,
                     node_id=node["node_id"],
                     status=ExecutionStepStatus.PENDING,
@@ -254,18 +260,10 @@ async def run_execution(
 
             # Execute RAG Search node
             if node_type == "ai.rag_search":
-                try:
-                    result = await execute_rag_search(
-                        configuration=resolved_configuration,
-                        workspace_id=workspace_id,
-                    )
-
-                except Exception:
-                    await mark_step_failed(
-                        execution_step_id,
-                        "RAG Search execution failed",
-                    )
-                    raise
+                result = await execute_rag_search(
+                    configuration=resolved_configuration,
+                    workspace_id=workspace_id,
+                )
 
                 # Store output for downstream nodes
                 context.set_node_output(
@@ -536,6 +534,26 @@ async def run_execution(
             "context": context.to_dict(),
         }
 
+    except HumanApprovalRequired:
+        # The approval transaction already saved context and the waiting step.
+        raise
+    except Exception as exc:
+        # Includes resolution, dispatch, persistence, and graph traversal.
+        # Completed/failed/waiting steps are protected by mark_step_failed.
+        try:
+            if execution_step_id is not None:
+                message = exc.error if isinstance(exc, ActionExecutionFailed) else "Node execution failed"
+                await mark_step_failed(execution_step_id, message)
+        finally:
+            if context is not None:
+                async with AsyncSessionLocal() as session:
+                    execution = await session.get(Execution, execution_id)
+                    if execution is not None:
+                        execution.context = context.to_dict()
+                        await _commit_session(session)
+        raise
     finally:
-        await workflow_client.close()
-        await action_client.close()
+        try:
+            await workflow_client.close()
+        finally:
+            await action_client.close()

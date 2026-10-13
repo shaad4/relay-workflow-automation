@@ -797,6 +797,7 @@ export default function NodeInspector({
   const { user } = useAuth();
   const knowledgeBaseCacheRef = useMemo(() => ({ current: null, scope: [user?.id, workflowId, workflowVersionId] }), [user?.id, workflowId, workflowVersionId]);
   const [formData, setFormData] = useState({});
+  const formDataRef = useRef({});
   const [nodeName, setNodeName] = useState("");
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const [webhookGuideOpen, setWebhookGuideOpen] = useState(false);
@@ -810,12 +811,14 @@ export default function NodeInspector({
       if (selectedNode.data?.typeId === "human.approval" && !selectedConfig.approver_user_id && user?.id) {
         selectedConfig.approver_user_id = user.id;
       }
+      formDataRef.current = selectedConfig;
       setFormData(selectedConfig);
       setHasLocalChanges(false);
       setApprovalErrors({});
       setConfigurationErrors([]);
     } else {
       setNodeName("");
+      formDataRef.current = {};
       setFormData({});
       setHasLocalChanges(false);
       setConfigurationErrors([]);
@@ -855,12 +858,13 @@ export default function NodeInspector({
 
   const handleFieldChange = (field, value) => {
     if (isReadOnly) return;
-    let nextConfig = { ...formData, [field]: value };
+    let nextConfig = { ...(typeId === "ai.rag_search" ? formDataRef.current : formData), [field]: value };
     if (typeId === "ai.rag_search") {
       if (field === "knowledge_base_id") delete nextConfig.knowledge_base;
       nextConfig = normalizeRAGConfiguration(nextConfig);
       onUpdateNode?.(selectedNode.id, { config: nextConfig });
     }
+    formDataRef.current = nextConfig;
     setFormData(nextConfig);
     setHasLocalChanges(true);
     setConfigurationErrors((previous) => previous.filter((error) => error.field !== field));
