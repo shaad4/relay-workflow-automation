@@ -18,7 +18,7 @@ from app.schemas.ai_provider_connection import (
 from app.services.ai_provider_connection import (
     AIProviderConnectionService,
 )
-
+from app.ai.connection_test import test_ai_provider_connection
 
 router = APIRouter(
     prefix="/ai/connections",
@@ -168,3 +168,35 @@ async def delete_ai_connection(
         )
 
     return None
+
+
+@router.post("/{connection_id}/test/")
+async def test_ai_connection(
+    connection_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    service = AIProviderConnectionService(session)
+
+    try:
+        success = await service.test_connection(
+            connection_id=connection_id,
+            workspace_id=UUID(identity["workspace_id"]),
+        )
+
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="AI connection is invalid or unavailable",
+        )
+
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="AI provider connection test failed",
+        )
+
+    return {
+        "success": success,
+        "message": "AI provider connection verified",
+    }

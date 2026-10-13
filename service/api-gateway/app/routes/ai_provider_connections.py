@@ -121,3 +121,13 @@ async def delete_ai_connection(
         request,
         connection_id,
     )
+
+@router.post("/{connection_id}/test/")
+async def test_ai_connection(
+    connection_id: str,
+    request: Request,
+):
+    return await proxy_ai_connection_request(
+        request,
+        f"{connection_id}/test",
+    )

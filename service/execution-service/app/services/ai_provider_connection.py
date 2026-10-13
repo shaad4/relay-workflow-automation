@@ -7,7 +7,7 @@ from app.ai.encryption import CredentialEncryption
 from app.repositories.ai_provider_connection import (
     AIProviderConnectionRepository,
 )
-
+from app.ai.connection_test import test_ai_provider_connection
 
 SUPPORTED_PROVIDERS = {
     "openai",
@@ -179,3 +179,21 @@ class AIProviderConnectionService:
         )
 
         return connection.provider, api_key
+
+
+    async def test_connection(
+        self,
+        connection_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> bool:
+        """Test a workspace-owned AI provider connection."""
+
+        provider, api_key = await self.get_execution_credentials(
+            connection_id=connection_id,
+            workspace_id=workspace_id,
+        )
+
+        return await test_ai_provider_connection(
+            provider=provider,
+            api_key=api_key,
+        )
