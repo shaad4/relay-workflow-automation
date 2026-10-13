@@ -4,12 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const outputsByType = {
+  "ai.rag_search": ["chunks", "context"],
   "action.http_request": ["status_code", "body", "headers", "success"],
   "action.email": ["message_id", "thread_id", "label_ids", "success"],
   "action.refund": ["refund_id", "payment_id", "amount", "status", "success"],
 };
 
-function previousNodesFor(nodes, edges, currentNodeId) {
+function previousNodesFor(nodes, edges, currentNodeId, includeTriggers = false) {
   const byId = new Map((nodes || []).map((node) => [String(node.id), node]));
   const previousIds = new Set();
   const pending = (edges || [])
@@ -27,7 +28,7 @@ function previousNodesFor(nodes, edges, currentNodeId) {
 
   return [...previousIds]
     .map((id) => byId.get(id))
-    .filter((node) => node && !node.data?.typeId?.startsWith("trigger."))
+    .filter((node) => node && (includeTriggers || !node.data?.typeId?.startsWith("trigger.")))
     .reverse();
 }
 
@@ -40,7 +41,7 @@ function ExpressionOption({ expression, label, onClick }) {
   );
 }
 
-export default function VariablePicker({ nodes, edges, currentNode, onInsert }) {
+export default function VariablePicker({ nodes, edges, currentNode, onInsert, upstreamOnly = false }) {
   const [open, setOpen] = useState(false);
   const [triggerPath, setTriggerPath] = useState("");
   const [expandedNode, setExpandedNode] = useState(null);
@@ -52,6 +53,7 @@ export default function VariablePicker({ nodes, edges, currentNode, onInsert }) 
     () => previousNodesFor(nodes, edges, currentNode?.id),
     [nodes, edges, currentNode?.id]
   );
+  const showTrigger = !upstreamOnly || previousNodesFor(nodes, edges, currentNode?.id, true).some((node) => node.data?.typeId?.startsWith("trigger."));
   const matchingNodes = previousNodes.filter((node) => {
     const query = search.trim().toLowerCase();
     return !query || `${node.data?.label || node.data?.name || ""} ${node.data?.nodeId || ""} ${(outputsByType[node.data?.typeId] || []).join(" ")}`.toLowerCase().includes(query);
@@ -122,12 +124,12 @@ export default function VariablePicker({ nodes, edges, currentNode, onInsert }) 
           <div className="mt-2 flex h-8 items-center gap-2 rounded-[5px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2"><span className="text-[var(--text-tertiary)]" aria-hidden="true">⌕</span><input aria-label="Search previous node variables" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search previous node outputs" className="min-w-0 flex-1 bg-transparent text-[10px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]" /></div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          <section className="pb-2">
+          {showTrigger && <section className="pb-2">
             <p className="px-1.5 pb-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Trigger <span className="font-normal normal-case tracking-normal">/ Data</span></p>
             <div className="flex gap-1.5 px-1"><input aria-label="Trigger data path" value={triggerPath} onChange={(event) => setTriggerPath(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); insertTriggerPath(); } }} placeholder="field.path" className="h-8 min-w-0 flex-1 rounded-[5px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2 font-mono text-[10px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)] focus:border-[var(--accent)]"/><button type="button" onClick={insertTriggerPath} disabled={!triggerPath.trim()} className="h-8 rounded-[5px] bg-[var(--accent)] px-2.5 text-[10px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40">Insert</button></div>
             {triggerPath.trim() && <div className="mx-1 mt-1.5 rounded-[5px] bg-sky-500/10 px-2 py-1.5"><span className="mr-1 text-[8px] uppercase tracking-wide text-[var(--text-tertiary)]">Token</span><code className="break-all font-mono text-[9px] text-sky-400">{`{{trigger.data.${triggerPath.trim().replace(/^\.+|\.+$/g, "")}}}`}</code></div>}
             <p className="px-1.5 pt-1 text-[9px] leading-4 text-[var(--text-tertiary)]">Use a field from the incoming payload; dots select nested fields.</p>
-          </section>
+          </section>}
           <section className="border-t border-[var(--border-subtle)] pt-2">
             <p className="px-1.5 pb-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Previous nodes</p>
             {matchingNodes.length === 0 ? <p className="px-1.5 py-2 text-[10px] text-[var(--text-tertiary)]">{previousNodes.length ? "No outputs match your search." : "Connect an action before this node to use its outputs."}</p> : <div className="space-y-0.5">{matchingNodes.map((node) => {

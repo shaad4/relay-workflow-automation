@@ -105,7 +105,7 @@ export const NODE_CATEGORIES = [
         icon: "🔍",
         description: "Search connected vector knowledge bases",
         defaultConfig: {
-          knowledge_base: "",
+          knowledge_base_id: "",
           query: "",
           top_k: 5,
         },
@@ -164,7 +164,6 @@ const exampleValuesByType = {
   },
   "action.refund": { payment_id: "ch_12345" },
   "ai.decision": { prompt: "Classify incoming customer request priority" },
-  "ai.rag_search": { knowledge_base: "kb_customer_docs", query: "{{input.message}}" },
   "ai.generate": { prompt: "Generate summary of customer ticket" },
   "logic.condition": { field: "status_code", value: "200" },
 };

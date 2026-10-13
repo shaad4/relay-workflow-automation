@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import { Handle, Position } from "@xyflow/react";
+import { ragKnowledgeBaseId, validateNodeConfiguration } from "./configValidation";
 import { getNodeDefinition } from "./nodeDefinitions";
 
 const categoryColors = {
@@ -35,7 +36,7 @@ function WorkflowNode({ data, selected }) {
       return summary ? `Approve: ${summary}` : "Approver selected";
     }
     if (typeId === "ai.decision" || typeId === "ai.generate") return config.model || "gemini-2.5-flash";
-    if (typeId === "ai.rag_search") return `Index  ${config.knowledge_base || "Not configured"}`;
+    if (typeId === "ai.rag_search") return ragKnowledgeBaseId(config) ? `Knowledge base selected · Top ${config.top_k ?? "—"} results` : "Choose a knowledge base";
     if (typeId === "logic.condition") return `${config.field || "Field not set"}  ${config.operator || "=="}  ${config.value || "Value not set"}`;
     return "Configured";
   };
@@ -72,7 +73,7 @@ function WorkflowNode({ data, selected }) {
       </div>
 
       <div className="workflow-node-footer flex items-center justify-between border-t px-3.5 py-2 text-[10px] text-[var(--text-tertiary)]">
-        <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#35c98a] shadow-[0_0_8px_#35c98a80]" />Ready</span>
+        <span className="inline-flex items-center gap-1.5">{typeId === "ai.rag_search" ? (validateNodeConfiguration(typeId, config).length ? "Configuration required" : "Configured") : <><span className="h-1.5 w-1.5 rounded-full bg-[#35c98a] shadow-[0_0_8px_#35c98a80]" />Ready</>}</span>
         <span className="workflow-node-id font-mono">{data?.nodeId || data?.node_id || "step"}</span>
       </div>
 

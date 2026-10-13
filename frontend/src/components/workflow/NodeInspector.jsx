@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { getNodeDefinition } from "./nodeDefinitions";
-import { validateNodeConfiguration } from "./configValidation";
+import { normalizeRAGConfiguration, ragKnowledgeBaseId, validateNodeConfiguration } from "./configValidation";
 import { createWebhook, deleteWebhook, getWebhookEndpoint, listWebhooks, regenerateWebhookToken, updateWebhook } from "@/services/webhooks";
 import { getWorkflowVersions } from "@/services/workflows";
+import { listKnowledgeBases } from "@/services/knowledgeBases";
 import { createConnection, listConnections } from "@/services/connections";
 import Link from "next/link";
 import WebhookTestDialog from "@/components/webhooks/WebhookTestDialog";
@@ -94,16 +95,17 @@ function TextInput({ value, onChange, mono = false, variables = false, prefix = 
   );
 }
 
-function TextareaInput({ value, onChange, rows = 3, mono = false, variables = false, placeholder = "", disabled = false }) {
+function TextareaInput({ value, onChange, rows = 3, mono = false, variables = false, placeholder = "", disabled = false, ...accessibility }) {
   const previewRef = useRef(null);
   if (variables) {
     return <div className={`relative w-full overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] transition-colors focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)] ${mono ? "font-mono" : ""}`}>
       <div ref={previewRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-y-auto whitespace-pre-wrap break-words p-2.5 text-[12px] [scrollbar-width:none]">{value ? <VariableText value={value} /> : <span className="text-[var(--text-disabled)]">{placeholder}</span>}</div>
-      <textarea rows={rows} value={value ?? ""} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} onScroll={(e) => { if (previewRef.current) previewRef.current.scrollTop = e.currentTarget.scrollTop; }} className="relative block w-full resize-none bg-transparent p-2.5 text-[12px] text-transparent caret-sky-400 selection:bg-sky-500/25 placeholder:text-[var(--text-disabled)] focus:outline-none disabled:cursor-not-allowed" />
+      <textarea {...accessibility} rows={rows} value={value ?? ""} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} onScroll={(e) => { if (previewRef.current) previewRef.current.scrollTop = e.currentTarget.scrollTop; }} className="relative block w-full resize-none bg-transparent p-2.5 text-[12px] text-transparent caret-sky-400 selection:bg-sky-500/25 placeholder:text-[var(--text-disabled)] focus:outline-none disabled:cursor-not-allowed" />
     </div>;
   }
   return (
     <textarea
+      {...accessibility}
       rows={rows}
       value={value ?? ""}
       placeholder={placeholder}
@@ -114,9 +116,10 @@ function TextareaInput({ value, onChange, rows = 3, mono = false, variables = fa
   );
 }
 
-function SelectInput({ value, onChange, options }) {
+function SelectInput({ value, onChange, options, ...accessibility }) {
   return (
     <select
+      {...accessibility}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
       className="w-full h-8 px-2 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:outline-none"
@@ -648,32 +651,60 @@ function AIConfig({ config, onChange }) {
   );
 }
 
-function RAGConfig({ config, onChange }) {
+function RAGConfig({ config, onChange, variableContext, knowledgeBaseCacheRef, isReadOnly }) {
+  const [knowledgeBases, setKnowledgeBases] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    if (!knowledgeBaseCacheRef.current) {
+      knowledgeBaseCacheRef.current = listKnowledgeBases().then((items) => {
+        if (!Array.isArray(items)) throw new Error("Invalid knowledge base list");
+        return items;
+      }).catch((error) => { knowledgeBaseCacheRef.current = null; throw error; });
+    }
+    knowledgeBaseCacheRef.current.then((items) => { if (active) setKnowledgeBases(items); })
+      .catch(() => { if (active) setLoadError(true); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [knowledgeBaseCacheRef, attempt]);
+
+  const selectedId = ragKnowledgeBaseId(config);
+  const selectedValue = typeof selectedId === "string" ? selectedId : "";
+  const missing = Boolean(selectedValue) && !knowledgeBases.some((item) => item.id === selectedValue);
+  const errors = Object.fromEntries(validateNodeConfiguration("ai.rag_search", config).map((error) => [error.field, error.message]));
+  if (!loading && !loadError && missing) errors.knowledge_base_id ||= "This knowledge base is unavailable. Choose another knowledge base.";
+  const errorFor = (field) => errors[field] && <p id={`rag-${field}-error`} role="alert" className="mt-1 text-[10px] text-red-500">{errors[field]}</p>;
+  const accessibility = (field, label) => ({ "aria-label": label, "aria-invalid": Boolean(errors[field]), "aria-describedby": errors[field] ? `rag-${field}-error` : undefined });
+  const options = [{ value: "", label: "Choose a knowledge base" }, ...knowledgeBases.map((item) => ({ value: item.id, label: item.name }))];
+  if (missing) options.push({ value: selectedValue, label: `${loading || loadError ? "Saved selection" : "Unavailable"}: ${selectedValue}` });
   return (
     <div className="space-y-3">
+      <p className="text-[11px] leading-4 text-[var(--text-tertiary)]">Retrieve relevant knowledge from uploaded company documents.</p>
       <div>
-        <FieldLabel>Knowledge Base ID</FieldLabel>
-        <TextInput
-          value={config.knowledge_base}
-          onChange={(v) => onChange("knowledge_base", v)}
-          mono
-        />
+        <FieldLabel>Knowledge Base</FieldLabel>
+        <SelectInput value={selectedValue} onChange={(value) => onChange("knowledge_base_id", value)} options={options} disabled={isReadOnly || loading || loadError} {...accessibility("knowledge_base_id", "Knowledge base")} />
+        {loading && <p role="status" className="mt-1 text-[10px] text-[var(--text-tertiary)]">Loading knowledge bases…</p>}
+        {loadError && <div role="alert" className="mt-1 text-[10px] text-red-500">Unable to load knowledge bases. Your selection is preserved. <button type="button" className="underline focus-visible:outline" onClick={() => { knowledgeBaseCacheRef.current = null; setLoading(true); setLoadError(false); setAttempt((value) => value + 1); }}>Retry</button></div>}
+        {!loading && !loadError && knowledgeBases.length === 0 && <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Create a knowledge base and upload documents in <Link href="/dashboard/knowledge-bases" className="text-[var(--accent)] underline">Knowledge Bases</Link>.</p>}
+        {errorFor("knowledge_base_id")}
       </div>
       <div>
-        <FieldLabel>Query</FieldLabel>
-        <TextInput
-          value={config.query}
-          onChange={(v) => onChange("query", v)}
-          mono
-        />
+        <VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly {...variableContext} onInsert={(expression) => onChange("query", `${typeof config.query === "string" ? config.query : ""}${expression}`)} />}>Query</VariableFieldLabel>
+        <TextareaInput value={typeof config.query === "string" ? config.query : ""} onChange={(value) => onChange("query", value)} rows={4} mono variables disabled={isReadOnly} {...accessibility("query", "Search query")} />
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Use text, upstream variables, or both. Maximum 2,000 characters.</p>
+        {errorFor("query")}
       </div>
       <div>
-        <FieldLabel>Top K Results</FieldLabel>
-        <TextInput
-          value={String(config.top_k ?? 5)}
-          onChange={(v) => onChange("top_k", Number.parseInt(v, 10) || 5)}
-          mono
-        />
+        <FieldLabel>Top Results</FieldLabel>
+        <input type="number" min="1" max="20" step="1" value={typeof config.top_k === "number" || typeof config.top_k === "string" ? config.top_k : ""} disabled={isReadOnly} onChange={(event) => { const value = event.target.value; onChange("top_k", /^\d+$/.test(value) ? Number(value) : value); }} {...accessibility("top_k", "Top results")} className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none font-mono" />
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Retrieve between 1 and 20 chunks.</p>
+        {errorFor("top_k")}
+      </div>
+      <div className="space-y-2 border-t border-[var(--border-subtle)] pt-3">
+        <FieldLabel>Available Outputs</FieldLabel>
+        {[["chunks", "Array of retrieved chunks with source metadata and similarity scores."], ["context", "Combined text for downstream AI prompts."]].map(([field, description]) => <div key={field}><p className="text-[10px] text-[var(--text-secondary)]"><strong>{field}</strong> — {description}</p><code className="block break-all select-text text-[10px] text-[var(--text-tertiary)]">{`{{nodes.${variableContext.currentNode.data.nodeId}.${field}}}`}</code></div>)}
       </div>
     </div>
   );
@@ -764,6 +795,7 @@ export default function NodeInspector({
   workflowEdges = [],
 }) {
   const { user } = useAuth();
+  const knowledgeBaseCacheRef = useMemo(() => ({ current: null, scope: [user?.id, workflowId, workflowVersionId] }), [user?.id, workflowId, workflowVersionId]);
   const [formData, setFormData] = useState({});
   const [nodeName, setNodeName] = useState("");
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
@@ -822,7 +854,14 @@ export default function NodeInspector({
   const variableContext = { nodes: workflowNodes, edges: workflowEdges, currentNode: selectedNode };
 
   const handleFieldChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (isReadOnly) return;
+    let nextConfig = { ...formData, [field]: value };
+    if (typeId === "ai.rag_search") {
+      if (field === "knowledge_base_id") delete nextConfig.knowledge_base;
+      nextConfig = normalizeRAGConfiguration(nextConfig);
+      onUpdateNode?.(selectedNode.id, { config: nextConfig });
+    }
+    setFormData(nextConfig);
     setHasLocalChanges(true);
     setConfigurationErrors((previous) => previous.filter((error) => error.field !== field));
   };
@@ -856,7 +895,7 @@ export default function NodeInspector({
       onUpdateNode(selectedNode.id, {
         label: nodeName,
         name: nodeName,
-        config: formData,
+        config: typeId === "ai.rag_search" ? normalizeRAGConfiguration(formData) : formData,
       });
       setHasLocalChanges(false);
     }
@@ -897,7 +936,7 @@ export default function NodeInspector({
       case "ai.generate":
         return <AIConfig config={formData} onChange={handleFieldChange} />;
       case "ai.rag_search":
-        return <RAGConfig config={formData} onChange={handleFieldChange} />;
+        return <RAGConfig key={user?.id} config={formData} onChange={handleFieldChange} variableContext={variableContext} knowledgeBaseCacheRef={knowledgeBaseCacheRef} isReadOnly={isReadOnly} />;
       case "logic.condition":
         return <ConditionConfig config={formData} onChange={handleFieldChange} />;
       case "human.approval":

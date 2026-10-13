@@ -14,7 +14,8 @@ import WorkflowCanvas from "./WorkflowCanvas";
 import NodeInspector from "./NodeInspector";
 import WorkflowValidation from "./WorkflowValidation";
 import { clearExampleNodeConfig, getNodeDefinition } from "./nodeDefinitions";
-import { validateWorkflowConfiguration } from "./configValidation";
+import { normalizeRAGConfiguration, ragKnowledgeBaseId, validateWorkflowConfiguration } from "./configValidation";
+import { listKnowledgeBases } from "@/services/knowledgeBases";
 import {
   createWorkflowNode,
   updateWorkflowNode,
@@ -102,6 +103,24 @@ function EdgeInspector({ edge, isReadOnly, onConditionChange, onDelete, onClose 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data transformation helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+async function validateRAGKnowledgeBases(nodes) {
+  const ragNodes = nodes.filter((node) => node.data?.typeId === "ai.rag_search");
+  if (!ragNodes.length) return [];
+  try {
+    const knowledgeBases = await listKnowledgeBases();
+    if (!Array.isArray(knowledgeBases)) throw new Error("Invalid knowledge base list");
+    const availableIds = new Set(knowledgeBases.map((item) => item.id));
+    return ragNodes.filter((node) => !availableIds.has(ragKnowledgeBaseId(node.data.config))).map((node) => ({
+      code: "NODE_CONFIG_KNOWLEDGE_BASE_ID",
+      nodeId: node.data.nodeId,
+      field: "knowledge_base_id",
+      message: `${node.data.label || "RAG Search"}: Knowledge base is unavailable. Choose another knowledge base.`,
+    }));
+  } catch {
+    return [{ code: "KNOWLEDGE_BASE_CHECK_FAILED", message: "Unable to verify knowledge bases. Please retry validation before publishing." }];
+  }
+}
 
 function removeNodeOutputReferences(value, nodeId) {
   if (typeof value === "string") {
@@ -779,13 +798,21 @@ export default function WorkflowBuilder({
   // ── SAVE: diff-based sync to backend ─────────────────────────────────────
   const handleSave = useCallback(async () => {
     if (isCanvasReadOnly || saveState === "saving") return false;
+    const ragErrors = validateWorkflowConfiguration(nodes.filter((node) => node.data?.typeId === "ai.rag_search"), [], { includeStructure: false });
+    if (ragErrors.length) {
+      setValidationResult({ isValid: false, errors: ragErrors });
+      setValidationOpen(true);
+      return false;
+    }
     setSaveState("saving");
     setSaveError(null);
 
     // Snapshot local state at this moment
     // Note: nodes/edges from closure captured at call time
     // We need latest — use functional form trick below via ref
-    const nodesSnap = [...nodes];
+    const nodesSnap = nodes.map((node) => node.data?.typeId === "ai.rag_search"
+      ? { ...node, data: { ...node.data, config: normalizeRAGConfiguration(node.data.config) } }
+      : node);
     const edgesSnap = [...edges];
     const srvNodes = serverNodesRef.current;
     const srvEdges = serverEdgesRef.current;
@@ -1039,6 +1066,7 @@ export default function WorkflowBuilder({
     setIsValidating(true);
     try {
       const localErrors = validateWorkflowConfiguration(nodes, edges);
+      if (!localErrors.length) localErrors.push(...await validateRAGKnowledgeBases(nodes));
       if (localErrors.length) {
         setValidationResult({ isValid: false, errors: localErrors });
         return;
@@ -1095,6 +1123,7 @@ export default function WorkflowBuilder({
     setIsPublishing(true);
     try {
       const localErrors = validateWorkflowConfiguration(nodes, edges);
+      if (!localErrors.length) localErrors.push(...await validateRAGKnowledgeBases(nodes));
       if (localErrors.length) {
         setValidationResult({ isValid: false, errors: localErrors });
         setValidationOpen(true);
