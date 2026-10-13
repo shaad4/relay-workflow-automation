@@ -10,3 +10,4 @@ aiokafka
 openai
 google-genai
 anthropic
+cryptography
