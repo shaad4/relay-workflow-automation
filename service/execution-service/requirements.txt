@@ -7,3 +7,6 @@ asyncpg
 alembic
 python-dotenv
 aiokafka
+openai
+google-genai
+anthropic
