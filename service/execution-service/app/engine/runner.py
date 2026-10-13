@@ -33,6 +33,38 @@ async def _commit_session(session, add=None, refresh=None):
         await session.rollback()
         raise
 
+async def mark_step_failed(
+    execution_step_id,
+    error_message: str,
+):
+    async with AsyncSessionLocal() as session:
+        step = await session.get(
+            ExecutionStep,
+            execution_step_id,
+        )
+
+        if step is None:
+            return
+
+        if step.status == ExecutionStepStatus.FAILED:
+            return
+
+        completed_at = datetime.now(timezone.utc)
+
+        step.status = ExecutionStepStatus.FAILED
+        step.completed_at = completed_at
+        step.error = {
+            "message": error_message,
+        }
+
+        if step.started_at:
+            step.duration_ms = int(
+                (completed_at - step.started_at).total_seconds()
+                * 1000
+            )
+
+        await session.commit()
+
 
 async def run_execution(
     execution_id,

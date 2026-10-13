@@ -3,9 +3,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import ValidationError
 
 from app.models import Workflow, WorkflowVersion, WorkflowEdge, WorkflowNode
 from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
+from app.schemas.node_configuration import RagSearchConfig
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
 from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
 
@@ -847,12 +849,14 @@ async def delete_workflow_edge(
     return True
 
 
+
 async def validate_workflow(
     workflow_id: UUID,
     version_number: int,
     workspace_id: str,
     session: AsyncSession,
 ):
+    # 1. Validate workflow ownership
     workflow_result = await session.execute(
         select(Workflow).where(
             Workflow.id == workflow_id,
@@ -865,6 +869,7 @@ async def validate_workflow(
     if workflow is None:
         return None
 
+    # 2. Retrieve workflow version
     version_result = await session.execute(
         select(WorkflowVersion).where(
             WorkflowVersion.workflow_id == workflow_id,
@@ -877,6 +882,7 @@ async def validate_workflow(
     if version is None:
         return None
 
+    # 3. Retrieve workflow nodes
     node_result = await session.execute(
         select(WorkflowNode).where(
             WorkflowNode.workflow_version_id == version.id,
@@ -885,6 +891,7 @@ async def validate_workflow(
 
     nodes = node_result.scalars().all()
 
+    # 4. Retrieve workflow edges
     edge_result = await session.execute(
         select(WorkflowEdge).where(
             WorkflowEdge.workflow_version_id == version.id,
@@ -898,25 +905,57 @@ async def validate_workflow(
 
     node_ids = {node.node_id for node in nodes}
 
-    # Check that the workflow has at least one node.
+    # 5. Validate that workflow contains nodes
     if not nodes:
         errors.append(
             {
                 "code": "NO_NODES",
-                "message": "Workflow must contain at least one node.",
+                "message": (
+                    "Workflow must contain at least one node."
+                ),
             }
         )
 
-    # Check for duplicate node IDs.
+    # 6. Check duplicate node IDs
     if len(node_ids) != len(nodes):
         errors.append(
             {
                 "code": "DUPLICATE_NODE_ID",
-                "message": "Workflow contains duplicate node IDs.",
+                "message": (
+                    "Workflow contains duplicate node IDs."
+                ),
             }
         )
 
-    # Check that every edge references existing nodes.
+    # 7. Validate RAG Search node configurations
+    for node in nodes:
+        if node.node_type != "ai.rag_search":
+            continue
+
+        try:
+            RagSearchConfig.model_validate(
+                node.configuration or {}
+            )
+
+        except ValidationError as exc:
+            for error in exc.errors():
+                field = ".".join(
+                    str(part)
+                    for part in error["loc"]
+                ) or "configuration"
+
+                errors.append(
+                    {
+                        "code": "INVALID_RAG_CONFIGURATION",
+                        "node_id": node.node_id,
+                        "message": (
+                            f"RAG Search node '{node.node_id}': "
+                            f"{field} - {error['msg']}"
+                        ),
+                    }
+                )
+
+    # 8. Validate edge references
     for edge in edges:
         if edge.source_node_id not in node_ids:
             errors.append(
@@ -940,11 +979,13 @@ async def validate_workflow(
                 }
             )
 
+    # 9. Return validation result
     return {
         "valid": not errors,
         "errors": errors,
         "warnings": warnings,
     }
+
 
 
 async def publish_workflow(
