@@ -9,6 +9,18 @@ export const outputsByType = {
 export function previousNodesFor(nodes, edges, currentNodeId, includeTriggers = false) {
   const byId = new Map((nodes || []).map((node) => [String(node.id), node]));
   const previousIds = new Set();
+  const followingIds = new Set();
+  const following = [String(currentNodeId)];
+  while (following.length) {
+    const source = following.pop();
+    for (const edge of edges || []) {
+      const target = String(edge.target);
+      if (String(edge.source) === source && !followingIds.has(target)) {
+        followingIds.add(target);
+        following.push(target);
+      }
+    }
+  }
   const pending = (edges || [])
     .filter((edge) => String(edge.target) === String(currentNodeId))
     .map((edge) => String(edge.source));
@@ -24,7 +36,6 @@ export function previousNodesFor(nodes, edges, currentNodeId, includeTriggers = 
 
   return [...previousIds]
     .map((id) => byId.get(id))
-    .filter((node) => node && (includeTriggers || !node.data?.typeId?.startsWith("trigger.")))
+    .filter((node) => node && !followingIds.has(String(node.id)) && (includeTriggers || !node.data?.typeId?.startsWith("trigger.")))
     .reverse();
 }
-

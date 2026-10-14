@@ -16,6 +16,11 @@ export function upgradeDecisionConfiguration(config = {}) {
 const required = (value) => String(value ?? "").trim().length > 0;
 const containsExpression = (value) => /\{\{[^{}]+\}\}/.test(String(value ?? ""));
 
+export function isLegacyConditionConfiguration(config = {}) {
+  return !!config && typeof config === "object" && !Array.isArray(config) &&
+    Object.keys(config).some((key) => key !== "value");
+}
+
 // Preserve conflicts until the user explicitly chooses a knowledge base.
 export function ragKnowledgeBaseId(config = {}) {
   if (!config || typeof config !== "object") return undefined;
@@ -120,9 +125,9 @@ export function validateNodeConfiguration(typeId, config = {}) {
       break;
     }
     case "logic.condition":
-      requireField("field", "Field or variable");
-      requireField("operator", "Operator");
-      if (!["is_empty", "is_not_empty"].includes(config.operator)) requireField("value", "Comparison value");
+      if (isLegacyConditionConfiguration(config)) errors.push({ field: "legacy", message: "This Condition uses older comparison settings. Update it to exact-value routing before publishing." });
+      if (typeof config.value !== "string" || !config.value.trim()) errors.push({ field: "value", message: "Value to Evaluate is required." });
+      else if (config.value.length > 2000) errors.push({ field: "value", message: "Value to Evaluate must be 2,000 characters or fewer." });
       break;
     case "human.approval":
       requireField("approver_user_id", "Approver");
@@ -172,6 +177,7 @@ export function validateWorkflowConfiguration(nodes = [], edges = [], { includeS
     const label = node.data?.label || typeId;
     const nodeErrors = validateNodeConfiguration(typeId, node.data?.config);
     if (typeId === "ai.decision") nodeErrors.push(...validateDecisionReferences(node.data?.config, nodes, edges, node.id));
+    if (typeId === "logic.condition") nodeErrors.push(...validateConditionReferences(node.data?.config, nodes, edges, node.id));
     for (const error of nodeErrors) {
       errors.push({
         field: error.field,
@@ -179,6 +185,39 @@ export function validateWorkflowConfiguration(nodes = [], edges = [], { includeS
         nodeId: node.data?.nodeId ?? node.id,
         message: `${label}: ${error.message}`,
       });
+    }
+  }
+  errors.push(...validateConditionBranches(nodes, edges));
+  return errors;
+}
+
+export function validateConditionReferences(config = {}, nodes = [], edges = [], currentNodeId) {
+  return validateDecisionReferences({ input_mappings: { value: config?.value } }, nodes, edges, currentNodeId)
+    .map((error) => ({ ...error, field: "value" }));
+}
+
+export function validateConditionBranches(nodes = [], edges = []) {
+  const errors = [];
+  for (const node of nodes.filter((item) => item.data?.typeId === "logic.condition")) {
+    const outgoing = edges.filter((edge) => edge.source === node.id);
+    const nodeId = node.data?.nodeId ?? node.id;
+    const label = node.data?.label || nodeId;
+    if (!outgoing.length) errors.push({ code: "CONDITION_NO_BRANCHES", nodeId, message: `${label}: Connect at least one outgoing branch.` });
+    const seen = new Map();
+    for (const edge of outgoing) {
+      const value = edge.data?.condition;
+      let message;
+      if (typeof value !== "string" || !value.trim()) message = "Enter a label for this Condition branch.";
+      else if (value !== value.trim()) message = "Branch labels cannot begin or end with spaces.";
+      else if (value.length > 255) message = "Branch labels must be 255 characters or fewer.";
+      else if (seen.has(value)) {
+        message = `Branch label '${value}' is already used on this Condition.`;
+        if (!errors.some((error) => error.edgeId === seen.get(value))) {
+          errors.push({ code: "CONDITION_BRANCH_LABEL", nodeId, edgeId: seen.get(value), message: `${label}: ${message}` });
+        }
+      }
+      if (message) errors.push({ code: "CONDITION_BRANCH_LABEL", nodeId, edgeId: edge.id, message: `${label}: ${message}` });
+      if (typeof value === "string" && !seen.has(value)) seen.set(value, edge.id);
     }
   }
   return errors;

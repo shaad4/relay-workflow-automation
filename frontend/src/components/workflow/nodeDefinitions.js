@@ -132,12 +132,8 @@ export const NODE_CATEGORIES = [
         name: "Condition",
         category: "Logic",
         icon: "🔀",
-        description: "Branch execution based on boolean condition",
-        defaultConfig: {
-          field: "",
-          operator: "equals",
-          value: "",
-        },
+        description: "Route to the branch matching an evaluated value",
+        defaultConfig: { value: "" },
       },
       {
         typeId: "human.approval",
@@ -164,7 +160,6 @@ const exampleValuesByType = {
   },
   "action.refund": { payment_id: "ch_12345" },
   "ai.generate": { prompt: "Generate summary of customer ticket" },
-  "logic.condition": { field: "status_code", value: "200" },
 };
 
 export function clearExampleNodeConfig(typeId, config) {

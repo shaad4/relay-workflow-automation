@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { getNodeDefinition } from "./nodeDefinitions";
-import { normalizeDecisionConfiguration, normalizeRAGConfiguration, ragKnowledgeBaseId, validateNodeConfiguration, validateDecisionReferences, AI_DECISION_FIELDS, renameDecisionInput, upgradeDecisionConfiguration } from "./configValidation";
+import { normalizeDecisionConfiguration, normalizeRAGConfiguration, ragKnowledgeBaseId, validateNodeConfiguration, validateDecisionReferences, validateConditionReferences, validateConditionBranches, isLegacyConditionConfiguration, AI_DECISION_FIELDS, renameDecisionInput, upgradeDecisionConfiguration } from "./configValidation";
 import { createWebhook, deleteWebhook, getWebhookEndpoint, listWebhooks, regenerateWebhookToken, updateWebhook } from "@/services/webhooks";
 import { getWorkflowVersions } from "@/services/workflows";
 import { listKnowledgeBases } from "@/services/knowledgeBases";
@@ -697,7 +697,7 @@ function AIDecisionConfig({ config, onChange, onReplace, variableContext, isRead
       </div>)}{mappingError && <p role="alert" className="text-[10px] text-red-500">{mappingError}</p>}{errorFor("input_mappings")}
     </section>
     <section className={sectionClass}><VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly ragOnly {...variableContext} onInsert={(expression) => onChange("rag_context", `${config.rag_context || ""}${expression}`)} />}>RAG Knowledge Context</VariableFieldLabel><TextareaInput value={typeof config.rag_context === "string" ? config.rag_context : ""} onChange={(value) => onChange("rag_context", value)} rows={3} mono variables aria-label="RAG Knowledge Context" /><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Optional reference knowledge, separate from your inputs. Insert context from an upstream RAG Search step. Maximum 2,000 characters.</p>{errorFor("rag_context")}</section>
-    <section className={sectionClass}><div className="flex items-center justify-between"><FieldLabel>Allowed Decisions</FieldLabel><span className="text-[10px] text-[var(--text-tertiary)]">{decisions.length} / 20</span></div><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Define 2–20 possible outcomes. Use letters, numbers, and underscores, starting with a letter.</p><div className="space-y-2">{decisions.map((decision, index) => <div key={index} className="flex items-center gap-2"><span className="w-4 text-[10px] tabular-nums text-[var(--text-disabled)]">{index + 1}</span><input aria-label={`Decision ${index + 1}`} value={typeof decision === "string" ? decision : ""} maxLength={100} onChange={(event) => onChange("allowed_decisions", decisions.map((value, i) => i === index ? event.target.value.toUpperCase() : value))} onBlur={() => onChange("allowed_decisions", decisions.map((value) => typeof value === "string" ? value.trim().toUpperCase() : value))} className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" /><button type="button" aria-label={`Remove decision ${index + 1}`} onClick={() => onChange("allowed_decisions", decisions.filter((_, i) => i !== index))} className="px-1 text-[var(--text-tertiary)] hover:text-red-500">×</button></div>)}</div><button type="button" disabled={decisions.length >= 20} className={smallButton} onClick={() => onChange("allowed_decisions", [...decisions, ""])}>＋ Add decision</button>{errorFor("allowed_decisions")}<p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Decision-specific branching is not available yet. Downstream steps can use the decision as data.</p></section>
+    <section className={sectionClass}><div className="flex items-center justify-between"><FieldLabel>Allowed Decisions</FieldLabel><span className="text-[10px] text-[var(--text-tertiary)]">{decisions.length} / 20</span></div><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Define 2–20 possible outcomes. Use letters, numbers, and underscores, starting with a letter.</p><div className="space-y-2">{decisions.map((decision, index) => <div key={index} className="flex items-center gap-2"><span className="w-4 text-[10px] tabular-nums text-[var(--text-disabled)]">{index + 1}</span><input aria-label={`Decision ${index + 1}`} value={typeof decision === "string" ? decision : ""} maxLength={100} onChange={(event) => onChange("allowed_decisions", decisions.map((value, i) => i === index ? event.target.value.toUpperCase() : value))} onBlur={() => onChange("allowed_decisions", decisions.map((value) => typeof value === "string" ? value.trim().toUpperCase() : value))} className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" /><button type="button" aria-label={`Remove decision ${index + 1}`} onClick={() => onChange("allowed_decisions", decisions.filter((_, i) => i !== index))} className="px-1 text-[var(--text-tertiary)] hover:text-red-500">×</button></div>)}</div><button type="button" disabled={decisions.length >= 20} className={smallButton} onClick={() => onChange("allowed_decisions", [...decisions, ""])}>＋ Add decision</button>{errorFor("allowed_decisions")}<p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Connect a Condition node after this step and choose its decision output to route by outcome.</p></section>
     <section className={sectionClass}><FieldLabel>Validation Failure Behavior</FieldLabel><div className="rounded-md border border-[var(--border-subtle)] bg-[var(--elevated)] p-3"><p className="text-[11px] font-medium">Stop workflow execution</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">Invalid JSON, a disallowed decision, or malformed output fails this step. Downstream actions do not run.</p></div></section>
     <details className={sectionClass}><summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)]">Output information</summary><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">The output fields are fixed. Fields inside data are flexible and are not individually validated.</p>{["decision", "reason", "data", "model", "input_tokens", "output_tokens"].map((field) => <code key={field} className="block select-text break-all rounded border border-[var(--border-subtle)] bg-[var(--input-bg)] p-2 text-[10px] text-[var(--text-secondary)]">{`{{nodes.${variableContext.currentNode.data.nodeId}.${field}}}`}</code>)}</details>
   </fieldset>;
@@ -789,41 +789,34 @@ function RAGConfig({ config, onChange, variableContext, knowledgeBaseCacheRef, i
   );
 }
 
-function ConditionConfig({ config, onChange }) {
+function ConditionConfig({ config, onChange, variableContext, workflowNodes, workflowEdges, onSelectEdge, isReadOnly }) {
+  const legacy = isLegacyConditionConfiguration(config);
+  const branches = workflowEdges.filter((edge) => edge.source === variableContext.currentNode.id);
+  const branchErrors = validateConditionBranches(workflowNodes, workflowEdges)
+    .filter((error) => error.nodeId === (variableContext.currentNode.data?.nodeId ?? variableContext.currentNode.id));
   return (
     <div className="space-y-3">
-      <div>
-        <FieldLabel>Field / Variable</FieldLabel>
-        <TextInput
-          value={config.field}
-          onChange={(v) => onChange("field", v)}
-          mono
-        />
-      </div>
-      <div>
-        <FieldLabel>Operator</FieldLabel>
-        <SelectInput
-          value={config.operator}
-          onChange={(v) => onChange("operator", v)}
-          options={[
-            { value: "equals", label: "Equals (==)" },
-            { value: "not_equals", label: "Not Equals (!=)" },
-            { value: "contains", label: "Contains" },
-            { value: "not_contains", label: "Does not contain" },
-            { value: "greater_than", label: "Greater Than (>)" },
-            { value: "less_than", label: "Less Than (<)" },
-            { value: "is_empty", label: "Is empty" },
-            { value: "is_not_empty", label: "Is not empty" },
-          ]}
-        />
-      </div>
-      <div>
-        <FieldLabel>Value</FieldLabel>
-        <TextInput
-          value={config.value}
-          onChange={(v) => onChange("value", v)}
-          mono
-        />
+      <p className="text-[12px] font-semibold text-[var(--text-primary)]">Condition</p>
+      {legacy ? <div role="alert" className="rounded-[6px] border border-amber-500/25 bg-amber-500/5 p-2.5 text-[10px] leading-4 text-[var(--text-secondary)]">
+        <p className="font-semibold text-amber-500">Update required before publishing</p>
+        <p className="mt-1">This draft uses older comparison settings. Its original values remain saved until you choose exact-value routing.</p>
+        <code className="mt-2 block break-all text-[var(--text-tertiary)]">{JSON.stringify(config)}</code>
+        {!isReadOnly && <button type="button" onClick={() => onChange({ value: "" })} className="mt-2 text-[10px] font-medium text-[var(--accent)] hover:underline">Update to exact-value routing</button>}
+      </div> : <div>
+        <VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly scalarOnly {...variableContext} onInsert={(expression) => onChange("value", expression)} />}>Value to Evaluate</VariableFieldLabel>
+        <TextInput value={typeof config.value === "string" ? config.value : ""} onChange={(value) => onChange("value", value)} mono variables aria-label="Value to Evaluate" />
+        <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">At runtime, this value selects one outgoing edge whose label matches exactly, including letter case. An unmatched value stops execution.</p>
+      </div>}
+      <div className="space-y-1.5 border-t border-[var(--border-subtle)] pt-3">
+        <FieldLabel>Outgoing branches</FieldLabel>
+        {branches.length ? branches.map((edge) => {
+          const target = workflowNodes.find((node) => node.id === edge.target);
+          return <button key={edge.id} type="button" onClick={() => onSelectEdge?.(edge)} className="flex w-full items-center justify-between gap-2 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--input-bg)] px-2.5 py-2 text-left text-[10px] hover:border-[var(--border-strong)]">
+            <span className="min-w-0 truncate font-mono text-[var(--text-primary)]">{edge.data?.condition || "Add branch label"}</span>
+            <span className="truncate text-[var(--text-tertiary)]">→ {target?.data?.label || target?.data?.nodeId || edge.target}</span>
+          </button>;
+        }) : <p className="text-[10px] text-[var(--text-tertiary)]">Connect this node to a target, then label the branch in the connection inspector.</p>}
+        {branchErrors.map((error) => <p key={error.edgeId ?? error.code} role="alert" className="text-[10px] text-red-500">{error.message}</p>)}
       </div>
     </div>
   );
@@ -872,6 +865,7 @@ export default function NodeInspector({
   className = "",
   workflowNodes = [],
   workflowEdges = [],
+  onSelectEdge,
 }) {
   const { user } = useAuth();
   const knowledgeBaseCacheRef = useMemo(() => ({ current: null, scope: [user?.id, workflowId, workflowVersionId] }), [user?.id, workflowId, workflowVersionId]);
@@ -937,17 +931,21 @@ export default function NodeInspector({
 
   const handleFieldChange = (field, value) => {
     if (isReadOnly) return;
-    let nextConfig = { ...(typeId === "ai.decision" ? selectedNode.data?.config : typeId === "ai.rag_search" ? formDataRef.current : formData), ...(typeof field === "object" ? field : { [field]: value }) };
+    let nextConfig = typeId === "logic.condition" && typeof field === "object"
+      ? field
+      : { ...(typeId === "ai.decision" ? selectedNode.data?.config : typeId === "ai.rag_search" ? formDataRef.current : formData), ...(typeof field === "object" ? field : { [field]: value }) };
     if (typeId === "ai.rag_search") {
       if (field === "knowledge_base_id") delete nextConfig.knowledge_base;
       nextConfig = normalizeRAGConfiguration(nextConfig);
       onUpdateNode?.(selectedNode.id, { config: nextConfig });
     }
-    if (typeId === "ai.decision") onUpdateNode?.(selectedNode.id, { config: nextConfig });
+    if (typeId === "ai.decision" || typeId === "logic.condition") onUpdateNode?.(selectedNode.id, { config: nextConfig });
     formDataRef.current = nextConfig;
     setFormData(nextConfig);
     setHasLocalChanges(true);
-    setConfigurationErrors((previous) => previous.filter((error) => error.field !== field));
+    setConfigurationErrors((previous) => typeId === "logic.condition" && typeof field === "object"
+      ? []
+      : previous.filter((error) => error.field !== field));
   };
 
   const handleSave = (e) => {
@@ -958,6 +956,7 @@ export default function NodeInspector({
       : typeId === "ai.decision" ? selectedNode.data?.config ?? {} : formData;
     const nextConfigurationErrors = validateNodeConfiguration(typeId, configToValidate);
     if (typeId === "ai.decision") nextConfigurationErrors.push(...validateDecisionReferences(configToValidate, workflowNodes, workflowEdges, selectedNode.id));
+    if (typeId === "logic.condition") nextConfigurationErrors.push(...validateConditionReferences(configToValidate, workflowNodes, workflowEdges, selectedNode.id));
     setConfigurationErrors(nextConfigurationErrors);
     if (nextConfigurationErrors.length) return;
     if (typeId === "human.approval") {
@@ -1024,7 +1023,7 @@ export default function NodeInspector({
       case "ai.rag_search":
         return <RAGConfig key={user?.id} config={formData} onChange={handleFieldChange} variableContext={variableContext} knowledgeBaseCacheRef={knowledgeBaseCacheRef} isReadOnly={isReadOnly} />;
       case "logic.condition":
-        return <ConditionConfig config={formData} onChange={handleFieldChange} />;
+        return <ConditionConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} workflowNodes={workflowNodes} workflowEdges={workflowEdges} onSelectEdge={onSelectEdge} isReadOnly={isReadOnly} />;
       case "human.approval":
         return <HumanApprovalConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} errors={approvalErrors} isReadOnly={isReadOnly} />;
       default:
