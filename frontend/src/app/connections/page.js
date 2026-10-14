@@ -33,8 +33,8 @@ function StripeIcon({ className = "h-5 w-5" }) {
 }
 function ConnectionsContent() {
   const { isInitializing, user } = useAuth();
-  const [section, setSection] = useState("integrations");
   const searchParams = useSearchParams();
+  const [section, setSection] = useState(() => searchParams.get("section") === "ai" ? "ai" : "integrations");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);

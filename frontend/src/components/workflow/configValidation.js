@@ -1,3 +1,18 @@
+import { previousNodesFor } from "./workflowVariables.js";
+
+export const AI_DECISION_FIELDS = ["connection_id", "model", "instructions", "input_mappings", "rag_context", "allowed_decisions"];
+export function normalizeDecisionConfiguration(config = {}) {
+  return { ...config, ...(Array.isArray(config.allowed_decisions) ? {
+    allowed_decisions: config.allowed_decisions.map((value) => typeof value === "string" ? value.trim().toUpperCase() : value),
+  } : {}) };
+}
+export function upgradeDecisionConfiguration(config = {}) {
+  return {
+    connection_id: "", model: "", input_mappings: {}, rag_context: "", allowed_decisions: [],
+    ...Object.fromEntries(Object.entries(config).filter(([key]) => AI_DECISION_FIELDS.includes(key))),
+    instructions: config.instructions || config.prompt || "",
+  };
+}
 const required = (value) => String(value ?? "").trim().length > 0;
 const containsExpression = (value) => /\{\{[^{}]+\}\}/.test(String(value ?? ""));
 
@@ -68,7 +83,26 @@ export function validateNodeConfiguration(typeId, config = {}) {
         if (!Number.isFinite(amount) || amount <= 0) errors.push({ field: "amount", message: "Refund amount must be a positive number or a variable." });
       }
       break;
-    case "ai.decision":
+    case "ai.decision": {
+      if (typeof config.connection_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(config.connection_id)) errors.push({ field: "connection_id", message: "Choose an active AI provider connection." });
+      for (const [field, label, max] of [["model", "Model", 150], ["instructions", "AI instructions", 10000]]) {
+        if (typeof config[field] !== "string" || !config[field].trim()) errors.push({ field, message: `${label} is required.` });
+        else if (config[field].length > max) errors.push({ field, message: `${label} must be ${max.toLocaleString("en-US")} characters or fewer.` });
+      }
+      if (config.rag_context !== undefined && (typeof config.rag_context !== "string" || config.rag_context.length > 2000)) errors.push({ field: "rag_context", message: "RAG context must be text with at most 2,000 characters." });
+      if (config.input_mappings !== undefined && (!config.input_mappings || typeof config.input_mappings !== "object" || Array.isArray(config.input_mappings))) errors.push({ field: "input_mappings", message: "Input mappings must be an object." });
+      else if (Object.keys(config.input_mappings || {}).some((key) => !key.trim())) errors.push({ field: "input_mappings", message: "Input mapping names cannot be empty." });
+      const decisions = config.allowed_decisions;
+      if (!Array.isArray(decisions) || decisions.length < 2 || decisions.length > 20) errors.push({ field: "allowed_decisions", message: "Add between 2 and 20 allowed decisions." });
+      if (Array.isArray(decisions)) {
+        const normalized = decisions.map((value) => typeof value === "string" ? value.trim().toUpperCase() : "");
+        if (normalized.some((value) => !/^[A-Z][A-Z0-9_]*$/.test(value) || value.length > 100)) errors.push({ field: "allowed_decisions", message: "Use up to 100 letters, numbers, or underscores per decision, starting with a letter." });
+        if (new Set(normalized).size !== normalized.length) errors.push({ field: "allowed_decisions", message: "Allowed decisions must be unique (case insensitive)." });
+      }
+      const unsupported = Object.keys(config).filter((field) => !AI_DECISION_FIELDS.includes(field));
+      if (unsupported.length) errors.push({ field: "legacy", message: `Review and upgrade legacy AI settings before saving: ${unsupported.join(", ")}.` });
+      break;
+    }
     case "ai.generate":
       requireField("prompt", "Prompt");
       requireField("model", "Model");
@@ -136,7 +170,9 @@ export function validateWorkflowConfiguration(nodes = [], edges = [], { includeS
   for (const node of nodes) {
     const typeId = node.data?.typeId ?? "custom";
     const label = node.data?.label || typeId;
-    for (const error of validateNodeConfiguration(typeId, node.data?.config)) {
+    const nodeErrors = validateNodeConfiguration(typeId, node.data?.config);
+    if (typeId === "ai.decision") nodeErrors.push(...validateDecisionReferences(node.data?.config, nodes, edges, node.id));
+    for (const error of nodeErrors) {
       errors.push({
         field: error.field,
         code: `NODE_CONFIG_${error.field.toUpperCase()}`,
@@ -146,4 +182,26 @@ export function validateWorkflowConfiguration(nodes = [], edges = [], { includeS
     }
   }
   return errors;
+}
+
+export function validateDecisionReferences(config = {}, nodes = [], edges = [], currentNodeId) {
+  const upstream = previousNodesFor(nodes, edges, currentNodeId, true);
+  const ids = new Set(upstream.map((node) => node.data?.nodeId || node.id));
+  const errors = [];
+  const visit = (value, field) => {
+    if (Array.isArray(value)) return value.forEach((item) => visit(item, field));
+    if (value && typeof value === "object") return Object.values(value).forEach((item) => visit(item, field));
+    if (typeof value !== "string") return;
+    for (const match of value.matchAll(/\{\{\s*nodes\.([^\s.{}]+)(?:\.[^{}]*)?\s*\}\}/g)) {
+      if (!ids.has(match[1])) errors.push({ field, message: `Referenced node '${match[1]}' is missing or not upstream. Reconnect it or update this expression.` });
+    }
+    if (/\{\{\s*trigger\./.test(value) && !upstream.some((node) => node.data?.typeId?.startsWith("trigger."))) errors.push({ field, message: "Connect an upstream trigger before using trigger variables." });
+  };
+  for (const field of ["instructions", "input_mappings", "rag_context"]) visit(config?.[field], field);
+  return errors;
+}
+
+export function renameDecisionInput(mappings, oldName, newName) {
+  if (Object.keys(mappings).some((name) => name !== oldName && name.trim() === newName.trim())) return null;
+  return Object.fromEntries(Object.entries(mappings).map(([key, value]) => [key === oldName ? newName : key, value]));
 }

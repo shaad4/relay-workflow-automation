@@ -15,7 +15,8 @@ import WorkflowCanvas from "./WorkflowCanvas";
 import NodeInspector from "./NodeInspector";
 import WorkflowValidation from "./WorkflowValidation";
 import { clearExampleNodeConfig, getNodeDefinition } from "./nodeDefinitions";
-import { normalizeRAGConfiguration, ragKnowledgeBaseId, validateWorkflowConfiguration } from "./configValidation";
+import { listAIConnections } from "@/services/aiProviderConnections";
+import { normalizeDecisionConfiguration, normalizeRAGConfiguration, ragKnowledgeBaseId, validateWorkflowConfiguration } from "./configValidation";
 import { listKnowledgeBases } from "@/services/knowledgeBases";
 import {
   createWorkflowNode,
@@ -120,6 +121,22 @@ async function validateRAGKnowledgeBases(nodes) {
     }));
   } catch {
     return [{ code: "KNOWLEDGE_BASE_CHECK_FAILED", message: "Unable to verify knowledge bases. Please retry validation before publishing." }];
+  }
+}
+
+async function validateAIConnections(nodes) {
+  const decisionNodes = nodes.filter((node) => node.data?.typeId === "ai.decision");
+  if (!decisionNodes.length) return [];
+  try {
+    const connections = await listAIConnections();
+    if (!Array.isArray(connections)) throw new Error("Invalid connection list");
+    const activeIds = new Set(connections.filter((item) => item.status === "active").map((item) => item.id));
+    return decisionNodes.filter((node) => !activeIds.has(node.data.config?.connection_id)).map((node) => ({
+      code: "NODE_CONFIG_CONNECTION_ID", nodeId: node.data.nodeId, field: "connection_id",
+      message: `${node.data.label || "AI Decision"}: Choose an active AI provider connection before publishing.`,
+    }));
+  } catch {
+    return [{ code: "AI_CONNECTION_CHECK_FAILED", message: "Unable to verify AI connections. Retry validation before publishing." }];
   }
 }
 
@@ -688,6 +705,7 @@ export default function WorkflowBuilder({
       setNodes((currentNodes) => currentNodes
         .filter((node) => node.id !== id)
         .map((node) => {
+          if (node.data?.typeId === "ai.decision") return node;
           const config = removeNodeOutputReferences(node.data?.config, deletedLogicalId);
           return config === node.data?.config ? node : { ...node, data: { ...node.data, config } };
         }));
@@ -797,6 +815,7 @@ export default function WorkflowBuilder({
     if (isCanvasReadOnly || publishingRef.current) return;
     if (removedLogicalIds.length) {
       setNodes((currentNodes) => currentNodes.map((node) => {
+        if (node.data?.typeId === "ai.decision") return node;
         let config = node.data?.config;
         for (const nodeId of removedLogicalIds) config = removeNodeOutputReferences(config, nodeId);
         return config === node.data?.config ? node : { ...node, data: { ...node.data, config } };
@@ -811,7 +830,8 @@ export default function WorkflowBuilder({
   // ── SAVE: diff-based sync to backend ─────────────────────────────────────
   const handleSave = useCallback(async ({ forPublish = false } = {}) => {
     if (isCanvasReadOnly || savingRef.current || (publishingRef.current && !forPublish)) return false;
-    const ragErrors = validateWorkflowConfiguration(nodes.filter((node) => node.data?.typeId === "ai.rag_search"), [], { includeStructure: false });
+    const checkedIds = new Set(nodes.filter((node) => ["ai.rag_search", "ai.decision"].includes(node.data?.typeId)).map((node) => node.data?.nodeId ?? node.id));
+    const ragErrors = validateWorkflowConfiguration(nodes, edges, { includeStructure: false }).filter((error) => checkedIds.has(error.nodeId));
     if (ragErrors.length) {
       setValidationResult({ isValid: false, errors: ragErrors });
       setValidationOpen(true);
@@ -827,7 +847,7 @@ export default function WorkflowBuilder({
     // We need latest — use functional form trick below via ref
     const nodesSnap = nodes.map((node) => node.data?.typeId === "ai.rag_search"
       ? { ...node, data: { ...node.data, config: normalizeRAGConfiguration(node.data.config) } }
-      : node);
+      : node.data?.typeId === "ai.decision" ? { ...node, data: { ...node.data, config: normalizeDecisionConfiguration(node.data.config) } } : node);
     const edgesSnap = [...edges];
     const savedSnapshot = workflowSaveSnapshot(nodesSnap, edgesSnap);
     const srvNodes = serverNodesRef.current;
@@ -1080,6 +1100,7 @@ export default function WorkflowBuilder({
     try {
       const localErrors = validateWorkflowConfiguration(nodes, edges);
       if (!localErrors.length) localErrors.push(...await validateRAGKnowledgeBases(nodes));
+      if (!localErrors.length) localErrors.push(...await validateAIConnections(nodes));
       if (localErrors.length) {
         setValidationResult({ isValid: false, errors: localErrors });
         return;
@@ -1123,6 +1144,7 @@ export default function WorkflowBuilder({
     try {
       const localErrors = validateWorkflowConfiguration(nodes, edges);
       if (!localErrors.length) localErrors.push(...await validateRAGKnowledgeBases(nodes));
+      if (!localErrors.length) localErrors.push(...await validateAIConnections(nodes));
       if (localErrors.length) {
         setValidationResult({ isValid: false, errors: localErrors });
         setValidationOpen(true);
