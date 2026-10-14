@@ -20,6 +20,14 @@ from app.models.execution import Execution
 from app.engine.handlers.rag_search import execute_rag_search
 from app.engine.handlers.ai_decision import execute_ai_decision
 
+from app.ai.exceptions import (
+    AIDecisionValidationError,
+    AIAuthenticationError,
+    AIRateLimitError,
+    AITimeoutError,
+    AIServiceUnavailableError,
+)
+
 
 async def _commit_session(session, add=None, refresh=None):
     try:
@@ -588,19 +596,47 @@ async def run_execution(
         # The approval transaction already saved context and the waiting step.
         raise
     except Exception as exc:
-        # Includes resolution, dispatch, persistence, and graph traversal.
-        # Completed/failed/waiting steps are protected by mark_step_failed.
+         # Classify failures using safe messages.
+        if isinstance(exc, ActionExecutionFailed):
+            message = "Action execution failed"
+
+        elif isinstance(exc, AIDecisionValidationError):
+            message = "AI Decision returned an invalid response"
+
+        elif isinstance(exc, AIAuthenticationError):
+            message = "AI provider authentication failed"
+
+        elif isinstance(exc, AIRateLimitError):
+            message = "AI provider rate limit exceeded"
+
+        elif isinstance(exc, AITimeoutError):
+            message = "AI provider request timed out"
+
+        elif isinstance(exc, AIServiceUnavailableError):
+            message = "AI provider unavailable"
+
+        else:
+            message = "Node execution failed"
+
         try:
             if execution_step_id is not None:
-                message = exc.error if isinstance(exc, ActionExecutionFailed) else "Node execution failed"
-                await mark_step_failed(execution_step_id, message)
+                await mark_step_failed(
+                    execution_step_id,
+                    message,
+                )
+
         finally:
             if context is not None:
                 async with AsyncSessionLocal() as session:
-                    execution = await session.get(Execution, execution_id)
+                    execution = await session.get(
+                        Execution,
+                        execution_id,
+                    )
+
                     if execution is not None:
                         execution.context = context.to_dict()
                         await _commit_session(session)
+
         raise
     finally:
         try:
