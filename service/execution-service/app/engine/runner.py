@@ -19,6 +19,7 @@ from app.models.human_approval import HumanApproval
 from app.models.execution import Execution
 from app.engine.handlers.rag_search import execute_rag_search
 from app.engine.handlers.ai_decision import execute_ai_decision
+from app.engine.handlers.condition import evaluate_condition
 
 from app.ai.exceptions import (
     AIDecisionValidationError,
@@ -358,6 +359,71 @@ async def run_execution(
                 sequence += 1
 
                 continue
+
+
+
+            # Execute Condition node
+            if node_type == "logic.condition":
+                # Read the resolved value
+                selected_condition = evaluate_condition(
+                    resolved_configuration
+                )
+
+                # Find the matching outgoing edge
+                next_node = executor.get_next_node(
+                    node_id=node_id,
+                    condition=selected_condition,
+                )
+
+                if next_node is None:
+                    raise ValueError(
+                        "Condition node has no matching branch"
+                    )
+
+                # Store the selected branch
+                result = {
+                    "value": selected_condition,
+                    "selected_branch": selected_condition,
+                    "next_node_id": next_node["node_id"],
+                }
+
+                context.set_node_output(
+                    node_id,
+                    result,
+                )
+
+                # Mark Condition step completed
+                completed_at = datetime.now(timezone.utc)
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    execution_step.status = (
+                        ExecutionStepStatus.COMPLETED
+                    )
+
+                    execution_step.output = result
+                    execution_step.completed_at = completed_at
+
+                    if execution_step.started_at:
+                        execution_step.duration_ms = int(
+                            (
+                                completed_at
+                                - execution_step.started_at
+                            ).total_seconds() * 1000
+                        )
+
+                    await _commit_session(session)
+
+                # Continue only through the selected edge
+                current_node = next_node
+                sequence += 1
+
+                continue
+
 
 
 
