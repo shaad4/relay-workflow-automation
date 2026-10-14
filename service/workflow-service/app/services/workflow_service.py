@@ -999,6 +999,7 @@ async def validate_workflow(
         "action.refund",
         "human.approval",
         "ai.rag_search",
+        "ai.decision",
     }
 
     # ai.decision is intentionally excluded until
