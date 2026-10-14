@@ -21,3 +21,7 @@ class AIServiceUnavailableError(AIProviderError):
 
 class AIResponseError(AIProviderError):
     """AI provider returned an invalid or incomplete response."""
+
+
+class AIDecisionValidationError(AIResponseError):
+    """AI returned an invalid structured decision."""

@@ -8,6 +8,10 @@ from app.ai.schemas import (
     validate_ai_decision,
 )
 
+from pydantic import ValidationError
+
+from app.ai.exceptions import AIDecisionValidationError
+
 
 class StructuredAIGeneration:
 
@@ -51,9 +55,19 @@ class StructuredAIGeneration:
 
         try:
             output_data = json.loads(response.content)
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                "AI provider returned invalid JSON"
+
+            output = AIDecisionOutput.model_validate(
+                output_data
+            )
+
+            output = validate_ai_decision(
+                output=output,
+                allowed_decisions=decision_input.allowed_decisions,
+            )
+
+        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+            raise AIDecisionValidationError(
+                "AI returned an invalid decision"
             ) from exc
 
         output = AIDecisionOutput.model_validate(
