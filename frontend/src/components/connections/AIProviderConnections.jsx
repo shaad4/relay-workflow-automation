@@ -3,9 +3,10 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createAIConnection, listAIConnections, getAIConnection, updateAIConnection, deleteAIConnection, testAIConnection, listAIConnectionModels } from "@/services/aiProviderConnections";
-import { Modal, Field, inputClass, buttonClass, primaryClass, secondaryClass } from "./ConnectionUI";
+import { Modal, Field, inputClass, buttonClass, secondaryClass } from "./ConnectionUI";
 import { AI_PROVIDERS, aiConnectionPayload, aiConnectionError } from "./aiConnectionForm";
 
+const actionClass = `${buttonClass} border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--surface)] hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]`;
 const emptyForm = () => ({ name: "", provider: "openai", api_key: "", status: "active" });
 const providerName = (id) => AI_PROVIDERS.find((provider) => provider.id === id)?.name || id;
 
@@ -58,11 +59,6 @@ export default function AIProviderConnections() {
   const open = (type, item = null) => {
     setSelected(item); setForm(emptyForm()); setVisible(false); setErrors({});
     setModels(null); setResult(null); setModal(type); setNotice("");
-  };
-
-  const createForProvider = (provider) => {
-    open("create");
-    setForm({ ...emptyForm(), provider });
   };
 
   const loadDetails = async (item) => {
@@ -131,22 +127,29 @@ export default function AIProviderConnections() {
     }
   };
 
-  return <section aria-labelledby="ai-providers-title" className="space-y-6">
+  return <section aria-labelledby="ai-providers-title" className="space-y-5 pt-2">
     <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div><h2 id="ai-providers-title" className="text-[18px] font-semibold">AI Providers</h2><p className="mt-1 text-[13px] text-[var(--text-secondary)]">Your models. Your keys. One place to connect them.</p></div>
-      <button type="button" onClick={() => open("create")} className={primaryClass}>＋ Add AI Connection</button>
+      <div><h2 id="ai-providers-title" className="flex items-center gap-2.5 text-[16px] font-semibold">AI Providers{!loading && !loadError && <span className="rounded-md border border-[var(--border-subtle)] px-1.5 py-0.5 text-[10px] font-normal tabular-nums text-[var(--text-tertiary)]">{items.length}</span>}</h2><p className="mt-1 text-[13px] text-[var(--text-secondary)]">Manage the provider connections available to your workspace.</p></div>
+      <button type="button" onClick={() => open("create")} className={`${actionClass} self-start sm:self-auto`}>＋ Add connection</button>
     </header>
-    <div className="grid gap-3 sm:grid-cols-3">{AI_PROVIDERS.map((provider) => <button key={provider.id} type="button" onClick={() => createForProvider(provider.id)} className="group flex items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] p-4 text-left transition-all hover:border-[var(--accent)]/50 hover:bg-[var(--elevated)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
-      <ProviderLogo provider={provider.id} /><span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold">{provider.name}</span><span className="mt-1 block text-[11px] text-[var(--text-tertiary)]">{provider.description}</span></span><span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-full border border-[var(--border-subtle)] text-[var(--text-tertiary)] transition-colors group-hover:border-[var(--accent)] group-hover:text-[var(--accent)]">＋</span>
-    </button>)}</div>
-    <div className="flex items-center gap-3 pt-2"><h3 className="text-[13px] font-semibold">Your connections</h3><span className="rounded-md bg-[var(--elevated)] px-2 py-0.5 text-[11px] text-[var(--text-tertiary)]">{loading ? "—" : items.length}</span><span className="h-px flex-1 bg-[var(--border-subtle)]" /></div>
     {loading && <p role="status" className="flex items-center gap-2 py-8 text-[13px] text-[var(--text-secondary)]"><span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--border-default)] border-t-[var(--accent)]" />Loading AI connections…</p>}
     {!loading && loadError && <div role="alert" className="rounded-md border border-[var(--border-subtle)] p-8 text-center"><h3 className="text-[14px] font-semibold">Unable to load AI connections</h3><p className="mt-2 text-[13px] text-[var(--text-secondary)]">{loadError}</p><button type="button" onClick={refresh} className={`${secondaryClass} mt-4`}>Retry</button></div>}
-    {!loading && !loadError && items.length === 0 && <div className="flex flex-col items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-12 text-center"><div className="mb-5 flex -space-x-2">{AI_PROVIDERS.map((provider) => <div key={provider.id} className="rounded-xl ring-4 ring-[var(--surface)]"><ProviderLogo provider={provider.id} size={22} /></div>)}</div><h3 className="text-[16px] font-semibold">Connect your first AI provider</h3><p className="mx-auto mt-2 max-w-sm text-[13px] leading-6 text-[var(--text-secondary)]">Bring your OpenAI, Gemini, or Claude API key. Your team can manage connections together in this workspace.</p><button type="button" onClick={() => open("create")} className={`${primaryClass} mt-5`}>＋ Add connection</button><p className="mt-4 text-[11px] text-[var(--text-tertiary)]">Keys are stored securely and never shown after saving.</p></div>}
-    {!loading && !loadError && <div className="grid gap-3 sm:grid-cols-2">{items.map((item) => <article key={item.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] p-4 transition-colors hover:border-[var(--border-strong)]">
-      <div className="flex items-start gap-3.5"><ProviderLogo provider={item.provider} /><div className="min-w-0"><h3 className="break-words text-[14px] font-medium">{item.name}</h3><p className="mt-1 text-[12px] text-[var(--text-secondary)]">{providerName(item.provider)}</p><p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)]"><span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${item.status === "active" ? "bg-emerald-500" : "bg-[var(--text-disabled)]"}`} />{item.status === "active" ? "Active" : "Inactive"}</p></div></div>
-      <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--border-subtle)] pt-4" aria-label={`Manage ${item.name}`}><button type="button" className={secondaryClass} onClick={() => inspect("test", item)}>Test Connection</button><button type="button" className={secondaryClass} onClick={() => inspect("models", item)}>View Models</button><button type="button" className={secondaryClass} onClick={() => loadDetails(item)}>Edit</button><button type="button" className={`${buttonClass} border-red-500/30 text-red-500 hover:bg-red-500/5`} onClick={() => open("delete", item)}>Delete</button></div>
-    </article>)}</div>}
+    {!loading && !loadError && items.length === 0 && <div className="flex flex-col items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-12 text-center"><div className="mb-5 flex -space-x-2">{AI_PROVIDERS.map((provider) => <div key={provider.id} className="rounded-xl ring-4 ring-[var(--surface)]"><ProviderLogo provider={provider.id} size={22} /></div>)}</div><h3 className="text-[16px] font-semibold">Connect your first AI provider</h3><p className="mx-auto mt-2 max-w-sm text-[13px] leading-6 text-[var(--text-secondary)]">Bring your OpenAI, Gemini, or Claude API key. Your team can manage connections together in this workspace.</p><button type="button" onClick={() => open("create")} className={`${actionClass} mt-5`}>＋ Add connection</button><p className="mt-4 text-[11px] text-[var(--text-tertiary)]">Keys are stored securely and never shown after saving.</p></div>}
+    {!loading && !loadError && items.length > 0 && <div className="rounded-lg border border-[var(--border-default)] bg-[var(--surface)]">
+      <div className="hidden items-center justify-between border-b border-[var(--border-subtle)] px-5 py-2.5 text-[11px] text-[var(--text-tertiary)] sm:flex"><span>Connection</span><span>Manage</span></div>
+      <div className="divide-y divide-[var(--border-subtle)]">{items.map((item) => <article key={item.id} className="flex flex-col gap-4 px-4 py-5 transition-colors hover:bg-[var(--elevated)]/40 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="flex min-w-0 items-center gap-3"><ProviderLogo provider={item.provider} size={22} /><div className="min-w-0"><div className="flex flex-wrap items-center gap-x-3 gap-y-1"><h3 className="break-all text-[13px] font-medium">{item.name}</h3><span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]"><span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${item.status === "active" ? "bg-emerald-500" : "bg-[var(--text-disabled)]"}`} />{item.status === "active" ? "Active" : "Inactive"}</span></div><p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{providerName(item.provider)}<span className="mx-2 text-[var(--border-strong)]">/</span>API key</p></div></div>
+        <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto" aria-label={`Manage ${item.name}`}>
+          <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--accent)]" onClick={() => inspect("models", item)}>Models<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m9 5 7 7-7 7" /></svg></button>
+          <button type="button" className={`${secondaryClass} h-8 px-3 text-[12px]`} onClick={() => inspect("test", item)}>Test connection</button>
+          <details className="group relative" onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary").focus(); } }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}>
+            <summary aria-label={`More actions for ${item.name}`} className="grid h-8 w-8 cursor-pointer list-none place-items-center rounded-md text-[var(--text-tertiary)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] [&::-webkit-details-marker]:hidden"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></summary>
+            <div className="absolute right-0 top-10 z-20 w-44 rounded-lg border border-[var(--border-default)] bg-[var(--surface)] p-1 shadow-xl"><button type="button" className="w-full rounded-md px-3 py-2 text-left text-[12px] hover:bg-[var(--elevated)]" onClick={(event) => { event.currentTarget.closest("details").open = false; loadDetails(item); }}>Edit connection</button><div className="my-1 h-px bg-[var(--border-subtle)]"/><button type="button" className="w-full rounded-md px-3 py-2 text-left text-[12px] text-red-500 hover:bg-red-500/5" onClick={(event) => { event.currentTarget.closest("details").open = false; open("delete", item); }}>Delete connection</button></div>
+          </details>
+        </div>
+      </article>)}</div>
+    </div>}
+    {!loading && !loadError && items.length > 0 && <p className="text-[11px] text-[var(--text-tertiary)]">Connections are shared with your workspace. API keys are encrypted and never displayed.</p>}
     {notice && <div role="status" className="connection-toast fixed bottom-5 right-5 z-[120] max-w-[calc(100%-2.5rem)] rounded-md border border-[var(--border-default)] bg-[var(--surface)] px-4 py-2.5 text-[13px]">{notice}<button type="button" aria-label="Dismiss notification" onClick={() => setNotice("")} className="ml-3">×</button></div>}
     {(modal === "create" || modal === "edit") && <Modal title={modal === "edit" ? "Edit AI connection" : "Add AI connection"} description="Choose a provider and bring your own API key." onClose={close} wide>
       <form onSubmit={save} className="space-y-5" aria-busy={busy}>
@@ -163,7 +166,7 @@ export default function AIProviderConnections() {
         </fieldset>
         <div className="flex items-start gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--elevated)] p-3"><svg aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><p className="text-[11px] leading-5 text-[var(--text-secondary)]">Your API key is encrypted and stored securely. It will never be displayed after saving.</p></div>
         {errors.api && <p role="alert" className="text-[12px] text-red-500">{errors.api}</p>}
-        <div className="flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-4"><button type="button" disabled={busy} onClick={close} className={secondaryClass}>Cancel</button><button type="submit" disabled={busy} className={primaryClass}>{busy ? "Saving…" : "Save Connection"}</button></div>
+        <div className="flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-4"><button type="button" disabled={busy} onClick={close} className={secondaryClass}>Cancel</button><button type="submit" disabled={busy} className={actionClass}>{busy ? "Saving…" : "Save Connection"}</button></div>
       </form>
     </Modal>}
     {modal === "delete" && <Modal title={`Delete ${selected.name}?`} onClose={close}><p className="text-[13px] leading-5 text-[var(--text-secondary)]">Deleting this connection removes its stored credentials. Workflows using this connection may fail until another connection is selected.</p>{errors.api && <p role="alert" className="mt-3 text-[12px] text-red-500">{errors.api}</p>}<div className="mt-5 flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-4"><button type="button" disabled={busy} onClick={close} className={secondaryClass}>Cancel</button><button type="button" disabled={busy} onClick={remove} className={`${buttonClass} border-red-500/40 bg-red-600 text-white hover:bg-red-700`}>{busy ? "Deleting…" : "Delete connection"}</button></div></Modal>}
