@@ -158,6 +158,58 @@ class AIDecisionConfig(BaseModel):
         return values
 
 
+
+class AIGenerateConfig(BaseModel):
+    """Configuration for a generic AI Generate node."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    connection_id: UUID
+
+    model: str = Field(
+        min_length=1,
+        max_length=150,
+    )
+
+    instructions: str = Field(
+        default="",
+        max_length=10000,
+    )
+
+    prompt: str = Field(
+        min_length=1,
+        max_length=10000,
+    )
+
+    rag_context: str = Field(
+        default="",
+        max_length=2000,
+    )
+
+    @field_validator("model", "instructions", "prompt")
+    @classmethod
+    def normalize_text(cls, value: str) -> str:
+        value = value.strip()
+
+        if not value and cls.__name__ == "AIGenerateConfig":
+            # Instructions may be empty, but model and
+            # prompt must be checked separately.
+            return value
+
+        return value
+
+    @field_validator("model", "prompt")
+    @classmethod
+    def validate_required_text(cls, value: str) -> str:
+        if not value:
+            raise ValueError(
+                "Field cannot be empty"
+            )
+
+        return value
+
+
+
 class ConditionConfig(BaseModel):
     """Configuration for exact-value branch routing."""
 
