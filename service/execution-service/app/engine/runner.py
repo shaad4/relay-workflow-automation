@@ -20,6 +20,7 @@ from app.models.execution import Execution
 from app.engine.handlers.rag_search import execute_rag_search
 from app.engine.handlers.ai_decision import execute_ai_decision
 from app.engine.handlers.condition import evaluate_condition
+from app.engine.handlers.ai_generate import execute_ai_generate
 
 from app.ai.exceptions import (
     AIDecisionValidationError,
@@ -336,6 +337,60 @@ async def run_execution(
                         ExecutionStep,
                         execution_step_id,
                     )
+
+                    execution_step.status = (
+                        ExecutionStepStatus.COMPLETED
+                    )
+
+                    execution_step.output = result
+                    execution_step.completed_at = completed_at
+
+                    if execution_step.started_at:
+                        execution_step.duration_ms = int(
+                            (
+                                completed_at
+                                - execution_step.started_at
+                            ).total_seconds() * 1000
+                        )
+
+                    await _commit_session(session)
+
+                # Continue to the next workflow node
+                current_node = executor.get_next_node(node_id)
+                sequence += 1
+
+                continue
+
+
+
+            # Execute AI Generate node
+            if node_type == "ai.generate":
+                async with AsyncSessionLocal() as session:
+                    result = await execute_ai_generate(
+                        configuration=resolved_configuration,
+                        workspace_id=workspace_id,
+                        session=session,
+                    )
+
+                # Store generated output for downstream nodes
+                context.set_node_output(
+                    node_id,
+                    result,
+                )
+
+                # Persist AI Generate execution step
+                completed_at = datetime.now(timezone.utc)
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    if execution_step is None:
+                        raise RuntimeError(
+                            "AI Generate execution step not found"
+                        )
 
                     execution_step.status = (
                         ExecutionStepStatus.COMPLETED
