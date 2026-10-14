@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { getNodeDefinition } from "./nodeDefinitions";
-import { normalizeDecisionConfiguration, normalizeRAGConfiguration, ragKnowledgeBaseId, validateNodeConfiguration, validateDecisionReferences, validateConditionReferences, validateConditionBranches, isLegacyConditionConfiguration, AI_DECISION_FIELDS, renameDecisionInput, upgradeDecisionConfiguration } from "./configValidation";
+import { normalizeDecisionConfiguration, normalizeRAGConfiguration, ragKnowledgeBaseId, validateNodeConfiguration, validateDecisionReferences, validateGenerateReferences, validateConditionReferences, validateConditionBranches, isLegacyConditionConfiguration, AI_DECISION_FIELDS, renameDecisionInput, upgradeDecisionConfiguration } from "./configValidation";
 import { createWebhook, deleteWebhook, getWebhookEndpoint, listWebhooks, regenerateWebhookToken, updateWebhook } from "@/services/webhooks";
 import { getWorkflowVersions } from "@/services/workflows";
 import { listKnowledgeBases } from "@/services/knowledgeBases";
@@ -626,7 +626,7 @@ function RefundConfig({ config, onChange, variableContext }) {
   );
 }
 
-function DecisionModels({ connectionId, active, value, onChange, isReadOnly }) {
+function DecisionModels({ connectionId, active, value, onChange, isReadOnly, guidance = "Provider catalogs can include non-text models. Select a model that supports structured text generation; this list does not guarantee compatibility." }) {
   const [result, setResult] = useState({ status: "loading", items: [] });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -644,7 +644,7 @@ function DecisionModels({ connectionId, active, value, onChange, isReadOnly }) {
     {result.status === "error" && active && <p role="alert" className="text-[10px] text-red-500">{result.error} <button type="button" onClick={() => { setResult({ status: "loading", items: [] }); setAttempt((current) => current + 1); }} className="underline">Retry</button></p>}
     {active && result.status === "ready" && !result.items.length && <p className="text-[10px] text-[var(--text-tertiary)]">No models were returned for this connection.</p>}
     {active && result.status === "ready" && unavailable && <p role="status" className="text-[10px] text-amber-600 dark:text-amber-400">The saved model is not in this catalog. Its ID is preserved; verify its availability before running.</p>}
-    <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Provider catalogs can include non-text models. Select a model that supports structured text generation; this list does not guarantee compatibility.</p>
+    <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">{guidance}</p>
   </div>;
 }
 
@@ -680,7 +680,7 @@ function AIDecisionConfig({ config, onChange, onReplace, variableContext, isRead
     {legacy.length > 0 && <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"><p className="text-[11px] font-medium">Legacy configuration needs review</p><p className="text-[10px] leading-4 text-[var(--text-secondary)]">Unsupported fields: {legacy.join(", ")}. Upgrading copies the old prompt into instructions when instructions are empty, retains the model and supported values, and removes unsupported fields. Nothing changes until you choose Upgrade.</p>{typeof config.prompt === "string" && <details><summary className="cursor-pointer text-[10px]">Review saved prompt</summary><p className="mt-1 select-text whitespace-pre-wrap break-words text-[10px]">{config.prompt}</p></details>}<button type="button" className={smallButton} onClick={() => onReplace(upgradeDecisionConfiguration(config))}>Upgrade configuration</button></div>}
     <section className="space-y-3">
       <div className="flex items-center justify-between"><FieldLabel>AI Provider Connection</FieldLabel><Link href="/connections?section=ai" target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--accent)] hover:underline">Manage ↗</Link></div>
-      {connections.status === "loading" ? <div role="status" className="h-9 animate-pulse rounded-md bg-[var(--elevated)] motion-reduce:animate-none"><span className="sr-only">Loading AI connections</span></div> : <select aria-label="AI provider connection" value={config.connection_id || ""} disabled={isReadOnly || connections.status !== "ready"} onChange={(event) => onChange({ connection_id: event.target.value, model: "" })} className="h-9 w-full rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"><option value="">Choose a connection</option>{missing && <option value={config.connection_id} disabled>Unavailable: {config.connection_id}</option>}{connections.items.map((item) => <option key={item.id} value={item.id} disabled={item.status !== "active"}>{item.name} · {AI_PROVIDERS.find((provider) => provider.id === item.provider)?.name || item.provider}{item.status !== "active" ? " (inactive)" : ""}</option>)}</select>}
+      {connections.status === "loading" ? <div role="status" className="h-9 animate-pulse rounded-md bg-[var(--elevated)] motion-reduce:animate-none"><span className="sr-only">Loading AI connections</span></div> : <select aria-label="AI provider connection" value={config.connection_id || ""} disabled={isReadOnly || connections.status !== "ready"} onChange={(event) => onChange("connection_id", event.target.value)} className="h-9 w-full rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"><option value="">Choose a connection</option>{missing && <option value={config.connection_id} disabled>Unavailable: {config.connection_id}</option>}{connections.items.map((item) => <option key={item.id} value={item.id} disabled={item.status !== "active"}>{item.name} · {AI_PROVIDERS.find((provider) => provider.id === item.provider)?.name || item.provider}{item.status !== "active" ? " (inactive)" : ""}</option>)}</select>}
       {connections.status === "error" && <p role="alert" className="text-[10px] text-red-500">{connections.error}</p>}
       {connections.status !== "loading" && <button type="button" onClick={() => { setConnections({ status: "loading", items: [] }); setAttempt((current) => current + 1); }} className="text-[10px] text-[var(--text-tertiary)] underline">{connections.status === "error" ? "Retry" : "Refresh connections"}</button>}
       {connections.status === "ready" && !connections.items.length && <p className="text-[10px] text-[var(--text-tertiary)]">No AI provider connections found. <Link href="/connections?section=ai" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] underline">Add a connection ↗</Link></p>}
@@ -703,31 +703,43 @@ function AIDecisionConfig({ config, onChange, onReplace, variableContext, isRead
   </fieldset>;
 }
 
-function AIConfig({ config, onChange }) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <FieldLabel>Prompt / Instruction</FieldLabel>
-        <TextareaInput
-          value={config.prompt}
-          onChange={(v) => onChange("prompt", v)}
-          rows={4}
-        />
-      </div>
-      <div>
-        <FieldLabel>Model</FieldLabel>
-        <SelectInput
-          value={config.model}
-          onChange={(v) => onChange("model", v)}
-          options={[
-            { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-            { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-            { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-          ]}
-        />
-      </div>
-    </div>
-  );
+function AIConfig({ config, onChange, variableContext, isReadOnly }) {
+  const [connections, setConnections] = useState({ status: "loading", items: [] });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let current = true;
+    listAIConnections().then((items) => {
+      if (!Array.isArray(items)) throw new Error("Invalid connection list");
+      if (current) setConnections({ status: "ready", items });
+    }).catch((error) => { if (current) setConnections({ status: "error", items: [], error: aiConnectionError(error) }); });
+    return () => { current = false; };
+  }, [attempt]);
+  const selected = connections.items.find((item) => item.id === config.connection_id);
+  const active = selected?.status === "active";
+  const missing = config.connection_id && !selected;
+  const errors = [...validateNodeConfiguration("ai.generate", config), ...validateGenerateReferences(config, variableContext.nodes, variableContext.edges, variableContext.currentNode.id)];
+  const errorFor = (field) => errors.filter((error) => error.field === field).map((error, index) => <p key={index} role="alert" className="mt-1 text-[10px] leading-4 text-red-500">{error.message}</p>);
+  const sectionClass = "space-y-3 border-t border-[var(--border-subtle)] pt-4";
+  const nodeId = variableContext.currentNode.data?.nodeId || variableContext.currentNode.id;
+  return <fieldset disabled={isReadOnly} className="space-y-4">
+    <p className="text-[11px] leading-5 text-[var(--text-secondary)]">Generate text from your workflow data with a connected AI provider.</p>
+    <section className="space-y-3">
+      <div className="flex items-center justify-between"><FieldLabel>AI Provider Connection</FieldLabel><Link href="/connections?section=ai" target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--accent)] hover:underline">Manage ↗</Link></div>
+      {connections.status === "loading" ? <div role="status" className="h-9 animate-pulse rounded-md bg-[var(--elevated)] motion-reduce:animate-none"><span className="sr-only">Loading AI connections</span></div> : <select aria-label="AI provider connection" value={config.connection_id || ""} disabled={isReadOnly || connections.status !== "ready"} onChange={(event) => onChange({ connection_id: event.target.value, model: "" })} className="h-9 w-full rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"><option value="">Choose a connection</option>{missing && <option value={config.connection_id} disabled>Unavailable: {config.connection_id}</option>}{connections.items.map((item) => <option key={item.id} value={item.id} disabled={item.status !== "active"}>{item.name} · {AI_PROVIDERS.find((provider) => provider.id === item.provider)?.name || item.provider}{item.status !== "active" ? " (inactive)" : ""}</option>)}</select>}
+      {connections.status === "error" && <p role="alert" className="text-[10px] text-red-500">{connections.error}</p>}
+      {connections.status !== "loading" && <button type="button" onClick={() => { setConnections({ status: "loading", items: [] }); setAttempt((current) => current + 1); }} className="text-[10px] text-[var(--text-tertiary)] underline">{connections.status === "error" ? "Retry" : "Refresh connections"}</button>}
+      {connections.status === "ready" && !connections.items.length && <p className="text-[10px] text-[var(--text-tertiary)]">No AI provider connections found. <Link href="/connections?section=ai" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] underline">Add a connection ↗</Link></p>}
+      {connections.status === "ready" && config.connection_id && !active && <p role="alert" className="text-[10px] text-amber-600 dark:text-amber-400">This connection is inactive or unavailable. Its saved ID is preserved; choose an active connection before publishing.</p>}
+      {errorFor("connection_id")}
+      <DecisionModels key={`${config.connection_id}:${active}`} connectionId={config.connection_id} active={active} value={config.model} onChange={onChange} isReadOnly={isReadOnly} guidance="Choose a model that supports text generation. Catalog availability can change." />
+      {errorFor("model")}
+    </section>
+    <section className={sectionClass}><FieldLabel>Instructions</FieldLabel><TextareaInput value={typeof config.instructions === "string" ? config.instructions : ""} onChange={(value) => onChange("instructions", value)} rows={5} aria-label="AI Generate instructions" placeholder="Write a helpful, concise response." /><p className="text-[10px] text-[var(--text-tertiary)]">Optional · Up to 10,000 characters.</p>{errorFor("instructions")}</section>
+    <section className={sectionClass}><VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly {...variableContext} onInsert={(expression) => onChange("prompt", `${config.prompt || ""}${expression}`)} />}>Prompt</VariableFieldLabel><TextareaInput value={typeof config.prompt === "string" ? config.prompt : ""} onChange={(value) => onChange("prompt", value)} rows={5} variables mono aria-label="AI Generate prompt" placeholder="Write a response to {{trigger.data.message}}" /><p className="text-[10px] text-[var(--text-tertiary)]">Required · Up to 10,000 characters. Use variables from the trigger or earlier nodes.</p>{errorFor("prompt")}</section>
+    <section className={sectionClass}><VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly ragOnly {...variableContext} onInsert={(expression) => onChange("rag_context", `${config.rag_context || ""}${expression}`)} />}>RAG Knowledge Context</VariableFieldLabel><TextareaInput value={typeof config.rag_context === "string" ? config.rag_context : ""} onChange={(value) => onChange("rag_context", value)} rows={3} variables mono aria-label="AI Generate RAG Knowledge Context" /><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Optional reference knowledge from an upstream RAG Search node. Up to 2,000 characters.</p>{errorFor("rag_context")}</section>
+    <details className={sectionClass}><summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)]">Output information</summary>{["content", "model", "input_tokens", "output_tokens"].map((field) => <code key={field} className="block select-text break-all rounded border border-[var(--border-subtle)] bg-[var(--input-bg)] p-2 text-[10px] text-[var(--text-secondary)]">{`{{nodes.${nodeId}.${field}}}`}</code>)}</details>
+    {errorFor("legacy")}
+  </fieldset>;
 }
 
 function RAGConfig({ config, onChange, variableContext, knowledgeBaseCacheRef, isReadOnly }) {
@@ -939,7 +951,7 @@ export default function NodeInspector({
       nextConfig = normalizeRAGConfiguration(nextConfig);
       onUpdateNode?.(selectedNode.id, { config: nextConfig });
     }
-    if (typeId === "ai.decision" || typeId === "logic.condition") onUpdateNode?.(selectedNode.id, { config: nextConfig });
+    if (typeId === "ai.decision" || typeId === "ai.generate" || typeId === "logic.condition") onUpdateNode?.(selectedNode.id, { config: nextConfig });
     formDataRef.current = nextConfig;
     setFormData(nextConfig);
     setHasLocalChanges(true);
@@ -956,6 +968,7 @@ export default function NodeInspector({
       : typeId === "ai.decision" ? selectedNode.data?.config ?? {} : formData;
     const nextConfigurationErrors = validateNodeConfiguration(typeId, configToValidate);
     if (typeId === "ai.decision") nextConfigurationErrors.push(...validateDecisionReferences(configToValidate, workflowNodes, workflowEdges, selectedNode.id));
+    if (typeId === "ai.generate") nextConfigurationErrors.push(...validateGenerateReferences(configToValidate, workflowNodes, workflowEdges, selectedNode.id));
     if (typeId === "logic.condition") nextConfigurationErrors.push(...validateConditionReferences(configToValidate, workflowNodes, workflowEdges, selectedNode.id));
     setConfigurationErrors(nextConfigurationErrors);
     if (nextConfigurationErrors.length) return;
@@ -1019,7 +1032,7 @@ export default function NodeInspector({
       case "ai.decision":
         return <AIDecisionConfig key={`${user?.id}:${selectedNode.id}`} config={selectedNode.data?.config ?? {}} onChange={handleFieldChange} onReplace={(config) => { if (isReadOnly) return; setFormData(config); onUpdateNode?.(selectedNode.id, { config }); setHasLocalChanges(true); }} variableContext={variableContext} isReadOnly={isReadOnly} />;
       case "ai.generate":
-        return <AIConfig config={formData} onChange={handleFieldChange} />;
+        return <AIConfig key={`${user?.id}:${selectedNode.id}`} config={formData} onChange={handleFieldChange} variableContext={variableContext} isReadOnly={isReadOnly} />;
       case "ai.rag_search":
         return <RAGConfig key={user?.id} config={formData} onChange={handleFieldChange} variableContext={variableContext} knowledgeBaseCacheRef={knowledgeBaseCacheRef} isReadOnly={isReadOnly} />;
       case "logic.condition":

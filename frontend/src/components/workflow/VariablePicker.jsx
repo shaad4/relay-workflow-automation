@@ -109,6 +109,7 @@ export default function VariablePicker({ nodes, edges, currentNode, onInsert, up
             {matchingNodes.length === 0 ? <p className="px-1.5 py-2 text-[10px] text-[var(--text-tertiary)]">{previousNodes.length ? "No outputs match your search." : "Connect an action before this node to use its outputs."}</p> : <div className="space-y-0.5">{matchingNodes.map((node) => {
               const typeId = node.data?.typeId;
               const scalarFields = {
+                "ai.generate": ["content", "model", "input_tokens", "output_tokens"],
                 "ai.decision": ["decision", "reason", "model", "input_tokens", "output_tokens"],
                 "ai.rag_search": ["context"],
                 "action.http_request": ["status_code", "success"],

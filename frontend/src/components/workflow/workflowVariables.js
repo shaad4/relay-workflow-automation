@@ -1,4 +1,5 @@
 export const outputsByType = {
+  "ai.generate": ["content", "model", "input_tokens", "output_tokens"],
   "ai.decision": ["decision", "reason", "data", "model", "input_tokens", "output_tokens"],
   "ai.rag_search": ["chunks", "context"],
   "action.http_request": ["status_code", "body", "headers", "success"],

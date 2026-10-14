@@ -115,11 +115,8 @@ export const NODE_CATEGORIES = [
         name: "AI Generate",
         category: "AI",
         icon: "✨",
-        description: "Generate structured text response using AI",
-        defaultConfig: {
-          prompt: "",
-          model: "gemini-2.5-flash",
-        },
+        description: "Generate text with a connected AI provider",
+        defaultConfig: { connection_id: "", model: "", instructions: "", prompt: "", rag_context: "" },
       },
     ],
   },
@@ -159,7 +156,6 @@ const exampleValuesByType = {
     body: "Your workflow step completed.",
   },
   "action.refund": { payment_id: "ch_12345" },
-  "ai.generate": { prompt: "Generate summary of customer ticket" },
 };
 
 export function clearExampleNodeConfig(typeId, config) {

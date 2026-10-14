@@ -1,6 +1,7 @@
 import { previousNodesFor } from "./workflowVariables.js";
 
 export const AI_DECISION_FIELDS = ["connection_id", "model", "instructions", "input_mappings", "rag_context", "allowed_decisions"];
+export const AI_GENERATE_FIELDS = ["connection_id", "model", "instructions", "prompt", "rag_context"];
 export function normalizeDecisionConfiguration(config = {}) {
   return { ...config, ...(Array.isArray(config.allowed_decisions) ? {
     allowed_decisions: config.allowed_decisions.map((value) => typeof value === "string" ? value.trim().toUpperCase() : value),
@@ -108,10 +109,19 @@ export function validateNodeConfiguration(typeId, config = {}) {
       if (unsupported.length) errors.push({ field: "legacy", message: `Review and upgrade legacy AI settings before saving: ${unsupported.join(", ")}.` });
       break;
     }
-    case "ai.generate":
-      requireField("prompt", "Prompt");
-      requireField("model", "Model");
+    case "ai.generate": {
+      if (typeof config.connection_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(config.connection_id)) errors.push({ field: "connection_id", message: "Choose an active AI provider connection." });
+      for (const [field, label, max] of [["model", "Model", 150], ["prompt", "Prompt", 10000]]) {
+        if (typeof config[field] !== "string" || !config[field].trim()) errors.push({ field, message: `${label} is required.` });
+        else if (config[field].length > max) errors.push({ field, message: `${label} must be ${max.toLocaleString("en-US")} characters or fewer.` });
+      }
+      for (const [field, label, max] of [["instructions", "Instructions", 10000], ["rag_context", "RAG context", 2000]]) {
+        if (config[field] !== undefined && (typeof config[field] !== "string" || config[field].length > max)) errors.push({ field, message: `${label} must be text with at most ${max.toLocaleString("en-US")} characters.` });
+      }
+      const unsupported = Object.keys(config).filter((field) => !AI_GENERATE_FIELDS.includes(field));
+      if (unsupported.length) errors.push({ field: "legacy", message: `Unsupported AI Generate fields: ${unsupported.join(", ")}. Review this configuration before publishing.` });
       break;
+    }
     case "ai.rag_search": {
       const kbId = ragKnowledgeBaseId(config);
       if (Object.hasOwn(config, "knowledge_base_id") && Object.hasOwn(config, "knowledge_base") && config.knowledge_base_id !== config.knowledge_base) {
@@ -177,6 +187,7 @@ export function validateWorkflowConfiguration(nodes = [], edges = [], { includeS
     const label = node.data?.label || typeId;
     const nodeErrors = validateNodeConfiguration(typeId, node.data?.config);
     if (typeId === "ai.decision") nodeErrors.push(...validateDecisionReferences(node.data?.config, nodes, edges, node.id));
+    if (typeId === "ai.generate") nodeErrors.push(...validateGenerateReferences(node.data?.config, nodes, edges, node.id));
     if (typeId === "logic.condition") nodeErrors.push(...validateConditionReferences(node.data?.config, nodes, edges, node.id));
     for (const error of nodeErrors) {
       errors.push({
@@ -194,6 +205,14 @@ export function validateWorkflowConfiguration(nodes = [], edges = [], { includeS
 export function validateConditionReferences(config = {}, nodes = [], edges = [], currentNodeId) {
   return validateDecisionReferences({ input_mappings: { value: config?.value } }, nodes, edges, currentNodeId)
     .map((error) => ({ ...error, field: "value" }));
+}
+
+export function validateGenerateReferences(config = {}, nodes = [], edges = [], currentNodeId) {
+  return validateDecisionReferences({
+    instructions: config?.instructions,
+    input_mappings: { prompt: config?.prompt },
+    rag_context: config?.rag_context,
+  }, nodes, edges, currentNodeId).map((error) => ({ ...error, field: error.field === "input_mappings" ? "prompt" : error.field }));
 }
 
 export function validateConditionBranches(nodes = [], edges = []) {
