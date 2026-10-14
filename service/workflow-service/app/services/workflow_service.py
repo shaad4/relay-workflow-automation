@@ -10,6 +10,7 @@ from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 from app.schemas.node_configuration import (
     RagSearchConfig,
     AIDecisionConfig,
+    ConditionConfig,
 )
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
 from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
@@ -855,6 +856,7 @@ async def delete_workflow_edge(
 
 
 
+
 async def validate_workflow(
     workflow_id: UUID,
     version_number: int,
@@ -928,7 +930,7 @@ async def validate_workflow(
             }
         )
 
-    # 7. Validate RAG Search node configurations
+    # 7. Validate RAG Search configurations
     for node in nodes:
         if node.node_type != "ai.rag_search":
             continue
@@ -956,7 +958,7 @@ async def validate_workflow(
                     }
                 )
 
-    # 8. Validate AI Decision node configurations
+    # 8. Validate AI Decision configurations
     for node in nodes:
         if node.node_type != "ai.decision":
             continue
@@ -984,15 +986,41 @@ async def validate_workflow(
                     }
                 )
 
-    # 9. Validate supported node types
+    # 9. Validate Condition configurations
+    for node in nodes:
+        if node.node_type != "logic.condition":
+            continue
+
+        try:
+            ConditionConfig.model_validate(
+                node.configuration or {}
+            )
+
+        except ValidationError as exc:
+            for error in exc.errors():
+                field = ".".join(
+                    str(part)
+                    for part in error["loc"]
+                ) or "configuration"
+
+                errors.append(
+                    {
+                        "code": "INVALID_CONDITION_CONFIGURATION",
+                        "node_id": node.node_id,
+                        "message": (
+                            f"Condition node '{node.node_id}': "
+                            f"{field} - {error['msg']}"
+                        ),
+                    }
+                )
+
+    # 10. Validate supported node types
     trigger_types = {
         "trigger.webhook",
         "trigger.manual",
         "trigger.schedule",
     }
 
-    # Only node types supported by the current runner
-    # can be published.
     supported_types = trigger_types | {
         "action.http_request",
         "action.email",
@@ -1000,10 +1028,8 @@ async def validate_workflow(
         "human.approval",
         "ai.rag_search",
         "ai.decision",
+        "logic.condition",
     }
-
-    # ai.decision is intentionally excluded until
-    # its execution handler is implemented in STEP 138.
 
     triggers = [
         node
@@ -1034,7 +1060,7 @@ async def validate_workflow(
                 }
             )
 
-    # 10. Validate edge references
+    # 11. Validate edge references
     for edge in edges:
         if edge.source_node_id not in node_ids:
             errors.append(
@@ -1058,7 +1084,7 @@ async def validate_workflow(
                 }
             )
 
-    # 11. Build graph adjacency and indegree
+    # 12. Build graph adjacency and indegree
     outgoing = {
         node_id: []
         for node_id in node_ids
@@ -1077,7 +1103,7 @@ async def validate_workflow(
             outgoing[edge.source_node_id].append(edge)
             indegree[edge.target_node_id] += 1
 
-    # 12. Validate branching
+    # 13. Validate branching
     for node in nodes:
         branches = outgoing[node.node_id]
 
@@ -1095,9 +1121,25 @@ async def validate_workflow(
                 or len(set(conditions)) != len(conditions)
             )
 
+        elif node.node_type == "logic.condition":
+            conditions = [
+                edge.condition
+                for edge in branches
+            ]
+
+            invalid = (
+                len(branches) == 0
+                or any(
+                    not isinstance(value, str)
+                    or not value.strip()
+                    or value != value.strip()
+                    for value in conditions
+                )
+                or len(set(conditions)) != len(conditions)
+            )
+
         else:
-            # Other node types currently support
-            # at most one outgoing edge.
+            # Other nodes support at most one outgoing edge.
             invalid = len(branches) > 1
 
         if invalid:
@@ -1106,13 +1148,13 @@ async def validate_workflow(
                     "code": "INVALID_BRANCHING",
                     "node_id": node.node_id,
                     "message": (
-                        f"Node '{node.node_id}' has unsupported "
+                        f"Node '{node.node_id}' has invalid "
                         "or ambiguous outgoing branches."
                     ),
                 }
             )
 
-    # 13. Detect workflow cycles using Kahn's algorithm
+    # 14. Detect workflow cycles using Kahn's algorithm
     pending = [
         node_id
         for node_id, count in indegree.items()
@@ -1138,13 +1180,11 @@ async def validate_workflow(
         errors.append(
             {
                 "code": "WORKFLOW_CYCLE",
-                "message": (
-                    "Workflow must not contain cycles."
-                ),
+                "message": "Workflow must not contain cycles.",
             }
         )
 
-    # 14. Verify all nodes are reachable from trigger
+    # 15. Verify all nodes are reachable from trigger
     if len(triggers) == 1:
         reachable = set()
         pending = [triggers[0].node_id]
@@ -1173,7 +1213,7 @@ async def validate_workflow(
                 }
             )
 
-    # 15. Return validation result
+    # 16. Return validation result
     return {
         "valid": not errors,
         "errors": errors,

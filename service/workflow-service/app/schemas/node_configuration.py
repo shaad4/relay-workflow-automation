@@ -156,3 +156,26 @@ class AIDecisionConfig(BaseModel):
                 )
 
         return values
+
+
+class ConditionConfig(BaseModel):
+    """Configuration for exact-value branch routing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: str = Field(
+        min_length=1,
+        max_length=2000,
+    )
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, value: str) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Condition value cannot be empty"
+            )
+
+        return value
