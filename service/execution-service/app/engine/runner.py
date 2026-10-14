@@ -18,6 +18,7 @@ from app.engine.approval_status import HumanApprovalStatus
 from app.models.human_approval import HumanApproval
 from app.models.execution import Execution
 from app.engine.handlers.rag_search import execute_rag_search
+from app.engine.handlers.ai_decision import execute_ai_decision
 
 
 async def _commit_session(session, add=None, refresh=None):
@@ -301,6 +302,55 @@ async def run_execution(
                 sequence += 1
 
                 continue
+
+
+            # Execute AI Decision node
+            if node_type == "ai.decision":
+                async with AsyncSessionLocal() as session:
+                    result = await execute_ai_decision(
+                        configuration=resolved_configuration,
+                        workspace_id=workspace_id,
+                        session=session,
+                    )
+
+                # Store validated AI output for downstream nodes
+                context.set_node_output(
+                    node_id,
+                    result,
+                )
+
+                # Persist AI Decision execution step
+                completed_at = datetime.now(timezone.utc)
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    execution_step.status = (
+                        ExecutionStepStatus.COMPLETED
+                    )
+
+                    execution_step.output = result
+                    execution_step.completed_at = completed_at
+
+                    if execution_step.started_at:
+                        execution_step.duration_ms = int(
+                            (
+                                completed_at
+                                - execution_step.started_at
+                            ).total_seconds() * 1000
+                        )
+
+                    await _commit_session(session)
+
+                # Continue to the next workflow node
+                current_node = executor.get_next_node(node_id)
+                sequence += 1
+
+                continue
+
 
 
             # Human Approval does not use Action Service or a connection.
