@@ -3,6 +3,10 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.service import AIService
+from app.ai.exceptions import (
+    AIProviderError, AIAuthenticationError, AIRateLimitError,
+    AITimeoutError, AIResponseError, AIServiceUnavailableError,
+)
 from app.services.ai_provider_connection import (
     AIProviderConnectionService,
 )
@@ -91,13 +95,38 @@ async def execute_ai_generate(
 
     ai_service = AIService()
 
-    response = await ai_service.generate(
-        provider=provider,
-        api_key=api_key,
-        model=model.strip(),
-        instructions=system_instructions,
-        prompt=user_prompt,
-    )
+    try:
+        response = await ai_service.generate(
+            provider=provider,
+            api_key=api_key,
+            model=model.strip(),
+            instructions=system_instructions,
+            prompt=user_prompt,
+        )
+    except AIProviderError as exc:
+        safe_messages = {
+            AIAuthenticationError: "AI provider authentication failed",
+            AIRateLimitError: "AI provider rate limit exceeded",
+            AITimeoutError: "AI provider request timed out",
+            AIResponseError: "AI provider returned an invalid response",
+            AIServiceUnavailableError: "AI provider unavailable",
+        }
+        raise type(exc)(safe_messages.get(type(exc), "AI provider request failed")) from None
+    except Exception:
+        raise AIServiceUnavailableError("AI provider unavailable") from None
+
+    if (
+        not isinstance(getattr(response, "content", None), str)
+        or not response.content.strip()
+        or not isinstance(getattr(response, "model", None), str)
+        or not response.model.strip()
+        or type(getattr(response, "input_tokens", None)) is not int
+        or response.input_tokens < 0
+        or type(getattr(response, "output_tokens", None)) is not int
+        or response.output_tokens < 0
+        or (api_key and (api_key in response.content or api_key in response.model))
+    ):
+        raise AIResponseError("AI provider returned an invalid response")
 
     return {
         "content": response.content,

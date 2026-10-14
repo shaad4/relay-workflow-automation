@@ -28,6 +28,7 @@ from app.ai.exceptions import (
     AIRateLimitError,
     AITimeoutError,
     AIServiceUnavailableError,
+    AIResponseError,
 )
 
 
@@ -735,6 +736,9 @@ async def run_execution(
 
         elif isinstance(exc, AIServiceUnavailableError):
             message = "AI provider unavailable"
+
+        elif isinstance(exc, AIResponseError):
+            message = "AI provider returned an invalid response"
 
         else:
             message = "Node execution failed"
