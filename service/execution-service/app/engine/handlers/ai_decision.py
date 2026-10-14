@@ -8,6 +8,7 @@ from app.ai.structured_generation import StructuredAIGeneration
 from app.services.ai_provider_connection import (
     AIProviderConnectionService,
 )
+from app.ai.input_validation import validate_resolved_ai_inputs
 
 
 async def execute_ai_decision(
@@ -52,6 +53,11 @@ async def execute_ai_decision(
 
     if not isinstance(rag_context, str):
         raise ValueError("Invalid RAG context")
+
+    validate_resolved_ai_inputs(
+        input_mappings=input_mappings,
+        rag_context=rag_context,
+    )
 
     try:
         decision_input = AIDecisionInput(
