@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { validateManualInput, manualRunError } from "../src/components/workflow/manualTrigger.js";
 
 test("accepts a JSON object, including empty input", () => {
-  assert.deepEqual(validateManualInput("{}"), { input: {} });
-  assert.deepEqual(validateManualInput('{"order_id":"ORD-TEST-187"}'), { input: { order_id: "ORD-TEST-187" } });
+  assert.deepEqual(validateManualInput("{}"), { input: {}, bytes: 12 });
+  assert.deepEqual(validateManualInput('{"order_id":"ORD-TEST-187"}').input, { order_id: "ORD-TEST-187" });
 });
 
 test("rejects malformed and non-object JSON", () => {

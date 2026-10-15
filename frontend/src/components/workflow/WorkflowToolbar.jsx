@@ -115,6 +115,7 @@ export default function WorkflowToolbar({
   const [runError, setRunError] = useState("");
   const [runPending, setRunPending] = useState(false);
   const [runResult, setRunResult] = useState(null);
+  const runInputRef = useRef(null);
   const workflowMenuRef = useRef(null);
   const versionMenuRef = useRef(null);
   // Older workflow payloads may expose "published"; the workflow-level state is active.
@@ -131,6 +132,27 @@ export default function WorkflowToolbar({
   const hasDraftVersion = sortedVersions.some((item) => String(item.status).toLowerCase() === "draft");
   const publishedVersion = sortedVersions.find((item) => String(item.id) === String(publishedVersionId));
   const publishedNumber = publishedVersion?.version_number ?? publishedVersion?.version;
+  const inputValidation = validateManualInput(runInput);
+  const inputBytes = inputValidation.bytes ?? new TextEncoder().encode(runInput).length + 10;
+
+  const formatRunInput = () => {
+    if (inputValidation.error) { setRunError(inputValidation.error); return; }
+    setRunInput(JSON.stringify(inputValidation.input, null, 2));
+    setRunError("");
+    runInputRef.current?.focus();
+  };
+
+  const handleRunInputKeyDown = (event) => {
+    if (event.key !== "Tab") return;
+    event.preventDefault();
+    const field = event.currentTarget;
+    const start = field.selectionStart;
+    const end = field.selectionEnd;
+    const updated = `${runInput.slice(0, start)}  ${runInput.slice(end)}`;
+    setRunInput(updated);
+    setRunError("");
+    requestAnimationFrame(() => { field.selectionStart = field.selectionEnd = start + 2; });
+  };
 
   useEffect(() => {
     if (!publishedVersionId || publishedNumber == null) return;
@@ -634,7 +656,39 @@ export default function WorkflowToolbar({
           </button>
         )}
       </div>
-      {runOpen && createPortal(<div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 p-3"><section role="dialog" aria-modal="true" aria-labelledby="manual-run-title" className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-[var(--border-default)] bg-[var(--surface)] p-5 shadow-2xl text-[var(--text-primary)]"><h2 id="manual-run-title" className="text-lg font-semibold">{runResult ? "Workflow run requested" : "Run Workflow"}</h2>{runResult ? <div className="mt-4 space-y-3 text-sm text-[var(--text-secondary)]"><p>Your workflow has been queued for execution.</p>{runResult.event_id && <p className="break-all font-mono text-xs">Event ID: {runResult.event_id}</p>}<button type="button" onClick={() => setRunOpen(false)} className="rounded-[6px] bg-[var(--accent)] px-4 py-2 text-white">Done</button></div> : <form onSubmit={submitRun} className="mt-3 space-y-4"><p className="text-sm text-[var(--text-secondary)]">Start a new execution using the published version of this workflow.</p><div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-xs"><p className="font-medium">{workflowName}</p><p className="mt-1 text-[var(--text-tertiary)]">{publishedNumber != null ? `Published version ${publishedNumber}` : "Published version selected by the server"} · {manualTriggerState === "manual" ? "Manual Trigger" : "Trigger type checked when you run"}</p></div><label className="block text-xs font-medium">Trigger Input (JSON)<textarea value={runInput} onChange={(event) => { setRunInput(event.target.value); setRunError(""); }} rows={9} spellCheck={false} className="mt-2 w-full resize-y rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-3 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" aria-invalid={Boolean(runError)} aria-describedby="manual-run-help" /></label><p id="manual-run-help" className="text-xs text-[var(--text-tertiary)]">Provide a JSON object. Its fields are available as trigger.data values.</p>{runError && <p role="alert" className="text-xs text-red-500">{runError}</p>}<div className="flex justify-end gap-2"><button type="button" disabled={runPending} onClick={() => setRunOpen(false)} className="rounded-[6px] border border-[var(--border-default)] px-4 py-2 text-xs disabled:opacity-50">Cancel</button><button type="submit" disabled={runPending} className="rounded-[6px] bg-[var(--accent)] px-4 py-2 text-xs font-medium text-white disabled:opacity-50">{runPending ? "Requesting…" : "Run Workflow"}</button></div></form>}</section></div>, document.body)}
+      {runOpen && createPortal(
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/70 p-3 sm:p-6">
+          <section role="dialog" aria-modal="true" aria-labelledby="manual-run-title" className="flex max-h-[min(90vh,760px)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--surface)] text-[var(--text-primary)] shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-5 py-4">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-[var(--accent)]">Manual trigger</p>
+                <h2 id="manual-run-title" className="mt-1 text-lg font-semibold">{runResult ? "Workflow run requested" : "Run Workflow"}</h2>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">{runResult ? "Your workflow has been queued for execution." : "Start a new execution using the published version."}</p>
+              </div>
+              <button type="button" disabled={runPending} onClick={() => setRunOpen(false)} aria-label="Close Run Workflow dialog" className="rounded-md px-2 py-1 text-lg text-[var(--text-tertiary)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)] disabled:opacity-50">×</button>
+            </header>
+            {runResult ? (
+              <div className="space-y-4 p-5 text-sm text-[var(--text-secondary)]">
+                {runResult.event_id && <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--elevated)] p-3"><span className="block text-xs text-[var(--text-tertiary)]">Event ID</span><code className="mt-1 block break-all text-xs">{runResult.event_id}</code></div>}
+                <div className="flex justify-end"><button type="button" onClick={() => setRunOpen(false)} className="rounded-md bg-[var(--accent)] px-4 py-2 text-white">Done</button></div>
+              </div>
+            ) : (
+              <form onSubmit={submitRun} className="flex min-h-0 flex-col">
+                <div className="space-y-4 overflow-y-auto p-5">
+                  <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--elevated)] px-3 py-2 text-xs"><p className="font-medium">{workflowName}</p><p className="mt-1 text-[var(--text-tertiary)]">{publishedNumber != null ? `Published version ${publishedNumber}` : "Published version selected by the server"} · {manualTriggerState === "manual" ? "Manual Trigger" : "Trigger type checked when you run"}</p></div>
+                  <div>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><label htmlFor="manual-run-input" className="text-xs font-medium">Trigger Input <span className="text-[var(--text-tertiary)]">(JSON object)</span></label><div className="flex gap-2"><button type="button" disabled={runPending || Boolean(inputValidation.error)} onClick={formatRunInput} className="rounded-md border border-[var(--border-default)] px-2.5 py-1 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-40">Format JSON</button><button type="button" disabled={runPending} onClick={() => { setRunInput("{}"); setRunError(""); runInputRef.current?.focus(); }} className="rounded-md border border-[var(--border-default)] px-2.5 py-1 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-40">Reset</button></div></div>
+                    <div className="overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--input-bg)] focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent)]/30"><div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-3 py-1.5 font-mono text-[10px] text-[var(--text-tertiary)]"><span>JSON</span><span>Tab inserts spaces</span></div><textarea id="manual-run-input" ref={runInputRef} value={runInput} onChange={(event) => { setRunInput(event.target.value); setRunError(""); }} onKeyDown={handleRunInputKeyDown} disabled={runPending} rows={12} spellCheck={false} autoCapitalize="off" autoComplete="off" aria-invalid={Boolean(inputValidation.error || runError)} aria-describedby="manual-run-help manual-run-status" placeholder={'{\n  "order_id": "ORD-10027"\n}'} className="block min-h-52 max-h-[42vh] w-full resize-y bg-transparent p-3 font-mono text-[13px] leading-5 text-[var(--text-primary)] outline-none disabled:opacity-60" /></div>
+                    <div id="manual-run-status" className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px]"><span className={inputValidation.error ? "text-amber-400" : "text-emerald-400"}>{inputValidation.error || "Valid JSON object"}</span><span className={inputBytes > 65536 ? "font-mono text-red-400" : "font-mono text-[var(--text-tertiary)]"}>{inputBytes.toLocaleString()} / 65,536 bytes</span></div>
+                    <p id="manual-run-help" className="mt-2 text-[11px] text-[var(--text-tertiary)]">Fields become available as <code className="font-mono">{"{{trigger.data.field_name}}"}</code>.</p>
+                  </div>
+                  {runError && <p role="alert" className="rounded-md border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-400">{runError}</p>}
+                </div>
+                <footer className="flex justify-end gap-2 border-t border-[var(--border-subtle)] px-5 py-4"><button type="button" disabled={runPending} onClick={() => setRunOpen(false)} className="rounded-md border border-[var(--border-default)] px-4 py-2 text-xs disabled:opacity-50">Cancel</button><button type="submit" disabled={runPending || Boolean(inputValidation.error)} className="rounded-md bg-[var(--accent)] px-4 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40">{runPending ? "Requesting…" : "Run Workflow"}</button></footer>
+              </form>
+            )}
+          </section>
+        </div>, document.body)}
     </div>
   );
 }

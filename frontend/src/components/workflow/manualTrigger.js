@@ -7,7 +7,7 @@ export function validateManualInput(text) {
   }
   const bytes = new TextEncoder().encode(JSON.stringify({ input })).length;
   if (bytes > 65536) return { error: "Trigger input is too large. The request must be 65,536 bytes or less." };
-  return { input };
+  return { input, bytes };
 }
 
 export function manualRunError(error) {
