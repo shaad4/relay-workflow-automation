@@ -1,6 +1,5 @@
-
 import json
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import grpc
 from fastapi import (
@@ -14,6 +13,8 @@ from pydantic import ValidationError
 
 from app.dependencies import get_current_identity
 from app.grpc.workflow_client import WorkflowGrpcClient
+from app.kafka.producer import publish_workflow_triggered
+from app.schemas.events import WorkflowTriggeredEvent
 from app.schemas.manual_trigger import ManualRunRequest
 
 
@@ -25,7 +26,10 @@ router = APIRouter(
 MAX_MANUAL_PAYLOAD_BYTES = 64 * 1024
 
 
-@router.post("/{workflow_id}/run")
+@router.post(
+    "/{workflow_id}/run",
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def run_workflow_manually(
     workflow_id: UUID,
     request: Request,
@@ -186,12 +190,31 @@ async def run_workflow_manually(
             detail="Published workflow does not have a Manual Trigger",
         )
 
-    # 10. Temporary validation-only response
+    # 10. Create Manual Trigger event
+    event = WorkflowTriggeredEvent(
+        event_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        workflow_id=workflow_id,
+        workflow_version_id=UUID(published.version_id),
+        trigger_type="manual",
+        payload=data.input,
+    )
+
+    # 11. Publish event to Kafka
+    try:
+        await publish_workflow_triggered(event)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to dispatch workflow execution",
+        ) from exc
+
+    # 12. Return accepted response
     return {
-        "status": "validated",
+        "status": "accepted",
+        "event_id": str(event.event_id),
         "workflow_id": str(workflow_id),
         "workflow_version_id": published.version_id,
         "trigger_type": "manual",
-        "input": data.input,
         "execution_started": False,
     }
