@@ -238,6 +238,11 @@ class ManualTriggerConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    description: str = Field(
+        default="",
+        max_length=500,
+    )
+
     input_schema: dict[str, Any] = Field(
         default_factory=lambda: {"type": "object"}
     )
