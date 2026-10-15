@@ -28,5 +28,38 @@ class WorkflowGrpcClient:
 
         return await self.stub.ValidateWorkflowVersion(request)
 
+    async def get_published_version(
+        self,
+        workflow_id: str,
+        workspace_id: str,
+    ):
+        request = workflow_pb2.GetPublishedVersionRequest(
+            workflow_id=workflow_id,
+            workspace_id=workspace_id,
+        )
+
+        return await self.stub.GetPublishedVersion(
+            request,
+            timeout=10,
+        )
+
+
+    async def get_workflow_definition(
+        self,
+        workflow_id: str,
+        version_id: str,
+        workspace_id: str,
+    ):
+        request = workflow_pb2.GetWorkflowDefinitionRequest(
+            workflow_id=workflow_id,
+            version_id=version_id,
+            workspace_id=workspace_id,
+        )
+
+        return await self.stub.GetWorkflowDefinition(
+            request,
+            timeout=10,
+        )
+
     async def close(self):
         await self.channel.close()
