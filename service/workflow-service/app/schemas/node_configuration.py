@@ -231,3 +231,28 @@ class ConditionConfig(BaseModel):
             )
 
         return value
+
+
+class ManualTriggerConfig(BaseModel):
+    """Configuration for a manual workflow trigger."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_schema: dict[str, Any] = Field(
+        default_factory=lambda: {"type": "object"}
+    )
+
+    @field_validator("input_schema")
+    @classmethod
+    def validate_input_schema(
+        cls,
+        value: dict[str, Any],
+    ) -> dict[str, Any]:
+
+        if value != {"type": "object"}:
+            raise ValueError(
+                "Manual Trigger MVP supports only "
+                "an unrestricted JSON object schema"
+            )
+
+        return value

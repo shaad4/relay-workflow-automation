@@ -12,6 +12,7 @@ from app.schemas.node_configuration import (
     AIDecisionConfig,
     ConditionConfig,
     AIGenerateConfig,
+    ManualTriggerConfig,
 )
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
 from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
@@ -856,7 +857,6 @@ async def delete_workflow_edge(
 
 
 
-
 async def validate_workflow(
     workflow_id: UUID,
     version_number: int,
@@ -1042,7 +1042,32 @@ async def validate_workflow(
                     }
                 )
 
-    # 11. Validate supported node types
+    # 11. Validate Manual Trigger configurations
+    for node in nodes:
+        if node.node_type != "trigger.manual":
+            continue
+
+        try:
+            ManualTriggerConfig.model_validate(
+                node.configuration or {}
+            )
+        except ValidationError as exc:
+            for error in exc.errors():
+                field = ".".join(
+                    str(part) for part in error["loc"]
+                ) or "configuration"
+                errors.append(
+                    {
+                        "code": "INVALID_MANUAL_TRIGGER_CONFIGURATION",
+                        "node_id": node.node_id,
+                        "message": (
+                            f"Manual Trigger node '{node.node_id}': "
+                            f"{field} - {error['msg']}"
+                        ),
+                    }
+                )
+
+    # 13. Validate supported node types
     trigger_types = {
         "trigger.webhook",
         "trigger.manual",
@@ -1092,7 +1117,7 @@ async def validate_workflow(
                 }
             )
 
-    # 12. Validate edge references
+    # 13. Validate edge references
     for edge in edges:
         if edge.source_node_id not in node_ids:
             errors.append(
@@ -1116,7 +1141,7 @@ async def validate_workflow(
                 }
             )
 
-    # 13. Build graph adjacency and indegree
+    # 14. Build graph adjacency and indegree
     outgoing = {
         node_id: []
         for node_id in node_ids
@@ -1135,7 +1160,7 @@ async def validate_workflow(
             outgoing[edge.source_node_id].append(edge)
             indegree[edge.target_node_id] += 1
 
-    # 14. Validate branching
+    # 15. Validate branching
     for node in nodes:
         branches = outgoing[node.node_id]
 
@@ -1185,7 +1210,7 @@ async def validate_workflow(
                 }
             )
 
-    # 15. Detect workflow cycles using Kahn's algorithm
+    # 16. Detect workflow cycles using Kahn's algorithm
     pending = [
         node_id
         for node_id, count in indegree.items()
@@ -1215,7 +1240,7 @@ async def validate_workflow(
             }
         )
 
-    # 16. Verify all nodes are reachable from trigger
+    # 17. Verify all nodes are reachable from trigger
     if len(triggers) == 1:
         reachable = set()
         pending = [triggers[0].node_id]
@@ -1244,13 +1269,12 @@ async def validate_workflow(
                 }
             )
 
-    # 17. Return validation result
+    # 18. Return validation result
     return {
         "valid": not errors,
         "errors": errors,
         "warnings": warnings,
     }
-
 
 
 async def publish_workflow(
