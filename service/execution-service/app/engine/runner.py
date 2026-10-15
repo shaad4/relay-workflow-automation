@@ -18,6 +18,18 @@ from app.engine.approval_status import HumanApprovalStatus
 from app.models.human_approval import HumanApproval
 from app.models.execution import Execution
 from app.engine.handlers.rag_search import execute_rag_search
+from app.engine.handlers.ai_decision import execute_ai_decision
+from app.engine.handlers.condition import evaluate_condition
+from app.engine.handlers.ai_generate import execute_ai_generate
+
+from app.ai.exceptions import (
+    AIDecisionValidationError,
+    AIAuthenticationError,
+    AIRateLimitError,
+    AITimeoutError,
+    AIServiceUnavailableError,
+    AIResponseError,
+)
 
 
 async def _commit_session(session, add=None, refresh=None):
@@ -303,6 +315,174 @@ async def run_execution(
                 continue
 
 
+            # Execute AI Decision node
+            if node_type == "ai.decision":
+                async with AsyncSessionLocal() as session:
+                    result = await execute_ai_decision(
+                        configuration=resolved_configuration,
+                        workspace_id=workspace_id,
+                        session=session,
+                    )
+
+                # Store validated AI output for downstream nodes
+                context.set_node_output(
+                    node_id,
+                    result,
+                )
+
+                # Persist AI Decision execution step
+                completed_at = datetime.now(timezone.utc)
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    execution_step.status = (
+                        ExecutionStepStatus.COMPLETED
+                    )
+
+                    execution_step.output = result
+                    execution_step.completed_at = completed_at
+
+                    if execution_step.started_at:
+                        execution_step.duration_ms = int(
+                            (
+                                completed_at
+                                - execution_step.started_at
+                            ).total_seconds() * 1000
+                        )
+
+                    await _commit_session(session)
+
+                # Continue to the next workflow node
+                current_node = executor.get_next_node(node_id)
+                sequence += 1
+
+                continue
+
+
+
+            # Execute AI Generate node
+            if node_type == "ai.generate":
+                async with AsyncSessionLocal() as session:
+                    result = await execute_ai_generate(
+                        configuration=resolved_configuration,
+                        workspace_id=workspace_id,
+                        session=session,
+                    )
+
+                # Store generated output for downstream nodes
+                context.set_node_output(
+                    node_id,
+                    result,
+                )
+
+                # Persist AI Generate execution step
+                completed_at = datetime.now(timezone.utc)
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    if execution_step is None:
+                        raise RuntimeError(
+                            "AI Generate execution step not found"
+                        )
+
+                    execution_step.status = (
+                        ExecutionStepStatus.COMPLETED
+                    )
+
+                    execution_step.output = result
+                    execution_step.completed_at = completed_at
+
+                    if execution_step.started_at:
+                        execution_step.duration_ms = int(
+                            (
+                                completed_at
+                                - execution_step.started_at
+                            ).total_seconds() * 1000
+                        )
+
+                    await _commit_session(session)
+
+                # Continue to the next workflow node
+                current_node = executor.get_next_node(node_id)
+                sequence += 1
+
+                continue
+
+
+
+            # Execute Condition node
+            if node_type == "logic.condition":
+                # Read the resolved value
+                selected_condition = evaluate_condition(
+                    resolved_configuration
+                )
+
+                # Find the matching outgoing edge
+                next_node = executor.get_next_node(
+                    node_id=node_id,
+                    condition=selected_condition,
+                )
+
+                if next_node is None:
+                    raise ValueError(
+                        "Condition node has no matching branch"
+                    )
+
+                # Store the selected branch
+                result = {
+                    "value": selected_condition,
+                    "selected_branch": selected_condition,
+                    "next_node_id": next_node["node_id"],
+                }
+
+                context.set_node_output(
+                    node_id,
+                    result,
+                )
+
+                # Mark Condition step completed
+                completed_at = datetime.now(timezone.utc)
+
+                async with AsyncSessionLocal() as session:
+                    execution_step = await session.get(
+                        ExecutionStep,
+                        execution_step_id,
+                    )
+
+                    execution_step.status = (
+                        ExecutionStepStatus.COMPLETED
+                    )
+
+                    execution_step.output = result
+                    execution_step.completed_at = completed_at
+
+                    if execution_step.started_at:
+                        execution_step.duration_ms = int(
+                            (
+                                completed_at
+                                - execution_step.started_at
+                            ).total_seconds() * 1000
+                        )
+
+                    await _commit_session(session)
+
+                # Continue only through the selected edge
+                current_node = next_node
+                sequence += 1
+
+                continue
+
+
+
+
             # Human Approval does not use Action Service or a connection.
             if node_type == "human.approval":
                 print(
@@ -538,19 +718,59 @@ async def run_execution(
         # The approval transaction already saved context and the waiting step.
         raise
     except Exception as exc:
-        # Includes resolution, dispatch, persistence, and graph traversal.
-        # Completed/failed/waiting steps are protected by mark_step_failed.
+        print(
+            "\n========== WORKFLOW EXECUTION ERROR ==========",
+            flush=True,
+        )
+        print("Node ID:", node_id, flush=True)
+        print("Node Type:", node_type, flush=True)
+        print("Exception Type:", type(exc).__name__, flush=True)
+        print("==============================================\n", flush=True)
+
+         # Classify failures using safe messages.
+        if isinstance(exc, ActionExecutionFailed):
+            message = "Action execution failed"
+
+        elif isinstance(exc, AIDecisionValidationError):
+            message = "AI Decision returned an invalid response"
+
+        elif isinstance(exc, AIAuthenticationError):
+            message = "AI provider authentication failed"
+
+        elif isinstance(exc, AIRateLimitError):
+            message = "AI provider rate limit exceeded"
+
+        elif isinstance(exc, AITimeoutError):
+            message = "AI provider request timed out"
+
+        elif isinstance(exc, AIServiceUnavailableError):
+            message = "AI provider unavailable"
+
+        elif isinstance(exc, AIResponseError):
+            message = "AI provider returned an invalid response"
+
+        else:
+            message = "Node execution failed"
+
         try:
             if execution_step_id is not None:
-                message = exc.error if isinstance(exc, ActionExecutionFailed) else "Node execution failed"
-                await mark_step_failed(execution_step_id, message)
+                await mark_step_failed(
+                    execution_step_id,
+                    message,
+                )
+
         finally:
             if context is not None:
                 async with AsyncSessionLocal() as session:
-                    execution = await session.get(Execution, execution_id)
+                    execution = await session.get(
+                        Execution,
+                        execution_id,
+                    )
+
                     if execution is not None:
                         execution.context = context.to_dict()
                         await _commit_session(session)
+
         raise
     finally:
         try:

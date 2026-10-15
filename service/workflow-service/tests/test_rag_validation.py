@@ -55,9 +55,9 @@ def test_supported_paths(type):
     assert validate([node("t", "trigger.webhook"), node("a", type, VALID if type == "ai.rag_search" else {})], [edge("t", "a")])["valid"]
 
 @pytest.mark.parametrize("nodes,edges,code", [
-    ([node("x", "ai.generate")], [], "UNSUPPORTED_NODE_TYPE"),
-    ([node("x", "ai.decision")], [], "UNSUPPORTED_NODE_TYPE"),
-    ([node("x", "logic.condition")], [], "UNSUPPORTED_NODE_TYPE"),
+    ([node("x", "ai.generate")], [], "INVALID_AI_GENERATE_CONFIGURATION"),
+    ([node("x", "ai.decision")], [], "INVALID_AI_DECISION_CONFIGURATION"),
+    ([node("x", "logic.condition")], [], "INVALID_CONDITION_CONFIGURATION"),
     ([node("x", "action.email")], [], "INVALID_TRIGGER"),
     ([node("t", "trigger.webhook")], [edge("t", "missing")], "INVALID_EDGE_TARGET"),
     ([node("t", "trigger.webhook"), node("a", "ai.rag_search", VALID)], [edge("t", "a"), edge("a", "t")], "WORKFLOW_CYCLE"),

@@ -71,6 +71,50 @@ def fake_upstream(monkeypatch, *, status_code=200, headers=None, content=b'{"ok"
     return calls
 
 
+def test_knowledge_base_proxy_preserves_scope_and_filters_hop_headers(gateway_client, monkeypatch):
+    from uuid import uuid4
+
+    calls = fake_upstream(monkeypatch, headers={
+        "content-type": "application/json",
+        "connection": "x-internal",
+        "x-internal": "private",
+        "x-request-id": "request-1",
+    })
+    knowledge_base = uuid4()
+    response = gateway_client.post(
+        f"/knowledge-bases/{knowledge_base}/search/?trace=1",
+        json={"query": "synthetic question", "top_k": 3},
+        headers={"x-workspace-id": str(uuid4()), "connection": "x-remove", "x-remove": "private"},
+    )
+    assert response.status_code == 200
+    assert calls[-1]["url"].endswith(f"/knowledge-bases/{knowledge_base}/search/")
+    assert calls[-1]["params"]["trace"] == "1"
+    assert "x-remove" not in calls[-1]["headers"]
+    assert "x-internal" not in response.headers
+    assert response.headers["x-request-id"] == "request-1"
+
+
+def test_knowledge_base_proxy_rejects_invalid_id_before_upstream(gateway_client, monkeypatch):
+    calls = fake_upstream(monkeypatch)
+    response = gateway_client.get("/knowledge-bases/not-a-uuid/")
+    assert response.status_code == 422
+    assert calls == []
+
+
+@pytest.mark.parametrize("method,path,upstream_path", [
+    ("GET", "/approvals/", "/approvals/"),
+    ("GET", "/approvals/review-1/", "/approvals/review-1/"),
+    ("POST", "/approvals/review-1/approve/", "/approvals/review-1/approve/"),
+    ("POST", "/approvals/review-1/reject/", "/approvals/review-1/reject/"),
+])
+def test_approval_routes_proxy_to_execution(gateway_client, monkeypatch, method, path, upstream_path):
+    calls = fake_upstream(monkeypatch, status_code=202)
+    response = gateway_client.request(method, path, headers={"x-workspace-id": "synthetic-workspace"})
+    assert response.status_code == 202
+    assert calls[-1]["url"].endswith(upstream_path)
+    assert calls[-1]["headers"]["x-workspace-id"] == "synthetic-workspace"
+
+
 def access_token(monkeypatch):
     secret = "gateway-test-secret-that-is-at-least-32-bytes"
     monkeypatch.setattr(security, "JWT_SECRET_KEY", secret)

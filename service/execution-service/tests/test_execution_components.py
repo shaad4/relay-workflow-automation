@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -604,7 +605,15 @@ def test_approval_route_resume_outcomes_and_missing_records(monkeypatch):
 
     async def failed(**_kwargs): raise ActionExecutionFailed("a", "bad")
     monkeypatch.setattr(approval_routes, "run_execution", failed)
-    asyncio.run(approval_routes.approve(approval.id, identity, session))
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(approval_routes.approve(approval.id, identity, session))
+    assert caught.value.status_code == 500
+    assert caught.value.detail == {
+        "message": "Approval recorded, but workflow execution failed",
+        "approval_id": str(approval.id),
+        "execution_id": str(execution.id),
+        "execution_status": ExecutionStatus.FAILED,
+    }
     assert execution.status == ExecutionStatus.FAILED and execution.error["node_id"] == "a"
 
     async def rag_success(**kwargs):
@@ -617,7 +626,11 @@ def test_approval_route_resume_outcomes_and_missing_records(monkeypatch):
 
     async def rag_failure(**kwargs): raise RuntimeError("private provider failure")
     monkeypatch.setattr(approval_routes, "run_execution", rag_failure)
-    asyncio.run(approval_routes.approve(approval.id, identity, session))
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(approval_routes.approve(approval.id, identity, session))
+    assert caught.value.status_code == 500
+    assert caught.value.detail["execution_status"] == ExecutionStatus.FAILED
+    assert "private provider failure" not in str(caught.value.detail)
     assert execution.status == ExecutionStatus.FAILED and execution.completed_at is not None
     assert execution.error == {"message": "Workflow resume failed"}
 

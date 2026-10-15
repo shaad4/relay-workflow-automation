@@ -1,4 +1,4 @@
-import { normalizeRAGConfiguration } from "./configValidation.js";
+import { normalizeRAGConfiguration, normalizeDecisionConfiguration } from "./configValidation.js";
 
 // Compare only persisted fields. React Flow selection and temporary UUIDs are UI state.
 export function workflowSaveSnapshot(nodes, edges) {
@@ -10,7 +10,7 @@ export function workflowSaveSnapshot(nodes, edges) {
       label: node.data.label,
       x: Math.round(node.position.x),
       y: Math.round(node.position.y),
-      config: node.data.typeId === "ai.rag_search" ? normalizeRAGConfiguration(node.data.config) : node.data.config ?? {},
+      config: node.data.typeId === "ai.rag_search" ? normalizeRAGConfiguration(node.data.config) : node.data.typeId === "ai.decision" ? normalizeDecisionConfiguration(node.data.config) : node.data.config ?? {},
     })).sort((a, b) => a.nodeId.localeCompare(b.nodeId)),
     edges: edges.map((edge) => ({
       source: logicalIds.get(edge.source) ?? edge.source,

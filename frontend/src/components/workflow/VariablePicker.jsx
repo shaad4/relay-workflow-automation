@@ -3,34 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-const outputsByType = {
-  "ai.rag_search": ["chunks", "context"],
-  "action.http_request": ["status_code", "body", "headers", "success"],
-  "action.email": ["message_id", "thread_id", "label_ids", "success"],
-  "action.refund": ["refund_id", "payment_id", "amount", "status", "success"],
-};
-
-function previousNodesFor(nodes, edges, currentNodeId, includeTriggers = false) {
-  const byId = new Map((nodes || []).map((node) => [String(node.id), node]));
-  const previousIds = new Set();
-  const pending = (edges || [])
-    .filter((edge) => String(edge.target) === String(currentNodeId))
-    .map((edge) => String(edge.source));
-
-  while (pending.length) {
-    const id = pending.pop();
-    if (previousIds.has(id) || id === String(currentNodeId)) continue;
-    previousIds.add(id);
-    for (const edge of edges || []) {
-      if (String(edge.target) === id) pending.push(String(edge.source));
-    }
-  }
-
-  return [...previousIds]
-    .map((id) => byId.get(id))
-    .filter((node) => node && (includeTriggers || !node.data?.typeId?.startsWith("trigger.")))
-    .reverse();
-}
+import { outputsByType, previousNodesFor } from "./workflowVariables.js";
 
 function ExpressionOption({ expression, label, onClick }) {
   return (
@@ -41,8 +14,9 @@ function ExpressionOption({ expression, label, onClick }) {
   );
 }
 
-export default function VariablePicker({ nodes, edges, currentNode, onInsert, upstreamOnly = false }) {
+export default function VariablePicker({ nodes, edges, currentNode, onInsert, upstreamOnly = true, ragOnly = false, scalarOnly = false }) {
   const [open, setOpen] = useState(false);
+  const [dataPath, setDataPath] = useState("");
   const [triggerPath, setTriggerPath] = useState("");
   const [expandedNode, setExpandedNode] = useState(null);
   const [search, setSearch] = useState("");
@@ -50,10 +24,10 @@ export default function VariablePicker({ nodes, edges, currentNode, onInsert, up
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
   const previousNodes = useMemo(
-    () => previousNodesFor(nodes, edges, currentNode?.id),
-    [nodes, edges, currentNode?.id]
+    () => previousNodesFor(nodes, edges, currentNode?.id).filter((node) => !ragOnly || node.data?.typeId === "ai.rag_search"),
+    [nodes, edges, currentNode?.id, ragOnly]
   );
-  const showTrigger = !upstreamOnly || previousNodesFor(nodes, edges, currentNode?.id, true).some((node) => node.data?.typeId?.startsWith("trigger."));
+  const showTrigger = !ragOnly && (!upstreamOnly || previousNodesFor(nodes, edges, currentNode?.id, true).some((node) => node.data?.typeId?.startsWith("trigger.")));
   const matchingNodes = previousNodes.filter((node) => {
     const query = search.trim().toLowerCase();
     return !query || `${node.data?.label || node.data?.name || ""} ${node.data?.nodeId || ""} ${(outputsByType[node.data?.typeId] || []).join(" ")}`.toLowerCase().includes(query);
@@ -134,13 +108,22 @@ export default function VariablePicker({ nodes, edges, currentNode, onInsert, up
             <p className="px-1.5 pb-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Previous nodes</p>
             {matchingNodes.length === 0 ? <p className="px-1.5 py-2 text-[10px] text-[var(--text-tertiary)]">{previousNodes.length ? "No outputs match your search." : "Connect an action before this node to use its outputs."}</p> : <div className="space-y-0.5">{matchingNodes.map((node) => {
               const typeId = node.data?.typeId;
-              const fields = outputsByType[typeId] || [];
+              const scalarFields = {
+                "ai.generate": ["content", "model", "input_tokens", "output_tokens"],
+                "ai.decision": ["decision", "reason", "model", "input_tokens", "output_tokens"],
+                "ai.rag_search": ["context"],
+                "action.http_request": ["status_code", "success"],
+                "action.email": ["message_id", "thread_id", "success"],
+                "action.refund": ["refund_id", "payment_id", "amount", "status", "success"],
+              };
+              const fields = ragOnly ? ["context"] : scalarOnly ? scalarFields[typeId] || [] : outputsByType[typeId] || [];
               const nodeId = node.data?.nodeId || node.id;
               const label = node.data?.label || node.data?.name || typeId;
               const expanded = expandedNode === node.id;
               return <div key={node.id}>
                 <button type="button" aria-expanded={expanded} onClick={() => setExpandedNode(expanded ? null : node.id)} className="flex w-full items-center gap-2 rounded-[5px] px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--elevated)]"><span className="w-3 text-center text-[10px] text-[var(--text-tertiary)]">{expanded ? "▾" : "▸"}</span><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-[var(--text-primary)]">{label}</span><code className="shrink-0 font-mono text-[9px] text-[var(--text-tertiary)]">{nodeId}</code></button>
                 {expanded && <div className="ml-4 border-l border-[var(--border-subtle)] py-0.5 pl-1.5">{fields.length ? fields.map((field) => <ExpressionOption key={field} label={field} expression={`{{nodes.${nodeId}.${field}}}`} onClick={() => insert(`{{nodes.${nodeId}.${field}}}`)} />) : <p className="px-2 py-1 text-[9px] text-[var(--text-tertiary)]">No output fields defined for this node.</p>}</div>}
+                {expanded && typeId === "ai.decision" && !scalarOnly && <div className="ml-4 space-y-1 px-2 py-2"><label className="block text-[9px] text-[var(--text-tertiary)]" htmlFor={`data-path-${node.id}`}>Known field inside data (optional)</label><div className="flex gap-1"><input id={`data-path-${node.id}`} value={dataPath} onChange={(event) => setDataPath(event.target.value)} placeholder="field.path" className="h-7 min-w-0 flex-1 rounded border border-[var(--border-default)] bg-[var(--input-bg)] px-2 font-mono text-[10px]"/><button type="button" disabled={!/^[\w$-]+(?:\.[\w$-]+)*$/.test(dataPath.trim())} onClick={() => { insert(`{{nodes.${nodeId}.data.${dataPath.trim()}}}`); setDataPath(""); }} className="text-[10px] text-[var(--accent)] disabled:opacity-40">Insert</button></div><p className="text-[9px] text-[var(--text-tertiary)]">Use a field you know exists. AI data fields are not guaranteed.</p></div>}
               </div>;
             })}</div>}
           </section>

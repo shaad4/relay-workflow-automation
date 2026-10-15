@@ -4,9 +4,11 @@ on:
   pull_request:
     branches:
       - dev
+      - main
   push:
     branches:
       - dev
+      - main
 
 permissions:
   contents: read
@@ -15,6 +17,7 @@ jobs:
   tests:
     name: ${{ matrix.service }} tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +28,7 @@ jobs:
           - service/integration-service
           - service/action-service
           - service/execution-service
+          - service/rag-service
     defaults:
       run:
         working-directory: ${{ matrix.service }}
@@ -34,6 +38,21 @@ jobs:
       JWT_ALGORITHM: HS256
       FRONTEND_URL: http://localhost:3000
       AUTH_SERVICE_URL: http://localhost:8000
+      OPENAI_API_KEY: ci-synthetic-key-no-network-calls
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: relay
+          POSTGRES_PASSWORD: relay
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U relay -d ci_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Check out repository
@@ -48,17 +67,55 @@ jobs:
 
       - name: Install service and test dependencies
         run: |
-          python -m pip install --only-binary=:all: -r requirements.txt
-          python -m pip install --only-binary=:all: pytest==9.1.1 pytest-cov==7.1.0 httpx==0.28.1
+          python -m pip install -r requirements.txt
+          python -m pip install pytest==9.1.1 pytest-cov==7.1.0 httpx==0.28.1
+
+      - name: Create execution test schema
+        if: matrix.service == 'service/execution-service'
+        run: python -m alembic upgrade head
 
       - name: Run tests with coverage
         run: |
-          if [ "${{ matrix.service }}" = "service/execution-service" ]; then
-            python -m coverage run --source=app --omit='*/grpc/generated/*' -m pytest
-            python -m coverage report --show-missing --fail-under=80
-          elif [ "${{ matrix.service }}" = "service/integration-service" ] || [ "${{ matrix.service }}" = "service/workflow-service" ] || [ "${{ matrix.service }}" = "service/action-service" ]; then
-            python -m coverage run --source=app --omit='*/grpc/generated/*' -m pytest
-            python -m coverage report --show-missing --fail-under=80
+          set +e
+          python -m coverage run --source=app --omit='*/grpc/generated/*' -m pytest tests
+          test_status=$?
+          if [ "${{ matrix.service }}" = "service/rag-service" ]; then
+            python -m coverage report --show-missing
           else
-            python -m pytest --cov=app --cov-report=term-missing
+            python -m coverage report --show-missing --fail-under=80
           fi
+          coverage_status=$?
+          python -m coverage xml -o coverage.xml
+          xml_status=$?
+          if [ "$test_status" -ne 0 ] || [ "$coverage_status" -ne 0 ] || [ "$xml_status" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ strategy.job-index }}
+          path: ${{ matrix.service }}/coverage.xml
+          if-no-files-found: ignore
+
+  frontend-tests:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run frontend tests
+        run: npm test

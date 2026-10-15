@@ -92,10 +92,10 @@ export const NODE_CATEGORIES = [
         name: "AI Decision",
         category: "AI",
         icon: "🧠",
-        description: "Classify inputs or route logic using AI",
+        description: "Classify structured inputs into defined decisions",
         defaultConfig: {
-          prompt: "",
-          model: "gemini-2.5-flash",
+          connection_id: "", model: "", instructions: "",
+          input_mappings: {}, rag_context: "", allowed_decisions: [],
         },
       },
       {
@@ -115,11 +115,8 @@ export const NODE_CATEGORIES = [
         name: "AI Generate",
         category: "AI",
         icon: "✨",
-        description: "Generate structured text response using AI",
-        defaultConfig: {
-          prompt: "",
-          model: "gemini-2.5-flash",
-        },
+        description: "Generate text with a connected AI provider",
+        defaultConfig: { connection_id: "", model: "", instructions: "", prompt: "", rag_context: "" },
       },
     ],
   },
@@ -132,12 +129,8 @@ export const NODE_CATEGORIES = [
         name: "Condition",
         category: "Logic",
         icon: "🔀",
-        description: "Branch execution based on boolean condition",
-        defaultConfig: {
-          field: "",
-          operator: "equals",
-          value: "",
-        },
+        description: "Route to the branch matching an evaluated value",
+        defaultConfig: { value: "" },
       },
       {
         typeId: "human.approval",
@@ -163,9 +156,6 @@ const exampleValuesByType = {
     body: "Your workflow step completed.",
   },
   "action.refund": { payment_id: "ch_12345" },
-  "ai.decision": { prompt: "Classify incoming customer request priority" },
-  "ai.generate": { prompt: "Generate summary of customer ticket" },
-  "logic.condition": { field: "status_code", value: "200" },
 };
 
 export function clearExampleNodeConfig(typeId, config) {
