@@ -301,10 +301,15 @@ function ScheduleConfig({ config, onChange }) {
   );
 }
 
-function ManualConfig() {
+function ManualConfig({ config, onChange, isReadOnly }) {
   return (
-    <div className="p-3 rounded-[6px] bg-[var(--elevated)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] leading-relaxed">
-      ▶ No configuration required. This node triggers the workflow manually via the dashboard or API.
+    <div className="space-y-3 text-[11px] text-[var(--text-secondary)]">
+      <label className="block">Description
+        <textarea value={config.description ?? ""} onChange={(event) => onChange("description", event.target.value)} disabled={isReadOnly} maxLength={500} rows={4} className="mt-1 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-2 text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60" />
+        <span className="block text-right text-[10px] text-[var(--text-tertiary)]">{String(config.description ?? "").length}/500</span>
+      </label>
+      <div><span className="block mb-1">Input Type</span><div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-2">JSON Object</div></div>
+      <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 leading-5">Provide JSON when starting the published workflow. Read values with:<code className="mt-1 block font-mono text-[10px]">{"{{trigger.data.order_id}}"}<br/>{"{{trigger.data.customer_email}}"}<br/>{"{{trigger.data.requested_amount}}"}</code></div>
     </div>
   );
 }
@@ -992,7 +997,7 @@ export default function NodeInspector({
       onUpdateNode(selectedNode.id, {
         label: nodeName,
         name: nodeName,
-        config: typeId === "ai.rag_search" ? normalizeRAGConfiguration(formData) : typeId === "ai.decision" ? normalizeDecisionConfiguration(configToValidate) : formData,
+        config: typeId === "trigger.manual" ? { ...formData, input_schema: { type: "object" } } : typeId === "ai.rag_search" ? normalizeRAGConfiguration(formData) : typeId === "ai.decision" ? normalizeDecisionConfiguration(configToValidate) : formData,
       });
       setHasLocalChanges(false);
     }
@@ -1022,7 +1027,7 @@ export default function NodeInspector({
       case "trigger.schedule":
         return <ScheduleConfig config={formData} onChange={handleFieldChange} />;
       case "trigger.manual":
-        return <ManualConfig />;
+        return <ManualConfig config={formData} onChange={handleFieldChange} isReadOnly={isReadOnly} />;
       case "action.http_request":
         return <HttpRequestConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} />;
       case "action.email":
@@ -1066,7 +1071,7 @@ export default function NodeInspector({
             <span className="text-[16px] shrink-0">{def.icon}</span>
             <div className="min-w-0">
               <div className="text-[13px] font-semibold text-[var(--text-primary)] truncate">
-                {typeId === "trigger.webhook" ? "Webhook trigger" : nodeName || def.name}
+                {typeId === "trigger.webhook" ? "Webhook trigger" : typeId === "trigger.manual" ? "Manual Trigger" : nodeName || def.name}
               </div>
               <div className="text-[9px] font-mono text-[var(--text-tertiary)] truncate">
                 {typeId}
@@ -1091,6 +1096,7 @@ export default function NodeInspector({
           </div>
         </div>
 
+        {typeId === "trigger.manual" && <p className="text-[10px] leading-4 text-[var(--text-secondary)]">Start this workflow manually with custom input data.</p>}
         {/* Node ID badge */}
         <div className="flex items-center gap-1">
           {typeId !== "trigger.webhook" && <span className="text-[9px] font-mono text-[var(--text-tertiary)] bg-[var(--elevated)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">

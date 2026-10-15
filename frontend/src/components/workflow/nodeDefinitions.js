@@ -29,12 +29,13 @@ export const NODE_CATEGORIES = [
       },
       {
         typeId: "trigger.manual",
-        name: "Manual",
+        name: "Manual Trigger",
         category: "Triggers",
         icon: "▶",
-        description: "Trigger manually via dashboard or API",
+        description: "Start this workflow manually with custom input data.",
         defaultConfig: {
-          description: "Triggered manually by user",
+          description: "",
+          input_schema: { type: "object" },
         },
       },
     ],

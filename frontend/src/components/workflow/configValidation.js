@@ -46,6 +46,10 @@ export function validateNodeConfiguration(typeId, config = {}) {
   };
 
   switch (typeId) {
+    case "trigger.manual":
+      if (config.description !== undefined && (typeof config.description !== "string" || config.description.length > 500)) errors.push({ field: "description", message: "Description must be 500 characters or fewer." });
+      if (config.input_schema !== undefined && (config.input_schema?.type !== "object" || Object.keys(config.input_schema).length !== 1)) errors.push({ field: "input_schema", message: "Input type must be JSON Object." });
+      break;
     case "trigger.webhook":
       if (!config.webhook_id) errors.push({ field: "webhook_id", message: "Set up a webhook endpoint before saving this trigger." });
       break;
@@ -160,6 +164,8 @@ export function validateWorkflowConfiguration(nodes = [], edges = [], { includeS
     const triggerNodes = nodes.filter((node) => node.data?.typeId?.startsWith("trigger."));
     if (triggerNodes.length === 0) {
       errors.push({ code: "NO_TRIGGER", message: "Workflow must have at least one Trigger node." });
+    } else if (triggerNodes.length > 1) {
+      errors.push({ code: "MULTIPLE_TRIGGERS", message: "Workflow must have exactly one Trigger node." });
     } else if (nodes.length > 1) {
       const reachable = new Set(triggerNodes.map((node) => node.id));
       const pending = [...reachable];

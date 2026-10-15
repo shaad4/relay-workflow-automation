@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import WorkflowStatus from "../workflows/WorkflowStatus";
-import { activateWorkflow, deactivateWorkflow, deleteWorkflow, deleteWorkflowVersion, updateWorkflow } from "@/services/workflows";
+import { activateWorkflow, deactivateWorkflow, deleteWorkflow, deleteWorkflowVersion, getWorkflowNodes, runWorkflow, updateWorkflow } from "@/services/workflows";
+import { validateManualInput, manualRunError } from "./manualTrigger";
 
 function CheckIcon(props) {
   return (
@@ -60,6 +61,10 @@ function RefreshCwIcon(props) {
   );
 }
 
+function PlayIcon(props) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}><path d="m8 5 11 7-11 7V5Z" /></svg>;
+}
+
 export default function WorkflowToolbar({
   workflowName = "Workflow",
   workflowStatus = "draft",
@@ -104,6 +109,12 @@ export default function WorkflowToolbar({
   const [versionToDelete, setVersionToDelete] = useState(null);
   const [isDeletingVersion, setIsDeletingVersion] = useState(false);
   const [deleteVersionError, setDeleteVersionError] = useState("");
+  const [manualTriggerState, setManualTriggerState] = useState("loading");
+  const [runOpen, setRunOpen] = useState(false);
+  const [runInput, setRunInput] = useState("{}");
+  const [runError, setRunError] = useState("");
+  const [runPending, setRunPending] = useState(false);
+  const [runResult, setRunResult] = useState(null);
   const workflowMenuRef = useRef(null);
   const versionMenuRef = useRef(null);
   // Older workflow payloads may expose "published"; the workflow-level state is active.
@@ -118,6 +129,40 @@ export default function WorkflowToolbar({
     (item) => Number(item.version_number ?? item.version) === Number(versionNumber)
   );
   const hasDraftVersion = sortedVersions.some((item) => String(item.status).toLowerCase() === "draft");
+  const publishedVersion = sortedVersions.find((item) => String(item.id) === String(publishedVersionId));
+  const publishedNumber = publishedVersion?.version_number ?? publishedVersion?.version;
+
+  useEffect(() => {
+    if (!publishedVersionId || publishedNumber == null) return;
+    let active = true;
+    getWorkflowNodes(workflowId, publishedNumber).then((raw) => {
+      const rows = Array.isArray(raw) ? raw : raw?.nodes ?? raw?.results ?? raw?.data ?? [];
+      if (active) setManualTriggerState(rows.some((node) => node.node_type === "trigger.manual" || node.type === "trigger.manual") ? "manual" : "other");
+    }).catch(() => { if (active) setManualTriggerState("unknown"); });
+    return () => { active = false; };
+  }, [workflowId, publishedVersionId, publishedNumber]);
+
+  useEffect(() => {
+    if (!runOpen) return;
+    const onEscape = (event) => { if (event.key === "Escape" && !runPending) setRunOpen(false); };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [runOpen, runPending]);
+
+  const submitRun = async (event) => {
+    event.preventDefault();
+    if (runPending) return;
+    const validation = validateManualInput(runInput);
+    if (validation.error) { setRunError(validation.error); return; }
+    setRunPending(true);
+    setRunError("");
+    try {
+      const result = await runWorkflow(workflowId, validation.input);
+      setRunResult(result);
+    } catch (error) {
+      setRunError(manualRunError(error));
+    } finally { setRunPending(false); }
+  };
 
   useEffect(() => {
     if (!workflowMenuOpen) return;
@@ -485,6 +530,7 @@ export default function WorkflowToolbar({
 
       {/* Right: Save indicator + actions */}
       <div className="flex items-center gap-3 shrink-0">
+        <button type="button" onClick={() => { setRunInput("{}"); setRunError(""); setRunResult(null); setRunOpen(true); }} disabled={!publishedVersionId || normalizedWorkflowStatus !== "active" || manualTriggerState === "other" || (publishedNumber != null && manualTriggerState === "loading")} title={!publishedVersionId ? "Publish a Manual Trigger workflow first" : normalizedWorkflowStatus !== "active" ? "Activate this workflow to run it" : manualTriggerState === "other" ? "The published version does not contain a Manual Trigger" : "Run the published version"} className="h-8 px-3 rounded-[6px] bg-[#4F46E5] text-white text-[12px] font-medium flex items-center gap-1.5 hover:bg-[#6366F1] disabled:opacity-40 disabled:cursor-not-allowed"><PlayIcon className="h-3.5 w-3.5 stroke-[1.8]" />Run Workflow</button>
         {!isReadOnly && (
           <div className="flex items-center gap-1 border-r border-[var(--border-subtle)] pr-2">
             <button type="button" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" aria-label="Undo" className="h-8 w-8 rounded-[6px] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-35 disabled:cursor-not-allowed">↶</button>
@@ -588,6 +634,7 @@ export default function WorkflowToolbar({
           </button>
         )}
       </div>
+      {runOpen && createPortal(<div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 p-3"><section role="dialog" aria-modal="true" aria-labelledby="manual-run-title" className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-[var(--border-default)] bg-[var(--surface)] p-5 shadow-2xl text-[var(--text-primary)]"><h2 id="manual-run-title" className="text-lg font-semibold">{runResult ? "Workflow run requested" : "Run Workflow"}</h2>{runResult ? <div className="mt-4 space-y-3 text-sm text-[var(--text-secondary)]"><p>Your workflow has been queued for execution.</p>{runResult.event_id && <p className="break-all font-mono text-xs">Event ID: {runResult.event_id}</p>}<button type="button" onClick={() => setRunOpen(false)} className="rounded-[6px] bg-[var(--accent)] px-4 py-2 text-white">Done</button></div> : <form onSubmit={submitRun} className="mt-3 space-y-4"><p className="text-sm text-[var(--text-secondary)]">Start a new execution using the published version of this workflow.</p><div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-xs"><p className="font-medium">{workflowName}</p><p className="mt-1 text-[var(--text-tertiary)]">Published version {publishedNumber ?? "unknown"} · Manual Trigger</p></div><label className="block text-xs font-medium">Trigger Input (JSON)<textarea value={runInput} onChange={(event) => { setRunInput(event.target.value); setRunError(""); }} rows={9} spellCheck={false} className="mt-2 w-full resize-y rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-3 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" aria-invalid={Boolean(runError)} aria-describedby="manual-run-help" /></label><p id="manual-run-help" className="text-xs text-[var(--text-tertiary)]">Provide a JSON object. Its fields are available as trigger.data values.</p>{runError && <p role="alert" className="text-xs text-red-500">{runError}</p>}<div className="flex justify-end gap-2"><button type="button" disabled={runPending} onClick={() => setRunOpen(false)} className="rounded-[6px] border border-[var(--border-default)] px-4 py-2 text-xs disabled:opacity-50">Cancel</button><button type="submit" disabled={runPending} className="rounded-[6px] bg-[var(--accent)] px-4 py-2 text-xs font-medium text-white disabled:opacity-50">{runPending ? "Requesting…" : "Run Workflow"}</button></div></form>}</section></div>, document.body)}
     </div>
   );
 }
