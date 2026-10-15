@@ -175,7 +175,15 @@ async def _handle_approval_decision(
 
         await _commit_session(session)
 
-        return approval_response
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Approval recorded, but workflow execution failed",
+                "approval_id": str(approval_response.id),
+                "execution_id": str(result.execution_id),
+                "execution_status": ExecutionStatus.FAILED,
+            },
+        ) from exc
 
     except Exception as exc:
         print(
@@ -193,6 +201,16 @@ async def _handle_approval_decision(
         execution.completed_at = datetime.now(timezone.utc)
         execution.error = {"message": "Workflow resume failed"}
         await _commit_session(session)
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Approval recorded, but workflow execution failed",
+                "approval_id": str(approval_response.id),
+                "execution_id": str(result.execution_id),
+                "execution_status": ExecutionStatus.FAILED,
+            },
+        ) from exc
 
     return approval_response
 

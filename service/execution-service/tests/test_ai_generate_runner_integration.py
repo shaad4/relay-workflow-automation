@@ -1,8 +1,7 @@
-"""Database-backed AI Generate runner tests. Opt in with RUN_AI_GENERATE_DB_TESTS=1."""
+"""Database-backed AI Generate runner tests."""
 
 import asyncio
 import json
-import os
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -22,17 +21,13 @@ from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
 
 
-pytestmark = pytest.mark.skipif(
-    os.getenv("RUN_AI_GENERATE_DB_TESTS") != "1",
-    reason="requires explicit opt-in to the execution development database",
-)
 API_KEY = "secret-test-key-never-persist"
 
 
 async def run_case(prompt="{{trigger.data.message}}", rag_context="", response=None, provider_error=None):
     database = make_url(DATABASE_URL)
-    if database.database != "relay_execution" or database.host not in {"execution-postgres", "localhost", "127.0.0.1"}:
-        pytest.fail("Refusing to run against a non-development execution database")
+    if database.database != "ci_test" or database.host not in {"localhost", "127.0.0.1"}:
+        pytest.fail("Database integration tests require the isolated local ci_test database")
 
     workspace_id, workflow_id, version_id, execution_id, connection_id = (uuid4() for _ in range(5))
     nodes = [

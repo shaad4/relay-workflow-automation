@@ -6,6 +6,14 @@ import stripe
 from app.connectors.base import Connector
 
 
+ZERO_DECIMAL_CURRENCIES = {
+    "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg",
+    "rwf", "vnd", "vuv", "xaf", "xof", "xpf",
+}
+TWO_DECIMAL_CURRENCIES = {"usd", "inr", "huf", "twd"}
+WHOLE_AMOUNT_TWO_DECIMAL_CURRENCIES = {"isk", "ugx"}
+
+
 class StripeConnector(Connector):
 
     async def execute(
@@ -38,14 +46,30 @@ class StripeConnector(Connector):
         except (InvalidOperation, ValueError):
             raise ValueError("Refund amount must be a valid number")
 
-        if amount_decimal <= 0:
+        if not amount_decimal.is_finite() or amount_decimal <= 0:
             raise ValueError("Refund amount must be greater than zero")
 
-        # Stripe expects amounts in the currency's smallest unit.
-        # Example: 12.50 USD -> 1250 cents.
-        amount_smallest_unit = int(amount_decimal * 100)
-
         try:
+            payment = stripe.PaymentIntent.retrieve(
+                payment_id, expand=["latest_charge"], api_key=api_key,
+            )
+            currency = payment.currency.lower()
+            charge = payment.latest_charge
+            if not charge or isinstance(charge, str):
+                raise ValueError("Payment has no refundable charge")
+            if currency not in (ZERO_DECIMAL_CURRENCIES | TWO_DECIMAL_CURRENCIES | WHOLE_AMOUNT_TWO_DECIMAL_CURRENCIES):
+                raise ValueError(f"Unsupported refund currency: {currency}")
+            if currency in WHOLE_AMOUNT_TWO_DECIMAL_CURRENCIES and amount_decimal != amount_decimal.to_integral_value():
+                raise ValueError("Refund amount must be a whole currency unit")
+            multiplier = 1 if currency in ZERO_DECIMAL_CURRENCIES else 100
+            units = amount_decimal * multiplier
+            if units != units.to_integral_value():
+                raise ValueError("Refund amount has invalid fractional units")
+            amount_smallest_unit = int(units)
+            remaining = charge.amount - charge.amount_refunded
+            if amount_smallest_unit > remaining or remaining <= 0:
+                raise ValueError("Refund amount exceeds remaining refundable balance")
+
             refund = stripe.Refund.create(
                 payment_intent=payment_id,
                 amount=amount_smallest_unit,

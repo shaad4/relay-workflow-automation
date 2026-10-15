@@ -6,9 +6,11 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from sqlalchemy import delete, select
+from sqlalchemy.engine import make_url
+import pytest
 
 from app.ai.exceptions import AIDecisionValidationError
-from app.db.database import AsyncSessionLocal
+from app.db.database import AsyncSessionLocal, DATABASE_URL, engine
 from app.engine.runner import run_execution
 from app.engine.status import ExecutionStatus
 from app.models.execution import Execution
@@ -16,6 +18,9 @@ from app.models.execution_step import ExecutionStep
 
 
 async def run_case(should_fail: bool):
+    database = make_url(DATABASE_URL)
+    if database.database != "ci_test" or database.host not in {"localhost", "127.0.0.1"}:
+        pytest.fail("Database integration tests require the isolated local ci_test database")
     workspace_id = uuid4()
     workflow_id = uuid4()
     version_id = uuid4()
@@ -222,6 +227,7 @@ async def run_case(should_fail: bool):
                 )
             )
             await session.commit()
+        await engine.dispose()
 
 
 async def main():
@@ -229,6 +235,11 @@ async def main():
     await run_case(should_fail=True)
 
     print("STEP 143/144 runner integration tests passed!")
+
+
+@pytest.mark.parametrize("should_fail", [False, True])
+def test_ai_decision_runner_persists_output_and_blocks_invalid_decisions(should_fail):
+    asyncio.run(run_case(should_fail))
 
 
 if __name__ == "__main__":

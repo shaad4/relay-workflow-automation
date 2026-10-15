@@ -1,13 +1,11 @@
 """Database-backed tests for Condition branch selection in the real runner.
 
-Run inside the execution service's development environment with
-RUN_CONDITION_BRANCHING_DB_TESTS=1. Every test uses unique execution records
+Run against the isolated local ci_test database. Every test uses unique execution records
 and removes them, including approval rows, in a finally block.
 """
 
 import asyncio
 import json
-import os
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
@@ -25,11 +23,6 @@ from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
 from app.models.human_approval import HumanApproval
 
-
-requires_development_database = pytest.mark.skipif(
-    os.getenv("RUN_CONDITION_BRANCHING_DB_TESTS") != "1",
-    reason="requires explicit opt-in to the execution development database",
-)
 
 DECISIONS = ("TECHNICAL", "BILLING", "GENERAL")
 
@@ -87,13 +80,9 @@ def workflow(decision=..., duplicate=False):
 
 
 async def run_database_case(decision=..., duplicate=False):
-    # These tests only write to the named development database. A second
-    # opt-in above prevents accidental execution during ordinary pytest runs.
     database = make_url(DATABASE_URL)
-    if database.database != "relay_execution" or database.host not in {
-        "execution-postgres", "localhost", "127.0.0.1"
-    }:
-        pytest.fail("Refusing to run against a non-development execution database")
+    if database.database != "ci_test" or database.host not in {"localhost", "127.0.0.1"}:
+        pytest.fail("Database integration tests require the isolated local ci_test database")
 
     workspace_id, workflow_id, version_id, execution_id = (uuid4() for _ in range(4))
     nodes, edges = workflow(decision, duplicate)
@@ -187,7 +176,6 @@ async def run_database_case(decision=..., duplicate=False):
 
 
 @pytest.mark.parametrize("decision", DECISIONS)
-@requires_development_database
 def test_runner_executes_only_the_matching_email_and_persists_condition(decision):
     result, error, steps, calls = asyncio.run(run_database_case(decision))
     expected_node = f"email_{decision.lower()}"
@@ -207,7 +195,6 @@ def test_runner_executes_only_the_matching_email_and_persists_condition(decision
 
 
 @pytest.mark.parametrize("decision", ["UNKNOWN", None])
-@requires_development_database
 def test_runner_fails_safely_without_email_for_unknown_or_missing_decision(decision):
     result, error, steps, calls = asyncio.run(run_database_case(decision))
     assert result is None and error is not None
@@ -217,7 +204,6 @@ def test_runner_fails_safely_without_email_for_unknown_or_missing_decision(decis
     assert not any(node_id.startswith("email_") for node_id in steps)
 
 
-@requires_development_database
 def test_runner_rejects_duplicate_matching_edges_without_email():
     result, error, steps, calls = asyncio.run(run_database_case(duplicate=True))
     assert result is None and isinstance(error, ValueError)
