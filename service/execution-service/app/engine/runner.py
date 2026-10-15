@@ -718,6 +718,15 @@ async def run_execution(
         # The approval transaction already saved context and the waiting step.
         raise
     except Exception as exc:
+        print(
+            "\n========== WORKFLOW EXECUTION ERROR ==========",
+            flush=True,
+        )
+        print("Node ID:", node_id, flush=True)
+        print("Node Type:", node_type, flush=True)
+        print("Exception Type:", type(exc).__name__, flush=True)
+        print("==============================================\n", flush=True)
+
          # Classify failures using safe messages.
         if isinstance(exc, ActionExecutionFailed):
             message = "Action execution failed"

@@ -1056,6 +1056,7 @@ async def validate_workflow(
         "human.approval",
         "ai.rag_search",
         "ai.decision",
+        "ai.generate",
         "logic.condition",
     }
 

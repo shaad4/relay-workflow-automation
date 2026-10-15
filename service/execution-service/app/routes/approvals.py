@@ -177,7 +177,15 @@ async def _handle_approval_decision(
 
         return approval_response
 
-    except Exception:
+    except Exception as exc:
+        print(
+            "\n========== WORKFLOW RESUME ERROR ==========",
+            flush=True,
+        )
+        print("Execution ID:", execution.id, flush=True)
+        print("Exception Type:", type(exc).__name__, flush=True)
+        print("===========================================\n", flush=True)
+
         await session.rollback()
         if runner_result is not None:
             execution.context = runner_result["context"]
