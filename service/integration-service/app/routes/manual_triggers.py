@@ -1,8 +1,16 @@
+
 import json
 from uuid import UUID
 
 import grpc
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    status,
+)
+from pydantic import ValidationError
 
 from app.dependencies import get_current_identity
 from app.grpc.workflow_client import WorkflowGrpcClient
@@ -14,21 +22,96 @@ router = APIRouter(
     tags=["manual-triggers"],
 )
 
+MAX_MANUAL_PAYLOAD_BYTES = 64 * 1024
+
 
 @router.post("/{workflow_id}/run")
 async def run_workflow_manually(
     workflow_id: UUID,
-    data: ManualRunRequest,
+    request: Request,
     identity: dict = Depends(get_current_identity),
 ):
+    # 1. Validate Content-Type
+    content_type = (
+        request.headers.get("content-type", "")
+        .split(";", 1)[0]
+        .strip()
+        .lower()
+    )
+
+    if content_type != "application/json":
+        raise HTTPException(
+            status_code=415,
+            detail="Content-Type must be application/json",
+        )
+
+    # 2. Check declared request size
+    content_length = request.headers.get("content-length")
+
+    if content_length is not None:
+        try:
+            declared_size = int(content_length)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Content-Length",
+            )
+
+        if declared_size < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Content-Length",
+            )
+
+        if declared_size > MAX_MANUAL_PAYLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="Manual trigger payload exceeds 64 KiB",
+            )
+
+    # 3. Read body with actual size enforcement
+    body = bytearray()
+
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_MANUAL_PAYLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="Manual trigger payload exceeds 64 KiB",
+            )
+
+        body.extend(chunk)
+
+    # 4. Parse JSON
+    try:
+        raw_data = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid JSON request body",
+        )
+
+    # 5. Validate request schema
+    try:
+        data = ManualRunRequest.model_validate(raw_data)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=exc.errors(
+                include_input=False,
+                include_context=False,
+            ),
+        ) from exc
+
+    # 6. Resolve authenticated workspace
     try:
         workspace_id = str(UUID(identity["workspace_id"]))
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, KeyError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid workspace identity",
         )
 
+    # 7. Validate published workflow
     client = WorkflowGrpcClient()
 
     try:
@@ -70,18 +153,28 @@ async def run_workflow_manually(
     finally:
         await client.close()
 
+    # 8. Parse workflow definition
     try:
         nodes = json.loads(definition.nodes_json)
-    except (json.JSONDecodeError, TypeError):
+
+        if not isinstance(nodes, list):
+            raise ValueError("Nodes must be a list")
+
+        if not all(isinstance(node, dict) for node in nodes):
+            raise ValueError("Invalid node structure")
+
+    except (json.JSONDecodeError, TypeError, ValueError):
         raise HTTPException(
             status_code=502,
             detail="Invalid workflow definition",
         )
 
+    # 9. Verify Manual Trigger
     triggers = [
         node
         for node in nodes
-        if node.get("node_type", "").startswith("trigger.")
+        if isinstance(node.get("node_type"), str)
+        and node["node_type"].startswith("trigger.")
     ]
 
     if (
@@ -93,8 +186,7 @@ async def run_workflow_manually(
             detail="Published workflow does not have a Manual Trigger",
         )
 
-    # Temporary response for STEP 175.
-    # No execution or Kafka event is created yet.
+    # 10. Temporary validation-only response
     return {
         "status": "validated",
         "workflow_id": str(workflow_id),
