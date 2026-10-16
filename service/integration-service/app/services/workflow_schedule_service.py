@@ -269,3 +269,20 @@ async def update_schedule(
     await session.refresh(schedule)
 
     return schedule
+
+
+async def delete_schedule(
+    schedule_id: UUID,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> None:
+    """Delete a schedule belonging to the workspace."""
+
+    schedule = await get_schedule(
+        schedule_id=schedule_id,
+        workspace_id=workspace_id,
+        session=session,
+    )
+
+    await session.delete(schedule)
+    await session.commit()

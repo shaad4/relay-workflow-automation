@@ -13,7 +13,8 @@ from app.services.workflow_schedule_service import (
     create_schedule,
     list_schedules,
     get_schedule,
-    update_schedule
+    update_schedule,
+    delete_schedule,
 )
 
 router = APIRouter(
@@ -114,5 +115,29 @@ async def update_workflow_schedule(
             schedule_id=schedule_id,
             workspace_id=workspace_id,
             data=data,
+            session=session,
+        )
+
+
+@router.delete(
+    "/{schedule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_workflow_schedule(
+    schedule_id: UUID,
+    identity: dict = Depends(get_current_identity),
+):
+    try:
+        workspace_id = UUID(identity["workspace_id"])
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid workspace identity",
+        )
+
+    async with AsyncSessionLocal() as session:
+        await delete_schedule(
+            schedule_id=schedule_id,
+            workspace_id=workspace_id,
             session=session,
         )
