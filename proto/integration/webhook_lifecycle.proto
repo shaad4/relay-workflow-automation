@@ -1,11 +1,14 @@
+
 syntax = "proto3";
 
 package relay.integration;
 
+// Existing Webhook Messages
+
 message DeleteWorkflowWebhooksRequest {
   string workflow_id = 1;
   string workspace_id = 2;
-  // Empty removes hooks from every version in the workflow.
+  // Empty removes hooks from every version.
   string workflow_version_id = 3;
 }
 
@@ -17,9 +20,60 @@ message ActivateWorkflowVersionWebhooksResponse {
   uint32 activated_count = 1;
 }
 
+// Scheduled Trigger Lifecycle Messages
+
+message WorkflowScheduleLifecycleRequest {
+  string workflow_id = 1;
+  string workspace_id = 2;
+}
+
+message SyncWorkflowScheduleRequest {
+  string workflow_id = 1;
+  string workspace_id = 2;
+  string workflow_version_id = 3;
+  bool has_schedule_trigger = 4;
+  bool workflow_active = 5;
+}
+
+message WorkflowScheduleLifecycleResponse {
+  uint32 affected_count = 1;
+}
+
+// Internal Integration Service
+
 service IntegrationInternalService {
-  rpc DeleteWorkflowWebhooks(DeleteWorkflowWebhooksRequest)
-      returns (DeleteWorkflowWebhooksResponse);
-  rpc ActivateWorkflowVersionWebhooks(DeleteWorkflowWebhooksRequest)
-      returns (ActivateWorkflowVersionWebhooksResponse);
+
+  // Existing Webhook Operations
+
+  rpc DeleteWorkflowWebhooks(
+    DeleteWorkflowWebhooksRequest
+  ) returns (
+    DeleteWorkflowWebhooksResponse
+  );
+
+  rpc ActivateWorkflowVersionWebhooks(
+    DeleteWorkflowWebhooksRequest
+  ) returns (
+    ActivateWorkflowVersionWebhooksResponse
+  );
+
+  // Scheduled Trigger Operations
+
+  rpc SyncWorkflowSchedule(
+    SyncWorkflowScheduleRequest
+  ) returns (
+    WorkflowScheduleLifecycleResponse
+  );
+
+  rpc SuspendWorkflowSchedule(
+    WorkflowScheduleLifecycleRequest
+  ) returns (
+    WorkflowScheduleLifecycleResponse
+  );
+
+  rpc DeleteWorkflowSchedule(
+    WorkflowScheduleLifecycleRequest
+  ) returns (
+    WorkflowScheduleLifecycleResponse
+  );
 }
