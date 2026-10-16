@@ -43,5 +43,64 @@ class IntegrationGrpcClient:
         response = await self.stub.ActivateWorkflowVersionWebhooks(request, timeout=8.0)
         return response.activated_count
 
+    
+    async def sync_workflow_schedule(
+        self,
+        workflow_id: UUID,
+        workspace_id: UUID | str,
+        workflow_version_id: UUID,
+        has_schedule_trigger: bool,
+        workflow_active: bool,
+    ) -> int:
+        request = webhook_lifecycle_pb2.SyncWorkflowScheduleRequest(
+            workflow_id=str(workflow_id),
+            workspace_id=str(workspace_id),
+            workflow_version_id=str(workflow_version_id),
+            has_schedule_trigger=has_schedule_trigger,
+            workflow_active=workflow_active,
+        )
+
+        response = await self.stub.SyncWorkflowSchedule(
+            request,
+            timeout=8.0,
+        )
+
+        return response.affected_count
+
+    async def suspend_workflow_schedule(
+        self,
+        workflow_id: UUID,
+        workspace_id: UUID | str,
+    ) -> int:
+        request = webhook_lifecycle_pb2.WorkflowScheduleLifecycleRequest(
+            workflow_id=str(workflow_id),
+            workspace_id=str(workspace_id),
+        )
+
+        response = await self.stub.SuspendWorkflowSchedule(
+            request,
+            timeout=8.0,
+        )
+
+        return response.affected_count
+
+    async def delete_workflow_schedule(
+        self,
+        workflow_id: UUID,
+        workspace_id: UUID | str,
+    ) -> int:
+        request = webhook_lifecycle_pb2.WorkflowScheduleLifecycleRequest(
+            workflow_id=str(workflow_id),
+            workspace_id=str(workspace_id),
+        )
+
+        response = await self.stub.DeleteWorkflowSchedule(
+            request,
+            timeout=8.0,
+        )
+
+        return response.affected_count
+
+
     async def close(self):
         await self.channel.close()

@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import grpc
 from croniter import croniter
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, delete, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -286,3 +286,87 @@ async def delete_schedule(
 
     await session.delete(schedule)
     await session.commit()
+
+
+
+async def sync_workflow_schedule(
+    workflow_id: UUID,
+    workspace_id: UUID,
+    workflow_version_id: UUID,
+    has_schedule_trigger: bool,
+    workflow_active: bool,
+    session: AsyncSession,
+) -> int:
+    """Synchronize a schedule with a published workflow version."""
+
+    result = await session.execute(
+        select(WorkflowSchedule).where(
+            WorkflowSchedule.workflow_id == workflow_id,
+            WorkflowSchedule.workspace_id == workspace_id,
+        )
+    )
+
+    schedule = result.scalar_one_or_none()
+
+    if schedule is None:
+        return 0
+
+    if not has_schedule_trigger:
+        # Stop scheduling when the new version
+        # does not contain a Scheduled Trigger.
+        schedule.next_run_at = None
+    else:
+        schedule.workflow_version_id = workflow_version_id
+
+        # Preserve the user's manual pause preference.
+        if schedule.enabled and workflow_active:
+            schedule.next_run_at = calculate_next_run(
+                schedule_type=schedule.schedule_type,
+                interval_minutes=schedule.interval_minutes,
+                cron_expression=schedule.cron_expression,
+                timezone_name=schedule.timezone,
+            )
+        else:
+            schedule.next_run_at = None
+
+    await session.commit()
+    return 1
+
+
+
+async def suspend_workflow_schedule(
+    workflow_id: UUID,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> int:
+    """Stop future scheduled runs for an inactive workflow."""
+
+    result = await session.execute(
+        update(WorkflowSchedule)
+        .where(
+            WorkflowSchedule.workflow_id == workflow_id,
+            WorkflowSchedule.workspace_id == workspace_id,
+        )
+        .values(next_run_at=None)
+    )
+
+    await session.commit()
+    return result.rowcount
+
+
+async def delete_workflow_schedule(
+    workflow_id: UUID,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> int:
+    """Delete a schedule when its workflow is deleted."""
+
+    result = await session.execute(
+        delete(WorkflowSchedule).where(
+            WorkflowSchedule.workflow_id == workflow_id,
+            WorkflowSchedule.workspace_id == workspace_id,
+        )
+    )
+
+    await session.commit()
+    return result.rowcount
