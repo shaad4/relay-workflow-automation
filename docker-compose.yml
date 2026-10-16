@@ -105,6 +105,7 @@ services:
     env_file:
       - ./service/integration-service/.env
     environment:
+      CELERY_WORKER: "true"
       CELERY_BROKER_URL: redis://rag-redis:6379/1
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
     depends_on:
