@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.grpc.workflow_client import WorkflowGrpcClient
 from app.models.workflow_schedule import WorkflowSchedule
-from app.schemas.workflow_schedule import ScheduleCreate
+from app.schemas.workflow_schedule import ScheduleCreate, ScheduleUpdate
 
 
 def calculate_next_run(
@@ -220,5 +220,52 @@ async def get_schedule(
             status_code=404,
             detail="Schedule not found",
         )
+
+    return schedule
+
+
+async def update_schedule(
+    schedule_id: UUID,
+    workspace_id: UUID,
+    data: ScheduleUpdate,
+    session: AsyncSession,
+) -> WorkflowSchedule:
+    """Update an existing workflow schedule."""
+
+    schedule = await get_schedule(
+        schedule_id=schedule_id,
+        workspace_id=workspace_id,
+        session=session,
+    )
+
+    changes = data.model_dump(exclude_unset=True)
+
+    if not changes:
+        return schedule
+
+    if "schedule_type" in changes:
+        if changes["schedule_type"] == "interval":
+            changes["cron_expression"] = None
+        elif changes["schedule_type"] == "cron":
+            changes["interval_minutes"] = None
+
+    for field, value in changes.items():
+        setattr(schedule, field, value)
+
+    # Validate the complete updated configuration,
+    # not only the submitted fields.
+    next_run = calculate_next_run(
+        schedule_type=schedule.schedule_type,
+        interval_minutes=schedule.interval_minutes,
+        cron_expression=schedule.cron_expression,
+        timezone_name=schedule.timezone,
+    )
+
+    schedule.next_run_at = (
+        next_run if schedule.enabled else None
+    )
+
+    await session.commit()
+    await session.refresh(schedule)
 
     return schedule

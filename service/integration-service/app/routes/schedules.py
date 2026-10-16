@@ -7,11 +7,13 @@ from app.dependencies import get_current_identity
 from app.schemas.workflow_schedule import (
     ScheduleCreate,
     ScheduleResponse,
+    ScheduleUpdate
 )
 from app.services.workflow_schedule_service import (
     create_schedule,
     list_schedules,
     get_schedule,
+    update_schedule
 )
 
 router = APIRouter(
@@ -86,5 +88,31 @@ async def get_workflow_schedule(
         return await get_schedule(
             schedule_id=schedule_id,
             workspace_id=workspace_id,
+            session=session,
+        )
+
+
+@router.patch(
+    "/{schedule_id}",
+    response_model=ScheduleResponse,
+)
+async def update_workflow_schedule(
+    schedule_id: UUID,
+    data: ScheduleUpdate,
+    identity: dict = Depends(get_current_identity),
+):
+    try:
+        workspace_id = UUID(identity["workspace_id"])
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid workspace identity",
+        )
+
+    async with AsyncSessionLocal() as session:
+        return await update_schedule(
+            schedule_id=schedule_id,
+            workspace_id=workspace_id,
+            data=data,
             session=session,
         )
