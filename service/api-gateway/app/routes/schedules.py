@@ -22,3 +22,26 @@ async def create_schedule(
         f"{INTEGRATION_SERVICE_URL}/schedules/",
         follow_redirects=False,
     )
+
+
+@router.get("/")
+async def list_workflow_schedules(
+    request: Request,
+):
+    return await proxy_request(
+        request,
+        f"{INTEGRATION_SERVICE_URL}/schedules/",
+        follow_redirects=False,
+    )
+
+
+@router.get("/{schedule_id}")
+async def get_workflow_schedule(
+    request: Request,
+    schedule_id: UUID,
+):
+    return await proxy_request(
+        request,
+        f"{INTEGRATION_SERVICE_URL}/schedules/{schedule_id}",
+        follow_redirects=False,
+    )
