@@ -11,3 +11,4 @@ aiokafka
 pytest
 pytest-cov
 httpx
+croniter
