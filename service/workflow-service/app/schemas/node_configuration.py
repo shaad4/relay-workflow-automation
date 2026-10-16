@@ -2,6 +2,11 @@ from typing import Any
 import re
 from uuid import UUID
 
+from datetime import time
+from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from croniter import croniter
+
 
 from pydantic import (
     BaseModel,
@@ -261,3 +266,68 @@ class ManualTriggerConfig(BaseModel):
             )
 
         return value
+    
+
+
+class ScheduledTriggerConfig(BaseModel):
+    """Configuration for a scheduled workflow trigger."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schedule_type: Literal["interval", "cron"]
+
+    interval_minutes: int | None = Field(
+        default=None,
+        ge=1,
+        le=10080,
+        strict=True,
+    )
+
+    cron_expression: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    timezone: str = Field(
+        default="UTC",
+        max_length=100,
+    )
+
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def validate_schedule(self):
+        # Validate timezone
+        try:
+            ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("Invalid timezone")
+
+        if self.schedule_type == "interval":
+            if self.interval_minutes is None:
+                raise ValueError(
+                    "interval_minutes is required"
+                )
+
+            if self.cron_expression is not None:
+                raise ValueError(
+                    "cron_expression is not allowed for interval"
+                )
+
+        if self.schedule_type == "cron":
+            if self.interval_minutes is not None:
+                raise ValueError(
+                    "interval_minutes is not allowed for cron"
+                )
+
+            if not self.cron_expression:
+                raise ValueError(
+                    "cron_expression is required"
+                )
+
+            if not croniter.is_valid(self.cron_expression):
+                raise ValueError(
+                    "Invalid cron expression"
+                )
+
+        return self

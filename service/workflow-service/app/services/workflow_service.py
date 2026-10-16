@@ -13,10 +13,10 @@ from app.schemas.node_configuration import (
     ConditionConfig,
     AIGenerateConfig,
     ManualTriggerConfig,
+    ScheduledTriggerConfig,
 )
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
 from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
-
 
 async def create_workflow(
     data: WorkflowCreate,
@@ -1062,6 +1062,33 @@ async def validate_workflow(
                         "node_id": node.node_id,
                         "message": (
                             f"Manual Trigger node '{node.node_id}': "
+                            f"{field} - {error['msg']}"
+                        ),
+                    }
+                )
+
+    # 12. Validate Scheduled Trigger configurations
+    for node in nodes:
+        if node.node_type != "trigger.schedule":
+            continue
+
+        try:
+            ScheduledTriggerConfig.model_validate(
+                node.configuration or {}
+            )
+
+        except ValidationError as exc:
+            for error in exc.errors():
+                field = ".".join(
+                    str(part) for part in error["loc"]
+                ) or "configuration"
+
+                errors.append(
+                    {
+                        "code": "INVALID_SCHEDULE_CONFIGURATION",
+                        "node_id": node.node_id,
+                        "message": (
+                            f"Scheduled Trigger node '{node.node_id}': "
                             f"{field} - {error['msg']}"
                         ),
                     }
