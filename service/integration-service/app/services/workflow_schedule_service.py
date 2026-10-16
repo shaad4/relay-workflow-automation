@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import grpc
 from croniter import croniter
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -177,4 +178,47 @@ async def create_schedule(
         ) from exc
 
     await session.refresh(schedule)
+    return schedule
+
+
+
+async def list_schedules(
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> list[WorkflowSchedule]:
+    """List schedules belonging to a workspace."""
+
+    result = await session.execute(
+        select(WorkflowSchedule)
+        .where(
+            WorkflowSchedule.workspace_id == workspace_id
+        )
+        .order_by(WorkflowSchedule.created_at.desc())
+    )
+
+    return list(result.scalars().all())
+
+
+async def get_schedule(
+    schedule_id: UUID,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> WorkflowSchedule:
+    """Retrieve one schedule within a workspace."""
+
+    result = await session.execute(
+        select(WorkflowSchedule).where(
+            WorkflowSchedule.id == schedule_id,
+            WorkflowSchedule.workspace_id == workspace_id,
+        )
+    )
+
+    schedule = result.scalar_one_or_none()
+
+    if schedule is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Schedule not found",
+        )
+
     return schedule
