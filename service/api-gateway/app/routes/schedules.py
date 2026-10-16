@@ -56,3 +56,15 @@ async def update_workflow_schedule(
         f"{INTEGRATION_SERVICE_URL}/schedules/{schedule_id}",
         follow_redirects=False,
     )
+
+
+@router.delete("/{schedule_id}")
+async def delete_workflow_schedule(
+    request: Request,
+    schedule_id: UUID,
+):
+    return await proxy_request(
+        request,
+        f"{INTEGRATION_SERVICE_URL}/schedules/{schedule_id}",
+        follow_redirects=False,
+    )
