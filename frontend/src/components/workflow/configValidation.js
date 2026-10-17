@@ -1,3 +1,4 @@
+import { validateSchedule } from "./scheduleTrigger.js";
 import { previousNodesFor } from "./workflowVariables.js";
 
 export const AI_DECISION_FIELDS = ["connection_id", "model", "instructions", "input_mappings", "rag_context", "allowed_decisions"];
@@ -54,18 +55,7 @@ export function validateNodeConfiguration(typeId, config = {}) {
       if (!config.webhook_id) errors.push({ field: "webhook_id", message: "Set up a webhook endpoint before saving this trigger." });
       break;
     case "trigger.schedule":
-      requireField("cron", "Cron expression");
-      requireField("timezone", "Timezone");
-      if (required(config.cron) && config.cron.trim().split(/\s+/).length !== 5) {
-        errors.push({ field: "cron", message: "Cron expression must contain five fields: minute, hour, day, month, and weekday." });
-      }
-      if (required(config.timezone)) {
-        try {
-          new Intl.DateTimeFormat("en", { timeZone: config.timezone }).format();
-        } catch {
-          errors.push({ field: "timezone", message: "Enter a valid IANA timezone, such as UTC or America/New_York." });
-        }
-      }
+      errors.push(...validateSchedule(config));
       break;
     case "action.http_request":
       requireField("connection_id", "HTTP connection");

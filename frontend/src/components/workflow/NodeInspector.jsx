@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
+import ScheduleConfig from "./ScheduleConfig";
+import { normalizeSchedule, scheduleNodePayload } from "./scheduleTrigger";
 import { getNodeDefinition } from "./nodeDefinitions";
 import { normalizeDecisionConfiguration, normalizeRAGConfiguration, ragKnowledgeBaseId, validateNodeConfiguration, validateDecisionReferences, validateGenerateReferences, validateConditionReferences, validateConditionBranches, isLegacyConditionConfiguration, AI_DECISION_FIELDS, renameDecisionInput, upgradeDecisionConfiguration } from "./configValidation";
 import { createWebhook, deleteWebhook, getWebhookEndpoint, listWebhooks, regenerateWebhookToken, updateWebhook } from "@/services/webhooks";
@@ -274,31 +276,6 @@ function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOn
     </section></div>}
     <WebhookTestDialog open={testOpen} webhook={webhook} onClose={() => setTestOpen(false)} />
   </div>;
-}
-
-function ScheduleConfig({ config, onChange }) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <FieldLabel>Cron Expression</FieldLabel>
-        <TextInput
-          value={config.cron}
-          onChange={(v) => onChange("cron", v)}
-          mono
-        />
-        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-          Standard 5-field cron (min hr dom mon dow)
-        </p>
-      </div>
-      <div>
-        <FieldLabel>Timezone</FieldLabel>
-        <TextInput
-          value={config.timezone}
-          onChange={(v) => onChange("timezone", v)}
-        />
-      </div>
-    </div>
-  );
 }
 
 function ManualConfig({ config, onChange, isReadOnly }) {
@@ -879,6 +856,7 @@ export default function NodeInspector({
   isReadOnly = false,
   workflowId,
   workflowVersionId,
+  scheduleRevision,
   className = "",
   workflowNodes = [],
   workflowEdges = [],
@@ -897,7 +875,7 @@ export default function NodeInspector({
   useEffect(() => {
     if (selectedNode) {
       setNodeName(selectedNode.data?.label ?? selectedNode.data?.name ?? "");
-      const selectedConfig = { ...(selectedNode.data?.config ?? {}) };
+      const selectedConfig = selectedNode.data?.typeId === "trigger.schedule" ? normalizeSchedule(selectedNode.data?.config) : { ...(selectedNode.data?.config ?? {}) };
       if (selectedNode.data?.typeId === "human.approval" && !selectedConfig.approver_user_id && user?.id) {
         selectedConfig.approver_user_id = user.id;
       }
@@ -956,7 +934,7 @@ export default function NodeInspector({
       nextConfig = normalizeRAGConfiguration(nextConfig);
       onUpdateNode?.(selectedNode.id, { config: nextConfig });
     }
-    if (typeId === "ai.decision" || typeId === "ai.generate" || typeId === "logic.condition") onUpdateNode?.(selectedNode.id, { config: nextConfig });
+    if (typeId === "ai.decision" || typeId === "ai.generate" || typeId === "logic.condition" || typeId === "trigger.schedule") onUpdateNode?.(selectedNode.id, { config: typeId === "trigger.schedule" ? scheduleNodePayload(nextConfig) : nextConfig });
     formDataRef.current = nextConfig;
     setFormData(nextConfig);
     setHasLocalChanges(true);
@@ -997,7 +975,7 @@ export default function NodeInspector({
       onUpdateNode(selectedNode.id, {
         label: nodeName,
         name: nodeName,
-        config: typeId === "trigger.manual" ? { ...formData, input_schema: { type: "object" } } : typeId === "ai.rag_search" ? normalizeRAGConfiguration(formData) : typeId === "ai.decision" ? normalizeDecisionConfiguration(configToValidate) : formData,
+        config: typeId === "trigger.schedule" ? scheduleNodePayload(formData) : typeId === "trigger.manual" ? { ...formData, input_schema: { type: "object" } } : typeId === "ai.rag_search" ? normalizeRAGConfiguration(formData) : typeId === "ai.decision" ? normalizeDecisionConfiguration(configToValidate) : formData,
       });
       setHasLocalChanges(false);
     }
@@ -1025,7 +1003,7 @@ export default function NodeInspector({
           if (onUpdateNode) onUpdateNode(selectedNode.id, { config: nextConfig });
         }} />;
       case "trigger.schedule":
-        return <ScheduleConfig config={formData} onChange={handleFieldChange} />;
+        return <ScheduleConfig key={`${selectedNode.id}:${scheduleRevision}`} config={formData} onChange={handleFieldChange} isReadOnly={isReadOnly} workflowId={workflowId} revision={scheduleRevision} />;
       case "trigger.manual":
         return <ManualConfig config={formData} onChange={handleFieldChange} isReadOnly={isReadOnly} />;
       case "action.http_request":
@@ -1096,6 +1074,7 @@ export default function NodeInspector({
           </div>
         </div>
 
+        {typeId === "trigger.schedule" && <p className="text-[10px] leading-4 text-[var(--text-secondary)]">Automatically run this workflow at scheduled times.</p>}
         {typeId === "trigger.manual" && <p className="text-[10px] leading-4 text-[var(--text-secondary)]">Start this workflow manually with custom input data.</p>}
         {/* Node ID badge */}
         <div className="flex items-center gap-1">
@@ -1141,7 +1120,7 @@ export default function NodeInspector({
           {typeId !== "trigger.webhook" && <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-tertiary)]">
             Configuration
           </div>}
-          {isReadOnly ? (
+          {isReadOnly && typeId !== "trigger.schedule" ? (
             <div className="opacity-60 pointer-events-none">
               {renderConfigPanel()}
             </div>

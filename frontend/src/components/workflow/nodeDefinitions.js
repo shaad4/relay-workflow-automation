@@ -18,13 +18,16 @@ export const NODE_CATEGORIES = [
       },
       {
         typeId: "trigger.schedule",
-        name: "Scheduled",
+        name: "Scheduled Trigger",
         category: "Triggers",
         icon: "🕒",
-        description: "Trigger on a recurring cron schedule",
+        description: "Automatically run this workflow at scheduled times.",
         defaultConfig: {
-          cron: "0 0 * * *",
-          timezone: "UTC",
+          schedule_type: "interval",
+          interval_minutes: 30,
+          cron_expression: null,
+          timezone: "Asia/Kolkata",
+          enabled: true,
         },
       },
       {

@@ -1176,6 +1176,8 @@ export default function WorkflowBuilder({
         if (published?.status !== "published") throw new Error("Publishing was not confirmed.");
       }
       setCurrentVersionStatus("published");
+      const scheduledNode = serverNodesRef.current.find((node) => node.node_type === "trigger.schedule");
+      if (scheduledNode) { setSelectedNodeId(scheduledNode.rfId); setSelectedEdgeId(null); setIsInspectorOpen(true); }
       onRefresh();
     } catch (err) {
       setValidationResult({ isValid: false, errors: [{
@@ -1432,6 +1434,7 @@ export default function WorkflowBuilder({
               isReadOnly={isCanvasReadOnly || isPublishing}
               workflowId={workflowId}
               workflowVersionId={version?.id}
+              scheduleRevision={`${currentVersionStatus}:${workflow?.status}:${workflow?.published_version_id}`}
               workflowNodes={nodes}
               workflowEdges={edges}
               onSelectEdge={handleEdgeSelect}
