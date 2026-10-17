@@ -74,3 +74,38 @@ export async function createScheduleIfMissing(workflowId, config, api) {
   const existing = rows.find((schedule) => String(schedule.workflow_id) === String(workflowId));
   return existing || api.createSchedule({ workflow_id: workflowId, ...schedulePayload(config) });
 }
+
+export function parseTriggerPayload(text) {
+  let input;
+  try { input = JSON.parse(text.trim() || "{}"); }
+  catch { return { error: "Invalid JSON format. Check your syntax." }; }
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    return { error: "Trigger payload must be a JSON object." };
+  }
+  return { input };
+}
+
+// Node configuration forbids input_data. Keep unsaved payloads across inspector
+// remounts and publishing in this tab until the schedule API confirms a save.
+const payloadDrafts = new Map();
+const payloadDraftKey = (workflowId) => `relay:schedule-payload:${workflowId}`;
+export function readPayloadDraft(workflowId, storage) {
+  const key = payloadDraftKey(workflowId);
+  let text = payloadDrafts.get(key);
+  try { text ??= storage?.getItem(key) ?? undefined; } catch { /* In-memory drafts still survive remounts. */ }
+  return { text: text ?? "{}", dirty: text !== undefined };
+}
+export function writePayloadDraft(workflowId, text, storage) {
+  const key = payloadDraftKey(workflowId);
+  payloadDrafts.set(key, text);
+  try { storage?.setItem(key, text); } catch { /* Retain the in-memory draft. */ }
+}
+export function clearPayloadDraft(workflowId, storage) {
+  const key = payloadDraftKey(workflowId);
+  payloadDrafts.delete(key);
+  try { storage?.removeItem(key); } catch { /* Storage may be unavailable. */ }
+}
+
+export function payloadDraftFromSchedule(draft, schedule) {
+  return draft.dirty ? draft : { text: JSON.stringify(schedule?.input_data ?? {}, null, 2), dirty: false };
+}
