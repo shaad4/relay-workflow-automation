@@ -1282,6 +1282,7 @@ export default function WorkflowBuilder({
         versionNumber={versionNumber}
         versions={versions}
         publishedVersionId={workflow?.published_version_id}
+        workflowNodes={nodes}
         onSelectVersion={(nextVersion) => {
           if (saveState !== "saved") {
             setSaveError("Save or discard your changes before switching versions.");

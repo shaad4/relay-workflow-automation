@@ -23,3 +23,23 @@ export function manualRunError(error) {
     default: return "The connection was interrupted or the request failed. Execution status may be uncertain; retrying may start another execution.";
   }
 }
+
+
+export function hasManualTrigger(raw) {
+  const nodes = Array.isArray(raw) ? raw : raw?.nodes ?? raw?.results ?? raw?.data ?? [];
+  return Array.isArray(nodes) && nodes.some((node) =>
+    (node.node_type ?? node.type ?? node.data?.typeId) === "trigger.manual" || node.data?.typeId === "trigger.manual"
+  );
+}
+
+export async function loadManualTrigger({ workflowId, publishedVersionId, versions }, { getWorkflowVersions, getWorkflowNodes }) {
+  const raw = versions ?? await getWorkflowVersions(workflowId);
+  const rows = Array.isArray(raw) ? raw : raw?.versions ?? raw?.results ?? raw?.data ?? [];
+  const version = publishedVersionId
+    ? rows.find((item) => String(item.id) === String(publishedVersionId))
+    : [...rows].sort((a, b) => Number(b.version_number ?? b.version) - Number(a.version_number ?? a.version))[0];
+  const versionNumber = version?.version_number ?? version?.version;
+  if (versionNumber == null) return { hasManualTrigger: false };
+  const nodes = await getWorkflowNodes(workflowId, versionNumber);
+  return { hasManualTrigger: hasManualTrigger(nodes), versionNumber };
+}

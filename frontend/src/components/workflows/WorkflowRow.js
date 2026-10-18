@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { activateWorkflow, deactivateWorkflow } from "@/services/workflows";
 import WorkflowStatus from "./WorkflowStatus";
+import RunWorkflowButton from "../workflow/RunWorkflowButton";
 
 function MoreHorizontalIcon(props) {
   return (
@@ -224,7 +225,9 @@ export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatu
           <span className="h-1 w-1 rounded-full bg-[var(--border-strong)]" />
           <span className="truncate text-[11px] text-[var(--text-tertiary)]">Updated {updatedAt}</span>
         </div>
-        <span className="shrink-0 text-[11px] font-medium text-[var(--accent)] opacity-0 transition-opacity group-hover:opacity-100">Open ↗</span>
+        <div className="flex shrink-0 items-center gap-2" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+          <RunWorkflowButton workflowId={workflowId} workflowName={name} workflowStatus={status} publishedVersionId={workflow.published_version_id} iconOnly />
+        </div>
       </div>
 
       <div ref={menuRef} className="absolute right-3 top-3 z-10">
