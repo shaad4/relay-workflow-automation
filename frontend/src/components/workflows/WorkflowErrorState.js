@@ -21,8 +21,8 @@ function RefreshIcon(props) {
 
 export default function WorkflowErrorState({ errorMessage = "", onRetry }) {
   return (
-    <div className="w-full bg-[var(--surface)] border border-red-500/20 rounded-xl p-8 sm:p-12 text-center my-4 select-none">
-      <div className="mx-auto w-12 h-12 rounded-[8px] bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4 text-[#F85149]">
+    <div role="alert" className="w-full bg-[var(--surface)] border border-red-500/20 rounded-2xl px-6 py-12 text-center">
+      <div className="mx-auto w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4 text-red-400">
         <AlertTriangleIcon className="w-6 h-6 stroke-[1.5]" />
       </div>
 
@@ -30,7 +30,7 @@ export default function WorkflowErrorState({ errorMessage = "", onRetry }) {
         Unable to load workflows
       </h3>
 
-      <p className="text-[14px] text-[var(--text-secondary)] max-w-sm mx-auto mb-6 leading-relaxed">
+      <p className="text-[13px] text-[var(--text-secondary)] max-w-sm mx-auto mb-6 leading-relaxed">
         {errorMessage || "Something went wrong while loading your workflows."}
       </p>
 
@@ -41,7 +41,7 @@ export default function WorkflowErrorState({ errorMessage = "", onRetry }) {
           className="inline-flex items-center gap-2 h-9 px-4 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--elevated)] hover:border-[var(--border-strong)] text-[14px] font-medium text-[var(--text-primary)] transition-all duration-100 ease-out focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 cursor-pointer"
         >
           <RefreshIcon className="w-4 h-4 stroke-[1.5]" />
-          <span>Retry</span>
+          <span>Retry loading</span>
         </button>
       )}
     </div>

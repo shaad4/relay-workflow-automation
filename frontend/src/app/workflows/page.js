@@ -60,7 +60,7 @@ function WorkflowsContent() {
   const [error, setError] = useState(null);
   const [workflows, setWorkflows] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all"); // 'all' | 'published' | 'draft'
+  const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -109,7 +109,8 @@ function WorkflowsContent() {
     return workflows.filter((wf) => {
       // Status filter
       if (statusFilter !== "all") {
-        const wfStatus = String(wf.status || "draft").toLowerCase();
+        const rawStatus = String(wf.status || "draft").toLowerCase();
+        const wfStatus = rawStatus === "published" ? "active" : rawStatus;
         if (wfStatus !== statusFilter) return false;
       }
 
@@ -132,52 +133,24 @@ function WorkflowsContent() {
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
 
   return (
-    <div className="w-full space-y-5 font-sans">
-      {/* Top Header & Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[var(--border-subtle)]">
+    <div className="mx-auto w-full max-w-[1440px] space-y-6 font-sans">
+      <header className="flex flex-col gap-5 border-b border-[var(--border-subtle)] pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-[22px] sm:text-[24px] leading-[30px] font-semibold text-[var(--text-primary)] tracking-tight">
-              Workflows
-            </h1>
-            {!loading && !error && (
-              <span className="px-2 py-0.5 text-[11px] font-mono font-medium rounded-full bg-[var(--elevated)] text-[var(--text-tertiary)] border border-[var(--border-subtle)]">
-                {workflows.length}
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 text-[13px] sm:text-[14px] leading-[20px] text-[var(--text-secondary)]">
-            Manage and automate your workflows.
-          </p>
+          <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.18em] text-[var(--text-tertiary)]"><span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />Workspace automation</div>
+          <h1 className="text-[26px] font-semibold leading-8 tracking-tight text-[var(--text-primary)] sm:text-[30px]">Workflows</h1>
+          <p className="mt-1.5 max-w-xl text-[13px] leading-5 text-[var(--text-secondary)]">Connect your tools and turn everyday processes into reliable automations.</p>
         </div>
-
-        {/* Create New Workflow CTA Button */}
         <div className="flex items-center gap-2">
-          {!loading && (
-            <button
-              type="button"
-              aria-label="Refresh workflows"
-              onClick={handleRetry}
-              className="p-2 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--elevated)] hover:border-[var(--border-strong)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all duration-100 ease-out focus:outline-none focus:ring-1 focus:ring-[var(--accent)] cursor-pointer"
-            >
-              <RefreshCwIcon className="w-4 h-4 stroke-[1.5]" />
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[13px] transition-all duration-100 ease-out focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/40 cursor-pointer shrink-0 shadow-none"
-          >
-            <PlusIcon className="w-4 h-4 stroke-[2]" />
-            <span>New Workflow</span>
-          </button>
+          {!loading && <button type="button" aria-label="Refresh workflows" onClick={handleRetry} className="grid h-10 w-10 place-items-center rounded-lg border border-[var(--border-default)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"><RefreshCwIcon className="h-4 w-4 stroke-[1.5]" /></button>}
+          <button type="button" onClick={() => setIsCreateModalOpen(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"><PlusIcon className="h-4 w-4 stroke-[1.8]" />Create Workflow</button>
         </div>
-      </div>
+      </header>
 
-      {/* Vercel-style Controls & Toolbar */}
+      {/* Search and status filters */}
       {!loading && !error && workflows.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 select-none">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-[12px] text-[var(--text-tertiary)]"><span className="font-mono text-[var(--text-primary)]">{workflows.length.toString().padStart(2, "0")}</span>{workflows.length === 1 ? "workflow" : "workflows"}<span aria-hidden="true" className="mx-1 h-3 w-px bg-[var(--border-default)]" /><span>Built to keep work moving</span></div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Search Box */}
           <div className="relative flex-1 max-w-md">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[var(--text-tertiary)]">
@@ -188,8 +161,9 @@ function WorkflowsContent() {
               type="text"
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-              placeholder="Filter workflows..."
-              className="w-full h-8 pl-9 pr-8 text-[13px] font-sans bg-[var(--surface)] text-[var(--text-primary)] placeholder-[var(--text-disabled)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors duration-100 ease-out"
+              aria-label="Search workflows"
+              placeholder="Search by name or description..."
+              className="w-full h-9 pl-9 pr-8 text-[12px] font-sans bg-[var(--surface)] text-[var(--text-primary)] placeholder-[var(--text-disabled)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors duration-100 ease-out"
             />
 
             {searchQuery && (
@@ -208,7 +182,8 @@ function WorkflowsContent() {
           <div className="flex items-center p-0.5 bg-[var(--elevated)] border border-[var(--border-subtle)] rounded-[6px] shrink-0 self-start sm:self-auto">
             {[
               { id: "all", label: "All" },
-              { id: "published", label: "Published" },
+              { id: "active", label: "Active" },
+              { id: "inactive", label: "Inactive" },
               { id: "draft", label: "Draft" },
             ].map((tab) => {
               const isSelected = statusFilter === tab.id;
@@ -216,6 +191,7 @@ function WorkflowsContent() {
                 <button
                   key={tab.id}
                   type="button"
+                  aria-pressed={isSelected}
                   onClick={() => { setStatusFilter(tab.id); setPage(1); }}
                   className={`px-3 py-1 text-[12px] font-medium rounded-[4px] transition-all duration-100 cursor-pointer ${
                     isSelected
@@ -227,6 +203,7 @@ function WorkflowsContent() {
                 </button>
               );
             })}
+          </div>
           </div>
         </div>
       )}
@@ -244,6 +221,7 @@ function WorkflowsContent() {
       ) : filteredWorkflows.length === 0 ? (
         <WorkflowSearchEmptyState
           query={searchQuery}
+          statusFilter={statusFilter}
           onClearSearch={() => {
             setSearchQuery("");
             setStatusFilter("all");
