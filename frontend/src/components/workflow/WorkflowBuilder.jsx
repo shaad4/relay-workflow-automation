@@ -15,6 +15,7 @@ import WorkflowToolbar from "./WorkflowToolbar";
 import NodeLibrary from "./NodeLibrary";
 import WorkflowCanvas from "./WorkflowCanvas";
 import NodeInspector from "./NodeInspector";
+import BranchConditionField from "./BranchConditionField";
 import WorkflowValidation from "./WorkflowValidation";
 import { clearExampleNodeConfig, getNodeDefinition } from "./nodeDefinitions";
 import { listAIConnections } from "@/services/aiProviderConnections";
@@ -77,9 +78,11 @@ function EditIcon(props) {
   );
 }
 
-function EdgeInspector({ edge, isReadOnly, isCondition, errors = [], onConditionChange, onDelete, onClose }) {
-  const source = edge.source || "Unknown";
-  const target = edge.target || "Unknown";
+function EdgeInspector({ edge, nodes, edges, isReadOnly, errors = [], onConditionChange, onDelete, onClose }) {
+  const sourceNode = nodes.find((node) => node.id === edge.source);
+  const targetNode = nodes.find((node) => node.id === edge.target);
+  const source = sourceNode?.data?.label || sourceNode?.data?.nodeId || edge.source || "Unknown";
+  const target = targetNode?.data?.label || targetNode?.data?.nodeId || edge.target || "Unknown";
   return (
     <aside className="w-72 shrink-0 bg-[var(--surface)] border-l border-[var(--border-subtle)] flex flex-col">
       <header className="h-12 px-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
@@ -90,18 +93,7 @@ function EdgeInspector({ edge, isReadOnly, isCondition, errors = [], onCondition
         <button type="button" onClick={onClose} aria-label="Close connection inspector" className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">×</button>
       </header>
       <div className="p-4 space-y-4">
-        <label className="block">
-          <span className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1 uppercase tracking-wide">Condition label</span>
-          <input
-            value={edge.data?.condition ?? ""}
-            disabled={isReadOnly}
-            onChange={(event) => onConditionChange(event.target.value)}
-            placeholder={isCondition ? "Required, e.g. TECHNICAL" : "Optional, e.g. approved"}
-            maxLength={255}
-            className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
-          />
-          {isCondition && <span className="mt-1 block text-[10px] leading-4 text-[var(--text-tertiary)]">This label must exactly match the Condition value, including letter case.</span>}
-        </label>
+        <BranchConditionField edge={edge} source={sourceNode} nodes={nodes} edges={edges} isReadOnly={isReadOnly} onChange={onConditionChange} />
         {errors.map((error) => <p key={error.code} role="alert" className="text-[10px] text-red-500">{error.message}</p>)}
         {!isReadOnly && (
           <button type="button" onClick={onDelete} className="h-8 px-3 rounded-[6px] border border-red-500/30 text-red-500 hover:bg-red-500/10 text-[12px] font-medium">
@@ -675,10 +667,10 @@ export default function WorkflowBuilder({
     markUnsaved();
   }, [isCanvasReadOnly, markUnsaved, setEdges, recordHistory]);
 
-  const handleEdgeConditionChange = useCallback((value) => {
-    if (isCanvasReadOnly || publishingRef.current || !selectedEdgeId) return;
+  const handleEdgeConditionChange = useCallback((value, edgeId = selectedEdgeId) => {
+    if (isCanvasReadOnly || publishingRef.current || !edgeId) return;
     recordHistory();
-    setEdges((current) => current.map((edge) => edge.id === selectedEdgeId
+    setEdges((current) => current.map((edge) => edge.id === edgeId
       ? { ...edge, data: { ...edge.data, condition: value || null }, label: value || "" }
       : edge));
     markUnsaved();
@@ -794,9 +786,14 @@ export default function WorkflowBuilder({
         data: { condition: null },
       };
       setEdges((eds) => addEdge(newEdge, eds));
+      if (nodes.some((node) => node.id === connection.source && ["human.approval", "logic.condition"].includes(node.data?.typeId))) {
+        setSelectedEdgeId(tempEdgeId);
+        setSelectedNodeId(null);
+        setIsInspectorOpen(true);
+      }
       markUnsaved();
     },
-    [isCanvasReadOnly, markUnsaved, setEdges, recordHistory]
+    [isCanvasReadOnly, markUnsaved, setEdges, recordHistory, nodes]
   );
 
   // ── Edge: changes (local; deletes mark unsaved) ───────────────────────────
@@ -1444,7 +1441,8 @@ export default function WorkflowBuilder({
           <EdgeInspector
             edge={selectedEdge}
             isReadOnly={isCanvasReadOnly}
-            isCondition={nodes.some((node) => node.id === selectedEdge.source && node.data?.typeId === "logic.condition")}
+            nodes={nodes}
+            edges={edges}
             errors={validateConditionBranches(nodes, edges).filter((error) => error.edgeId === selectedEdge.id)}
             onConditionChange={handleEdgeConditionChange}
             onDelete={() => handleDeleteEdge(selectedEdge.id)}
@@ -1466,6 +1464,7 @@ export default function WorkflowBuilder({
               workflowNodes={nodes}
               workflowEdges={edges}
               onSelectEdge={handleEdgeSelect}
+              onEdgeConditionChange={handleEdgeConditionChange}
             />
           </div>
         )}

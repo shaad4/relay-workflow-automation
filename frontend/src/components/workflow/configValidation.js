@@ -1,5 +1,6 @@
 import { validateSchedule } from "./scheduleTrigger.js";
 import { previousNodesFor } from "./workflowVariables.js";
+import { branchOptions } from "./branchOptions.js";
 
 export const AI_DECISION_FIELDS = ["connection_id", "model", "instructions", "input_mappings", "rag_context", "allowed_decisions"];
 export const AI_GENERATE_FIELDS = ["connection_id", "model", "instructions", "prompt", "rag_context"];
@@ -213,25 +214,29 @@ export function validateGenerateReferences(config = {}, nodes = [], edges = [], 
 
 export function validateConditionBranches(nodes = [], edges = []) {
   const errors = [];
-  for (const node of nodes.filter((item) => item.data?.typeId === "logic.condition")) {
+  for (const node of nodes.filter((item) => ["logic.condition", "human.approval"].includes(item.data?.typeId))) {
     const outgoing = edges.filter((edge) => edge.source === node.id);
     const nodeId = node.data?.nodeId ?? node.id;
     const label = node.data?.label || nodeId;
-    if (!outgoing.length) errors.push({ code: "CONDITION_NO_BRANCHES", nodeId, message: `${label}: Connect at least one outgoing branch.` });
+    const options = branchOptions(node, nodes, edges);
+    const branchType = node.data.typeId === "human.approval" ? "Human Approval" : "Condition";
+    const code = node.data.typeId === "human.approval" ? "APPROVAL_BRANCH_LABEL" : "CONDITION_BRANCH_LABEL";
+    if (!outgoing.length && branchType === "Condition") errors.push({ code: "CONDITION_NO_BRANCHES", nodeId, message: `${label}: Connect at least one outgoing branch.` });
     const seen = new Map();
     for (const edge of outgoing) {
       const value = edge.data?.condition;
       let message;
-      if (typeof value !== "string" || !value.trim()) message = "Enter a label for this Condition branch.";
+      if (typeof value !== "string" || !value.trim()) message = `Choose an outcome for this ${branchType} branch.`;
       else if (value !== value.trim()) message = "Branch labels cannot begin or end with spaces.";
       else if (value.length > 255) message = "Branch labels must be 255 characters or fewer.";
+      else if (options !== null && !options.some((option) => option.value === value)) message = `Outcome '${value}' is not available. Choose a current outcome.`;
       else if (seen.has(value)) {
-        message = `Branch label '${value}' is already used on this Condition.`;
+        message = `Outcome '${value}' is already used on this ${branchType}.`;
         if (!errors.some((error) => error.edgeId === seen.get(value))) {
-          errors.push({ code: "CONDITION_BRANCH_LABEL", nodeId, edgeId: seen.get(value), message: `${label}: ${message}` });
+          errors.push({ code, nodeId, edgeId: seen.get(value), message: `${label}: ${message}` });
         }
       }
-      if (message) errors.push({ code: "CONDITION_BRANCH_LABEL", nodeId, edgeId: edge.id, message: `${label}: ${message}` });
+      if (message) errors.push({ code, nodeId, edgeId: edge.id, message: `${label}: ${message}` });
       if (typeof value === "string" && !seen.has(value)) seen.set(value, edge.id);
     }
   }

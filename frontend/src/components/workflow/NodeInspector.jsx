@@ -15,6 +15,7 @@ import Link from "next/link";
 import WebhookTestDialog from "@/components/webhooks/WebhookTestDialog";
 import WebhookUsageGuide from "@/components/webhooks/WebhookUsageGuide";
 import VariablePicker from "@/components/workflow/VariablePicker";
+import BranchConditionField from "./BranchConditionField";
 import { useAuth } from "@/context/AuthContext";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -783,11 +784,26 @@ function RAGConfig({ config, onChange, variableContext, knowledgeBaseCacheRef, i
   );
 }
 
-function ConditionConfig({ config, onChange, variableContext, workflowNodes, workflowEdges, onSelectEdge, isReadOnly }) {
+function OutgoingBranches({ source, workflowNodes, workflowEdges, onSelectEdge, onEdgeConditionChange, isReadOnly }) {
+  const branches = workflowEdges.filter((edge) => edge.source === source.id);
+  const errors = validateConditionBranches(workflowNodes, workflowEdges)
+    .filter((error) => error.nodeId === (source.data?.nodeId ?? source.id));
+  return <div className="space-y-3 border-t border-[var(--border-subtle)] pt-3">
+    <FieldLabel>Outgoing branches</FieldLabel>
+    {branches.map((edge) => {
+      const target = workflowNodes.find((node) => node.id === edge.target);
+      return <div key={edge.id} className="space-y-2 rounded-[6px] border border-[var(--border-subtle)] p-2.5">
+        <button type="button" onClick={() => onSelectEdge?.(edge)} className="text-left text-[11px] text-[var(--accent)] hover:underline">To {target?.data?.label || target?.data?.nodeId || edge.target} →</button>
+        <BranchConditionField edge={edge} source={source} nodes={workflowNodes} edges={workflowEdges} isReadOnly={isReadOnly} onChange={(value) => onEdgeConditionChange?.(value, edge.id)} />
+      </div>;
+    })}
+    {!branches.length && <p className="text-[10px] text-[var(--text-tertiary)]">Connect this node to a next step, then choose the branch outcome.</p>}
+    {errors.map((error) => <p key={error.edgeId ?? error.code} role="alert" className="text-[10px] text-red-500">{error.message}</p>)}
+  </div>;
+}
+
+function ConditionConfig({ config, onChange, variableContext, workflowNodes, workflowEdges, onSelectEdge, onEdgeConditionChange, isReadOnly }) {
   const legacy = isLegacyConditionConfiguration(config);
-  const branches = workflowEdges.filter((edge) => edge.source === variableContext.currentNode.id);
-  const branchErrors = validateConditionBranches(workflowNodes, workflowEdges)
-    .filter((error) => error.nodeId === (variableContext.currentNode.data?.nodeId ?? variableContext.currentNode.id));
   return (
     <div className="space-y-3">
       <p className="text-[12px] font-semibold text-[var(--text-primary)]">Condition</p>
@@ -801,17 +817,7 @@ function ConditionConfig({ config, onChange, variableContext, workflowNodes, wor
         <TextInput value={typeof config.value === "string" ? config.value : ""} onChange={(value) => onChange("value", value)} mono variables aria-label="Value to Evaluate" />
         <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">At runtime, this value selects one outgoing edge whose label matches exactly, including letter case. An unmatched value stops execution.</p>
       </div>}
-      <div className="space-y-1.5 border-t border-[var(--border-subtle)] pt-3">
-        <FieldLabel>Outgoing branches</FieldLabel>
-        {branches.length ? branches.map((edge) => {
-          const target = workflowNodes.find((node) => node.id === edge.target);
-          return <button key={edge.id} type="button" onClick={() => onSelectEdge?.(edge)} className="flex w-full items-center justify-between gap-2 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--input-bg)] px-2.5 py-2 text-left text-[10px] hover:border-[var(--border-strong)]">
-            <span className="min-w-0 truncate font-mono text-[var(--text-primary)]">{edge.data?.condition || "Add branch label"}</span>
-            <span className="truncate text-[var(--text-tertiary)]">→ {target?.data?.label || target?.data?.nodeId || edge.target}</span>
-          </button>;
-        }) : <p className="text-[10px] text-[var(--text-tertiary)]">Connect this node to a target, then label the branch in the connection inspector.</p>}
-        {branchErrors.map((error) => <p key={error.edgeId ?? error.code} role="alert" className="text-[10px] text-red-500">{error.message}</p>)}
-      </div>
+      <OutgoingBranches source={variableContext.currentNode} workflowNodes={workflowNodes} workflowEdges={workflowEdges} onSelectEdge={onSelectEdge} onEdgeConditionChange={onEdgeConditionChange} isReadOnly={isReadOnly} />
     </div>
   );
 }
@@ -862,6 +868,7 @@ export default function NodeInspector({
   workflowNodes = [],
   workflowEdges = [],
   onSelectEdge,
+  onEdgeConditionChange,
 }) {
   const { user } = useAuth();
   const knowledgeBaseCacheRef = useMemo(() => ({ current: null, scope: [user?.id, workflowId, workflowVersionId] }), [user?.id, workflowId, workflowVersionId]);
@@ -1020,9 +1027,9 @@ export default function NodeInspector({
       case "ai.rag_search":
         return <RAGConfig key={user?.id} config={formData} onChange={handleFieldChange} variableContext={variableContext} knowledgeBaseCacheRef={knowledgeBaseCacheRef} isReadOnly={isReadOnly} />;
       case "logic.condition":
-        return <ConditionConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} workflowNodes={workflowNodes} workflowEdges={workflowEdges} onSelectEdge={onSelectEdge} isReadOnly={isReadOnly} />;
+        return <ConditionConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} workflowNodes={workflowNodes} workflowEdges={workflowEdges} onSelectEdge={onSelectEdge} onEdgeConditionChange={onEdgeConditionChange} isReadOnly={isReadOnly} />;
       case "human.approval":
-        return <HumanApprovalConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} errors={approvalErrors} isReadOnly={isReadOnly} />;
+        return <><HumanApprovalConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} errors={approvalErrors} isReadOnly={isReadOnly} /><OutgoingBranches source={selectedNode} workflowNodes={workflowNodes} workflowEdges={workflowEdges} onSelectEdge={onSelectEdge} onEdgeConditionChange={onEdgeConditionChange} isReadOnly={isReadOnly} /></>;
       default:
         return (
           <div className="p-3 rounded-[6px] bg-[var(--elevated)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)]">
