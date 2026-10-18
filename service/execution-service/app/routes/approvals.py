@@ -1,7 +1,8 @@
+import logging
 from uuid import UUID
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_identity
@@ -18,10 +19,14 @@ from app.engine.exceptions import (
 from app.models.execution import Execution
 
 from app.services.approval_service import (
+    ApprovalDecisionResult,
     decide_approval,
     list_pending_approvals,
     get_approval,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(
@@ -89,6 +94,7 @@ async def _handle_approval_decision(
     decision: str,
     identity: dict,
     session: AsyncSession,
+    background_tasks: BackgroundTasks | None = None,
 ) -> ApprovalResponse:
     try:
         result = await decide_approval(
@@ -117,6 +123,34 @@ async def _handle_approval_decision(
     approval = result.approval
     approval_response = ApprovalResponse.model_validate(approval)
 
+    if background_tasks is not None and result.start_node_id is not None:
+        # The decision and resume checkpoint are already committed. Return the
+        # decision before running slow AI/provider actions (gateway timeout: 5s).
+        background_tasks.add_task(_resume_approval_in_background, result, approval_response)
+        return approval_response
+
+    return await _resume_approval(result, approval_response, session)
+
+
+async def _resume_approval_in_background(
+    result: ApprovalDecisionResult,
+    approval_response: ApprovalResponse,
+) -> None:
+    # Never retain the request's database session after sending its response.
+    async with AsyncSessionLocal() as session:
+        try:
+            await _resume_approval(result, approval_response, session)
+        except Exception:
+            # Resume failures are persisted by _resume_approval and belong to
+            # the execution; they must not turn a recorded decision into a 500.
+            logger.exception("Workflow resume failed after approval %s", approval_response.id)
+
+
+async def _resume_approval(
+    result: ApprovalDecisionResult,
+    approval_response: ApprovalResponse,
+    session: AsyncSession,
+) -> ApprovalResponse:
     execution = await session.get(
         Execution,
         result.execution_id,
@@ -223,12 +257,14 @@ async def approve(
     approval_id: UUID,
     identity: dict = Depends(get_current_identity),
     session: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = None,
 ):
     return await _handle_approval_decision(
         approval_id=approval_id,
         decision="approved",
         identity=identity,
         session=session,
+        background_tasks=background_tasks,
     )
 
 
@@ -240,10 +276,12 @@ async def reject(
     approval_id: UUID,
     identity: dict = Depends(get_current_identity),
     session: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = None,
 ):
     return await _handle_approval_decision(
         approval_id=approval_id,
         decision="rejected",
         identity=identity,
         session=session,
+        background_tasks=background_tasks,
     )
