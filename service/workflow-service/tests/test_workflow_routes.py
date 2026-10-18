@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 import httpx
+import grpc
 from fastapi import FastAPI
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -181,7 +182,23 @@ def test_update_workflow(client, monkeypatch):
     assert response.json()["name"] == workflow.name
 
 
-def test_delete_workflow(client, monkeypatch):
+@pytest.fixture
+def approval_cleanup(monkeypatch):
+    calls = []
+
+    class Client:
+        async def delete_workflow_approvals(self, workflow_id, workspace_id):
+            calls.append((workflow_id, workspace_id))
+            return 2
+
+        async def close(self):
+            calls.append("closed")
+
+    monkeypatch.setattr(workflows, "ExecutionGrpcClient", Client)
+    return calls
+
+
+def test_delete_workflow(client, monkeypatch, approval_cleanup):
     async def delete_workflow(workflow_id, workspace_id, session):
         return True
 
@@ -194,8 +211,12 @@ def test_delete_workflow(client, monkeypatch):
     monkeypatch.setattr(workflows, "delete_workflow", delete_workflow)
     monkeypatch.setattr(workflows, "get_workflow", get_workflow)
     monkeypatch.setattr(workflows, "revoke_workflow_webhooks", revoke_workflow_webhooks)
-    response = client.delete(f"/workflows/{WORKFLOW_ID}/")
+    response = client.delete(
+        f"/workflows/{WORKFLOW_ID}/",
+        headers={"authorization": "Bearer test-token"},
+    )
     assert response.status_code == 204
+    assert approval_cleanup == [(WORKFLOW_ID, str(WORKSPACE_ID)), "closed"]
 
 
 def test_delete_workflow_returns_conflict_for_active_status(client, monkeypatch):
@@ -211,7 +232,7 @@ def test_delete_workflow_returns_conflict_for_active_status(client, monkeypatch)
     assert response.json()["detail"].startswith("Only draft or inactive workflows can be deleted")
 
 
-def test_delete_workflow_returns_conflict_if_status_changes_during_delete(client, monkeypatch):
+def test_delete_workflow_returns_conflict_if_status_changes_during_delete(client, monkeypatch, approval_cleanup):
     async def get_workflow(workflow_id, workspace_id, session):
         return workflow
 
@@ -532,3 +553,32 @@ def test_publish_reports_schedule_sync_failure_after_commit(client, monkeypatch)
     assert response.status_code == 503
     assert "Workflow published" in response.json()["detail"]
     assert "scheduling needs attention" in response.json()["detail"]
+
+
+def test_delete_workflow_cancels_if_approval_cleanup_fails(client, monkeypatch):
+    async def get_workflow(**kwargs):
+        return workflow
+
+    async def revoke(*args):
+        pass
+
+    closed = []
+
+    class Client:
+        async def delete_workflow_approvals(self, *args):
+            raise grpc.RpcError("Execution service unavailable")
+
+        async def close(self):
+            closed.append(True)
+
+    async def delete_workflow(**kwargs):
+        pytest.fail("Workflow must remain when approval cleanup fails")
+
+    monkeypatch.setattr(workflows, "get_workflow", get_workflow)
+    monkeypatch.setattr(workflows, "revoke_workflow_webhooks", revoke)
+    monkeypatch.setattr(workflows, "delete_workflow", delete_workflow)
+    monkeypatch.setattr(workflows, "ExecutionGrpcClient", Client)
+    response = client.delete(f"/workflows/{WORKFLOW_ID}/")
+    assert response.status_code == 503
+    assert "Human approval requests could not be deleted" in response.json()["detail"]
+    assert closed == [True]

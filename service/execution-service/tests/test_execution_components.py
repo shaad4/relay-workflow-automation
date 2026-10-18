@@ -659,6 +659,13 @@ def test_application_health_and_lifespan(monkeypatch):
             calls.append("cancelled")
             raise
     async def stop(): calls.append("stop")
+    async def start_grpc():
+        calls.append("grpc_start")
+        async def stop_grpc(grace):
+            assert grace == 5
+            calls.append("grpc_stop")
+        return SimpleNamespace(stop=stop_grpc)
+    monkeypatch.setattr("app.main.start_grpc_server", start_grpc)
     monkeypatch.setattr("app.main.start_consumer", start)
     monkeypatch.setattr("app.main.consume_workflow_triggered", consume)
     monkeypatch.setattr("app.main.stop_consumer", stop)
@@ -668,4 +675,4 @@ def test_application_health_and_lifespan(monkeypatch):
             await asyncio.sleep(0)
     asyncio.run(exercise())
     assert calls[0] == "start"
-    assert set(calls[1:]) == {"cancelled", "stop"}
+    assert set(calls[1:]) == {"grpc_start", "cancelled", "stop", "grpc_stop"}

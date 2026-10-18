@@ -1,9 +1,12 @@
 from uuid import UUID
 
+import grpc
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
+from app.grpc.execution_client import ExecutionGrpcClient
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
 from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate, WorkflowValidationResponse, WorkflowPublishResponse, WorkflowStatusResponse
@@ -142,6 +145,17 @@ async def delete_workflow_route(
             status_code=503,
             detail="Associated webhook endpoints could not be revoked. Workflow deletion was cancelled.",
         ) from exc
+
+    client = ExecutionGrpcClient()
+    try:
+        await client.delete_workflow_approvals(workflow_id, identity["workspace_id"])
+    except grpc.RpcError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Human approval requests could not be deleted. Workflow deletion was cancelled.",
+        ) from exc
+    finally:
+        await client.close()
 
     try:
         deleted = await delete_workflow(

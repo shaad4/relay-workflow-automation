@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package relay.execution;
+
+message DeleteWorkflowApprovalsRequest {
+  string workflow_id = 1;
+  string workspace_id = 2;
+}
+
+message DeleteWorkflowApprovalsResponse {
+  uint32 deleted_count = 1;
+}
+
+service ExecutionInternalService {
+  rpc DeleteWorkflowApprovals(DeleteWorkflowApprovalsRequest)
+      returns (DeleteWorkflowApprovalsResponse);
+}
