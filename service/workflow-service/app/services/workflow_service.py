@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from app.models import Workflow, WorkflowVersion, WorkflowEdge, WorkflowNode
 from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 from app.schemas.node_configuration import (
+    EmailConfig,
     RagSearchConfig,
     AIDecisionConfig,
     ConditionConfig,
@@ -944,6 +945,19 @@ async def validate_workflow(
                 "message": "Workflow contains duplicate node IDs.",
             }
         )
+
+    for node in nodes:
+        if node.node_type != "action.email":
+            continue
+        try:
+            EmailConfig.model_validate(node.configuration or {})
+        except ValidationError as exc:
+            for error in exc.errors():
+                errors.append({
+                    "code": "INVALID_EMAIL_CONFIGURATION",
+                    "node_id": node.node_id,
+                    "message": f"Send Email node '{node.node_id}': body_format - {error['msg']}",
+                })
 
     # 7. Validate RAG Search configurations
     for node in nodes:

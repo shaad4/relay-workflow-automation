@@ -576,6 +576,7 @@ async def run_execution(
 
             elif node_type == "action.email":
                 provider, action = "gmail", "send_email"
+                resolved_configuration.setdefault("body_format", "plain")
 
             elif node_type == "action.refund":
                 provider, action = "", "refund_payment"

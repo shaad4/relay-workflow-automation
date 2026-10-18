@@ -784,3 +784,41 @@ def test_approval_http_response_is_sent_before_resume(monkeypatch, action, decis
         assert events == ["committed", "response sent", "resume"]
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("body_format", [None, "plain", "html"])
+def test_student_report_email_resolves_expressions_and_forwards_format(monkeypatch, body_format):
+    body = '<h1>Student Report</h1><table><tr><td>Math</td><td>95</td></tr></table>'
+    email_config = {
+        "connection_id": "existing-gmail-connection",
+        "to": "{{trigger.data.recipient_email}}",
+        "subject": "Student Report - {{trigger.data.student_name}}",
+        "body": "{{nodes.generate_1.content}}",
+    }
+    if body_format is not None:
+        email_config["body_format"] = body_format
+    nodes = [
+        {"node_id": "webhook", "node_type": "trigger.webhook", "configuration": {}},
+        {"node_id": "generate_1", "node_type": "ai.generate", "configuration": {
+            "instructions": "Return valid HTML without Markdown code fences.",
+        }},
+        {"node_id": "email", "node_type": "action.email", "configuration": email_config},
+    ]
+    edges = [{"source_node_id": "webhook", "target_node_id": "generate_1"}, {"source_node_id": "generate_1", "target_node_id": "email"}]
+    async def generate(**_kwargs):
+        return {"content": body, "model": "mock", "input_tokens": 1, "output_tokens": 1}
+    monkeypatch.setattr(runner, "execute_ai_generate", generate)
+    state = runner_setup(monkeypatch, nodes, edges)
+    asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "x", {
+        "recipient_email": "student@example.test", "student_name": "Zoë",
+    }))
+    request = state["actions"][0]
+    assert request["provider"] == "gmail" and request["action"] == "send_email"
+    assert json.loads(request["input_data_json"]) == {
+        "connection_id": "existing-gmail-connection", "to": "student@example.test",
+        "subject": "Student Report - Zoë", "body": body, "body_format": body_format or "plain",
+    }
+    if body_format is None:
+        assert "body_format" not in email_config
+    else:
+        assert email_config["body_format"] == body_format

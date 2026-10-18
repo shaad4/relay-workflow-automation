@@ -432,6 +432,7 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
 }
 
 function EmailConfig({ config, onChange, variableContext }) {
+  const isReadOnly = useContext(InspectorReadOnly);
   const [connections, setConnections] = useState([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [connectionsError, setConnectionsError] = useState(false);
@@ -501,6 +502,25 @@ function EmailConfig({ config, onChange, variableContext }) {
           variables
         />
       </div>
+      <fieldset>
+        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Body Format</legend>
+        <div className="flex gap-2">
+          {[{ value: "plain", label: "Plain Text" }, { value: "html", label: "HTML" }].map(({ value, label }) => (
+            <label key={value} className={`flex flex-1 items-center gap-2 rounded-[6px] border px-2.5 py-2 text-[12px] text-[var(--text-primary)] ${isReadOnly ? "" : "cursor-pointer"} ${(config.body_format ?? "plain") === value ? "border-[var(--accent)] bg-[var(--accent)]/5" : "border-[var(--border-default)] bg-[var(--input-bg)]"}`}>
+              <input
+                type="radio"
+                name="email-body-format"
+                value={value}
+                checked={(config.body_format ?? "plain") === value}
+                disabled={isReadOnly}
+                onChange={() => { if (!isReadOnly) onChange("body_format", value); }}
+                className="h-3.5 w-3.5 accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <div>
         <VariableFieldLabel picker={pickerFor("body")}>Message Body</VariableFieldLabel>
         <TextareaInput

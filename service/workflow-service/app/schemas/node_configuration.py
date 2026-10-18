@@ -17,6 +17,14 @@ from pydantic import (
 )
 
 
+class EmailConfig(BaseModel):
+    # Email configuration previously used the generic JSON node schema.
+    # Preserve its existing fields while validating the new format option.
+    model_config = ConfigDict(extra="allow")
+
+    body_format: Literal["plain", "html"] = "plain"
+
+
 class RagSearchConfig(BaseModel):
     """Configuration schema for the RAG Search node."""
 

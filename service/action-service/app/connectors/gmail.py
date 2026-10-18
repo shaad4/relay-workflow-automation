@@ -62,6 +62,10 @@ class GmailConnector(Connector):
         to = input_data.get("to")
         subject = input_data.get("subject")
         body = input_data.get("body")
+        body_format = input_data.get("body_format", "plain")
+
+        if body_format not in ("plain", "html"):
+            raise ValueError("body_format must be 'plain' or 'html'")
 
         if not to:
             raise ValueError("Recipient email is required")
@@ -77,7 +81,7 @@ class GmailConnector(Connector):
         message = EmailMessage()
         message["To"] = to
         message["Subject"] = subject
-        message.set_content(body)
+        message.set_content(body, subtype=body_format, charset="utf-8")
 
         raw_message = base64.urlsafe_b64encode(
             message.as_bytes()

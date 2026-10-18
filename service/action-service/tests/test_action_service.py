@@ -639,3 +639,57 @@ def test_gmail_oauth_routes_state_and_callback(monkeypatch):
     assert result["message"] == "Gmail connected successfully"
     assert result["email"] == "user@example.test"
     assert any(call[0] == "delete" for call in session.calls)
+
+
+@pytest.mark.parametrize("body_format,subtype", [(None, "plain"), ("plain", "plain"), ("html", "html")])
+def test_gmail_body_format_mime_and_payload(monkeypatch, body_format, subtype):
+    from email import policy
+    from email.parser import BytesParser
+
+    body = '<h1>Student Report — Zoë</h1><table><tr><td>Math</td><td>95</td></tr></table>'
+    sent = []
+
+    async def token(refresh_token):
+        assert refresh_token == "existing-refresh-token"
+        return "access-token"
+
+    class Client(FakeSession):
+        def __init__(self, **_kwargs): pass
+        async def post(self, url, **kwargs):
+            assert url.endswith("/users/me/messages/send")
+            assert kwargs["headers"]["Authorization"] == "Bearer access-token"
+            sent.append(kwargs["json"])
+            return SimpleNamespace(status_code=200, json=lambda: {"id": "mock-message"})
+
+    monkeypatch.setattr(gmail, "refresh_access_token", token)
+    monkeypatch.setattr(gmail.httpx, "AsyncClient", Client)
+    payload = {"to": "student@example.test", "subject": "Student Report - Zoë", "body": body}
+    if body_format is not None:
+        payload["body_format"] = body_format
+    monkeypatch.setattr(action_server, "AsyncSessionLocal", FakeSession)
+    monkeypatch.setattr(action_server, "get_connection", AsyncMockConnectionLookup(
+        SimpleNamespace(provider="gmail", auth_type="oauth2", credential="existing-refresh-token")
+    ))
+    response = asyncio.run(action_server.ActionInternalService().ExecuteAction(make_request(
+        provider="gmail", action="send_email", config_json="{}", input_data_json=json.dumps(payload),
+    ), None))
+    assert response.success, response.error
+    result = json.loads(response.result_json)
+    message = BytesParser(policy=policy.default).parsebytes(base64.urlsafe_b64decode(sent[0]["raw"]))
+    assert message.get_content_type() == f"text/{subtype}"
+    assert message.get_content_charset() == "utf-8"
+    assert message.get_content().rstrip("\n") == body
+    assert message["To"] == payload["to"]
+    assert message["Subject"] == payload["subject"]
+    assert result["message_id"] == "mock-message"
+
+
+@pytest.mark.parametrize("body_format", ["HTML", "markdown", "", None, 42, []])
+def test_gmail_rejects_unsupported_body_format_before_api_calls(monkeypatch, body_format):
+    async def unexpected_token(_token):
+        pytest.fail("Invalid format must not call Google")
+    monkeypatch.setattr(gmail, "refresh_access_token", unexpected_token)
+    with pytest.raises(ValueError, match="body_format"):
+        asyncio.run(gmail.GmailConnector().execute("send_email", {"refresh_token": "existing"}, {
+            "to": "a@example.test", "subject": "Report", "body": "Report", "body_format": body_format,
+        }))

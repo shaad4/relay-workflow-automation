@@ -87,3 +87,25 @@ def test_publish_gates_actual_rag_configuration(valid):
         with pytest.raises(ValueError, match="validation failed"):
             asyncio.run(service.publish_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, session))
         assert session.commits == 0 and version.status == "draft"
+
+
+@pytest.mark.parametrize("body_format", [None, "plain", "html"])
+def test_email_format_schema_and_publication_preserve_legacy_config(body_format):
+    from app.schemas.node_configuration import EmailConfig
+    config = {"connection_id": str(uuid4()), "to": "{{trigger.data.recipient_email}}", "subject": "Student Report - {{trigger.data.student_name}}", "body": "{{nodes.generate_1.content}}"}
+    if body_format is not None:
+        config["body_format"] = body_format
+    parsed = EmailConfig.model_validate(config)
+    assert parsed.body_format == (body_format or "plain")
+    assert parsed.model_dump()["body"] == config["body"]
+    assert validate([node("t", "trigger.webhook"), node("mail", "action.email", config)], [edge("t", "mail")])["valid"]
+
+
+@pytest.mark.parametrize("body_format", ["HTML", "markdown", "", None, 42, []])
+def test_email_format_rejected_by_schema_and_publication(body_format):
+    from app.schemas.node_configuration import EmailConfig
+    config = {"body_format": body_format}
+    with pytest.raises(ValidationError):
+        EmailConfig.model_validate(config)
+    result = validate([node("t", "trigger.webhook"), node("mail", "action.email", config)], [edge("t", "mail")])
+    assert "INVALID_EMAIL_CONFIGURATION" in {error["code"] for error in result["errors"]}

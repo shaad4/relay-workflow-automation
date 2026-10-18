@@ -67,6 +67,9 @@ export function validateNodeConfiguration(typeId, config = {}) {
       requireField("url", "Request path");
       break;
     case "action.email":
+      if (config.body_format !== undefined && !["plain", "html"].includes(config.body_format)) {
+        errors.push({ field: "body_format", message: "Choose Plain Text or HTML." });
+      }
       requireField("connection_id", "Gmail account");
       requireField("to", "Recipient email");
       if (required(config.to) && !containsExpression(config.to) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.to.trim())) {

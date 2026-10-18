@@ -70,6 +70,7 @@ export const NODE_CATEGORIES = [
           to: "",
           subject: "",
           body: "",
+          body_format: "plain",
         },
       },
       {
