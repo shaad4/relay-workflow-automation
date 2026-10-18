@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from integration import webhook_lifecycle_pb2 as integration_dot_webhook__lifecycle__pb2
+from app.grpc.generated.integration import webhook_lifecycle_pb2 as integration_dot_webhook__lifecycle__pb2
 
 GRPC_GENERATED_VERSION = '1.84.0'
 GRPC_VERSION = grpc.__version__
@@ -26,7 +26,9 @@ if _version_not_supported:
 
 
 class IntegrationInternalServiceStub:
-    """Missing associated documentation comment in .proto file."""
+    """Internal Integration Service
+
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -44,18 +46,57 @@ class IntegrationInternalServiceStub:
                 request_serializer=integration_dot_webhook__lifecycle__pb2.DeleteWorkflowWebhooksRequest.SerializeToString,
                 response_deserializer=integration_dot_webhook__lifecycle__pb2.ActivateWorkflowVersionWebhooksResponse.FromString,
                 _registered_method=True)
+        self.SyncWorkflowSchedule = channel.unary_unary(
+                '/relay.integration.IntegrationInternalService/SyncWorkflowSchedule',
+                request_serializer=integration_dot_webhook__lifecycle__pb2.SyncWorkflowScheduleRequest.SerializeToString,
+                response_deserializer=integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleResponse.FromString,
+                _registered_method=True)
+        self.SuspendWorkflowSchedule = channel.unary_unary(
+                '/relay.integration.IntegrationInternalService/SuspendWorkflowSchedule',
+                request_serializer=integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleRequest.SerializeToString,
+                response_deserializer=integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleResponse.FromString,
+                _registered_method=True)
+        self.DeleteWorkflowSchedule = channel.unary_unary(
+                '/relay.integration.IntegrationInternalService/DeleteWorkflowSchedule',
+                request_serializer=integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleRequest.SerializeToString,
+                response_deserializer=integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleResponse.FromString,
+                _registered_method=True)
 
 
 class IntegrationInternalServiceServicer:
-    """Missing associated documentation comment in .proto file."""
+    """Internal Integration Service
+
+    """
 
     def DeleteWorkflowWebhooks(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Existing Webhook Operations
+
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ActivateWorkflowVersionWebhooks(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SyncWorkflowSchedule(self, request, context):
+        """Scheduled Trigger Operations
+
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SuspendWorkflowSchedule(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteWorkflowSchedule(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -74,6 +115,21 @@ def add_IntegrationInternalServiceServicer_to_server(servicer, server):
                     request_deserializer=integration_dot_webhook__lifecycle__pb2.DeleteWorkflowWebhooksRequest.FromString,
                     response_serializer=integration_dot_webhook__lifecycle__pb2.ActivateWorkflowVersionWebhooksResponse.SerializeToString,
             ),
+            'SyncWorkflowSchedule': grpc.unary_unary_rpc_method_handler(
+                    servicer.SyncWorkflowSchedule,
+                    request_deserializer=integration_dot_webhook__lifecycle__pb2.SyncWorkflowScheduleRequest.FromString,
+                    response_serializer=integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleResponse.SerializeToString,
+            ),
+            'SuspendWorkflowSchedule': grpc.unary_unary_rpc_method_handler(
+                    servicer.SuspendWorkflowSchedule,
+                    request_deserializer=integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleRequest.FromString,
+                    response_serializer=integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleResponse.SerializeToString,
+            ),
+            'DeleteWorkflowSchedule': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteWorkflowSchedule,
+                    request_deserializer=integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleRequest.FromString,
+                    response_serializer=integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleResponse.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'relay.integration.IntegrationInternalService', rpc_method_handlers)
@@ -83,7 +139,9 @@ def add_IntegrationInternalServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class IntegrationInternalService:
-    """Missing associated documentation comment in .proto file."""
+    """Internal Integration Service
+
+    """
 
     @staticmethod
     def DeleteWorkflowWebhooks(request,
@@ -129,6 +187,87 @@ class IntegrationInternalService:
             '/relay.integration.IntegrationInternalService/ActivateWorkflowVersionWebhooks',
             integration_dot_webhook__lifecycle__pb2.DeleteWorkflowWebhooksRequest.SerializeToString,
             integration_dot_webhook__lifecycle__pb2.ActivateWorkflowVersionWebhooksResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SyncWorkflowSchedule(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/relay.integration.IntegrationInternalService/SyncWorkflowSchedule',
+            integration_dot_webhook__lifecycle__pb2.SyncWorkflowScheduleRequest.SerializeToString,
+            integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SuspendWorkflowSchedule(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/relay.integration.IntegrationInternalService/SuspendWorkflowSchedule',
+            integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleRequest.SerializeToString,
+            integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteWorkflowSchedule(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/relay.integration.IntegrationInternalService/DeleteWorkflowSchedule',
+            integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleRequest.SerializeToString,
+            integration_dot_webhook__lifecycle__pb2.WorkflowScheduleLifecycleResponse.FromString,
             options,
             channel_credentials,
             insecure,

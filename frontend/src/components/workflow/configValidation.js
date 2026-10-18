@@ -1,4 +1,6 @@
+import { validateSchedule } from "./scheduleTrigger.js";
 import { previousNodesFor } from "./workflowVariables.js";
+import { branchOptions } from "./branchOptions.js";
 
 export const AI_DECISION_FIELDS = ["connection_id", "model", "instructions", "input_mappings", "rag_context", "allowed_decisions"];
 export const AI_GENERATE_FIELDS = ["connection_id", "model", "instructions", "prompt", "rag_context"];
@@ -46,22 +48,15 @@ export function validateNodeConfiguration(typeId, config = {}) {
   };
 
   switch (typeId) {
+    case "trigger.manual":
+      if (config.description !== undefined && (typeof config.description !== "string" || config.description.length > 500)) errors.push({ field: "description", message: "Description must be 500 characters or fewer." });
+      if (config.input_schema !== undefined && (config.input_schema?.type !== "object" || Object.keys(config.input_schema).length !== 1)) errors.push({ field: "input_schema", message: "Input type must be JSON Object." });
+      break;
     case "trigger.webhook":
       if (!config.webhook_id) errors.push({ field: "webhook_id", message: "Set up a webhook endpoint before saving this trigger." });
       break;
     case "trigger.schedule":
-      requireField("cron", "Cron expression");
-      requireField("timezone", "Timezone");
-      if (required(config.cron) && config.cron.trim().split(/\s+/).length !== 5) {
-        errors.push({ field: "cron", message: "Cron expression must contain five fields: minute, hour, day, month, and weekday." });
-      }
-      if (required(config.timezone)) {
-        try {
-          new Intl.DateTimeFormat("en", { timeZone: config.timezone }).format();
-        } catch {
-          errors.push({ field: "timezone", message: "Enter a valid IANA timezone, such as UTC or America/New_York." });
-        }
-      }
+      errors.push(...validateSchedule(config));
       break;
     case "action.http_request":
       requireField("connection_id", "HTTP connection");
@@ -72,6 +67,9 @@ export function validateNodeConfiguration(typeId, config = {}) {
       requireField("url", "Request path");
       break;
     case "action.email":
+      if (config.body_format !== undefined && !["plain", "html"].includes(config.body_format)) {
+        errors.push({ field: "body_format", message: "Choose Plain Text or HTML." });
+      }
       requireField("connection_id", "Gmail account");
       requireField("to", "Recipient email");
       if (required(config.to) && !containsExpression(config.to) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.to.trim())) {
@@ -160,6 +158,8 @@ export function validateWorkflowConfiguration(nodes = [], edges = [], { includeS
     const triggerNodes = nodes.filter((node) => node.data?.typeId?.startsWith("trigger."));
     if (triggerNodes.length === 0) {
       errors.push({ code: "NO_TRIGGER", message: "Workflow must have at least one Trigger node." });
+    } else if (triggerNodes.length > 1) {
+      errors.push({ code: "MULTIPLE_TRIGGERS", message: "Workflow must have exactly one Trigger node." });
     } else if (nodes.length > 1) {
       const reachable = new Set(triggerNodes.map((node) => node.id));
       const pending = [...reachable];
@@ -217,25 +217,29 @@ export function validateGenerateReferences(config = {}, nodes = [], edges = [], 
 
 export function validateConditionBranches(nodes = [], edges = []) {
   const errors = [];
-  for (const node of nodes.filter((item) => item.data?.typeId === "logic.condition")) {
+  for (const node of nodes.filter((item) => ["logic.condition", "human.approval"].includes(item.data?.typeId))) {
     const outgoing = edges.filter((edge) => edge.source === node.id);
     const nodeId = node.data?.nodeId ?? node.id;
     const label = node.data?.label || nodeId;
-    if (!outgoing.length) errors.push({ code: "CONDITION_NO_BRANCHES", nodeId, message: `${label}: Connect at least one outgoing branch.` });
+    const options = branchOptions(node, nodes, edges);
+    const branchType = node.data.typeId === "human.approval" ? "Human Approval" : "Condition";
+    const code = node.data.typeId === "human.approval" ? "APPROVAL_BRANCH_LABEL" : "CONDITION_BRANCH_LABEL";
+    if (!outgoing.length && branchType === "Condition") errors.push({ code: "CONDITION_NO_BRANCHES", nodeId, message: `${label}: Connect at least one outgoing branch.` });
     const seen = new Map();
     for (const edge of outgoing) {
       const value = edge.data?.condition;
       let message;
-      if (typeof value !== "string" || !value.trim()) message = "Enter a label for this Condition branch.";
+      if (typeof value !== "string" || !value.trim()) message = `Choose an outcome for this ${branchType} branch.`;
       else if (value !== value.trim()) message = "Branch labels cannot begin or end with spaces.";
       else if (value.length > 255) message = "Branch labels must be 255 characters or fewer.";
+      else if (options !== null && !options.some((option) => option.value === value)) message = `Outcome '${value}' is not available. Choose a current outcome.`;
       else if (seen.has(value)) {
-        message = `Branch label '${value}' is already used on this Condition.`;
+        message = `Outcome '${value}' is already used on this ${branchType}.`;
         if (!errors.some((error) => error.edgeId === seen.get(value))) {
-          errors.push({ code: "CONDITION_BRANCH_LABEL", nodeId, edgeId: seen.get(value), message: `${label}: ${message}` });
+          errors.push({ code, nodeId, edgeId: seen.get(value), message: `${label}: ${message}` });
         }
       }
-      if (message) errors.push({ code: "CONDITION_BRANCH_LABEL", nodeId, edgeId: edge.id, message: `${label}: ${message}` });
+      if (message) errors.push({ code, nodeId, edgeId: edge.id, message: `${label}: ${message}` });
       if (typeof value === "string" && !seen.has(value)) seen.set(value, edge.id);
     }
   }

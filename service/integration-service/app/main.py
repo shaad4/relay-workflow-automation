@@ -6,6 +6,8 @@ from app.kafka.producer import start_producer, stop_producer
 from app.grpc.server import start_grpc_server
 from app.routes.webhooks import router as webhook_router
 from app.routes.public_webhooks import router as public_webhooks_router
+from app.routes.manual_triggers import router as manual_triggers_router
+from app.routes.schedules import router as schedules_router
 
 
 @asynccontextmanager
@@ -28,7 +30,8 @@ app = FastAPI(
 
 app.include_router(webhook_router)
 app.include_router(public_webhooks_router)
-
+app.include_router(manual_triggers_router)
+app.include_router(schedules_router)
 
 @app.get("/health")
 async def health():

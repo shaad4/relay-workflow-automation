@@ -1,3 +1,4 @@
+
 name: relay-workflow-automation
 
 services:
@@ -83,11 +84,57 @@ services:
       - ./service/integration-service/.env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      CELERY_BROKER_URL: redis://rag-redis:6379/1
     depends_on:
       kafka-init:
         condition: service_completed_successfully
       integration-postgres:
         condition: service_started
+
+  # INTEGRATION CELERY WORKER
+  integration-celery-worker:
+    build:
+      context: ./service/integration-service
+    container_name: relay-integration-celery-worker
+    command: >
+      celery -A app.celery_app:celery_app
+      worker
+      --loglevel=warning
+      --queues=integration
+      --concurrency=1
+    env_file:
+      - ./service/integration-service/.env
+    environment:
+      CELERY_WORKER: "true"
+      CELERY_BROKER_URL: redis://rag-redis:6379/1
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+    depends_on:
+      rag-redis:
+        condition: service_healthy
+      integration-postgres:
+        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # INTEGRATION CELERY BEAT
+  integration-celery-beat:
+    build:
+      context: ./service/integration-service
+    container_name: relay-integration-celery-beat
+    command: >
+      celery -A app.celery_app:celery_app
+      beat
+      --loglevel=warning
+      --schedule=/tmp/integration-celerybeat-schedule
+    env_file:
+      - ./service/integration-service/.env
+    environment:
+      CELERY_BROKER_URL: redis://rag-redis:6379/1
+    depends_on:
+      rag-redis:
+        condition: service_healthy
+    restart: unless-stopped
 
   # INTEGRATION DATABASE
   integration-postgres:
@@ -128,24 +175,18 @@ services:
     volumes:
       - action_postgres_data:/var/lib/postgresql/data
 
-  
   # EXECUTION SERVICE
   execution-service:
     build:
       context: ./service/execution-service
-
     container_name: relay-execution-service
-
     ports:
       - "${EXECUTION_SERVICE_PORT:-8005}:8000"
-
     env_file:
       - ./service/execution-service/.env
-
     environment:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
       RAG_GRPC_ADDRESS: rag-service:50056
-
     depends_on:
       action-service:
         condition: service_started
@@ -155,7 +196,6 @@ services:
         condition: service_completed_successfully
       rag-service:
         condition: service_started
-
 
   # EXECUTION DATABASE
   execution-postgres:
@@ -169,7 +209,6 @@ services:
       - "127.0.0.1:${EXECUTION_DB_PORT:-5437}:5432"
     volumes:
       - execution_postgres_data:/var/lib/postgresql/data
-
 
   # RAG SERVICE
   rag-service:
@@ -217,34 +256,27 @@ services:
   rag-celery-worker:
     build:
       context: ./service/rag-service
-
     container_name: relay-rag-celery-worker
-
     command: >
       celery -A app.celery_app:celery_app
       worker
       --loglevel=info
       --queues=rag_ingestion
       --concurrency=1
-
     env_file:
       - ./service/rag-service/.env
-
     depends_on:
       rag-redis:
         condition: service_healthy
       rag-postgres:
         condition: service_started
-
     restart: unless-stopped
-
 
   # KAFKA BROKER
   kafka:
     image: apache/kafka:4.0.1
     container_name: relay-kafka
     restart: unless-stopped
-
     environment:
       KAFKA_NODE_ID: ${KAFKA_NODE_ID:-1}
       KAFKA_PROCESS_ROLES: broker,controller
@@ -257,10 +289,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: ${KAFKA_AUTO_CREATE_TOPICS_ENABLE:-false}
-
     volumes:
       - kafka_data:/var/lib/kafka/data
-
     healthcheck:
       test:
         - CMD-SHELL
@@ -275,11 +305,9 @@ services:
     image: apache/kafka:4.0.1
     container_name: relay-kafka-init
     restart: "no"
-
     depends_on:
       kafka:
         condition: service_healthy
-
     entrypoint:
       - /bin/sh
       - -ec

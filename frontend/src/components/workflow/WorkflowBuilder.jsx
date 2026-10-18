@@ -8,11 +8,14 @@ import {
   addEdge,
 } from "@xyflow/react";
 
+import * as scheduleApi from "@/services/schedules";
+import { publishWithSchedule, readPayloadDraft, clearPayloadDraft, retryScheduleActivation } from "./scheduleTrigger";
 import { workflowSaveSnapshot, workflowChangedDuringSave } from "./workflowSaveState";
 import WorkflowToolbar from "./WorkflowToolbar";
 import NodeLibrary from "./NodeLibrary";
 import WorkflowCanvas from "./WorkflowCanvas";
 import NodeInspector from "./NodeInspector";
+import BranchConditionField from "./BranchConditionField";
 import WorkflowValidation from "./WorkflowValidation";
 import { clearExampleNodeConfig, getNodeDefinition } from "./nodeDefinitions";
 import { listAIConnections } from "@/services/aiProviderConnections";
@@ -27,8 +30,14 @@ import {
   updateWorkflowEdge,
   validateWorkflow,
   publishWorkflow,
+  getWorkflow,
+  getWorkflowVersions,
+  getWorkflowNodes,
   createDraftVersion,
 } from "@/services/workflows";
+
+const scheduleOperations = { ...scheduleApi, publishWorkflow, getWorkflow, getWorkflowVersions, getWorkflowNodes };
+const payloadStorage = () => { try { return window.sessionStorage; } catch { return undefined; } };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Icons
@@ -69,9 +78,11 @@ function EditIcon(props) {
   );
 }
 
-function EdgeInspector({ edge, isReadOnly, isCondition, errors = [], onConditionChange, onDelete, onClose }) {
-  const source = edge.source || "Unknown";
-  const target = edge.target || "Unknown";
+function EdgeInspector({ edge, nodes, edges, isReadOnly, errors = [], onConditionChange, onDelete, onClose }) {
+  const sourceNode = nodes.find((node) => node.id === edge.source);
+  const targetNode = nodes.find((node) => node.id === edge.target);
+  const source = sourceNode?.data?.label || sourceNode?.data?.nodeId || edge.source || "Unknown";
+  const target = targetNode?.data?.label || targetNode?.data?.nodeId || edge.target || "Unknown";
   return (
     <aside className="w-72 shrink-0 bg-[var(--surface)] border-l border-[var(--border-subtle)] flex flex-col">
       <header className="h-12 px-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
@@ -82,18 +93,7 @@ function EdgeInspector({ edge, isReadOnly, isCondition, errors = [], onCondition
         <button type="button" onClick={onClose} aria-label="Close connection inspector" className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">×</button>
       </header>
       <div className="p-4 space-y-4">
-        <label className="block">
-          <span className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1 uppercase tracking-wide">Condition label</span>
-          <input
-            value={edge.data?.condition ?? ""}
-            disabled={isReadOnly}
-            onChange={(event) => onConditionChange(event.target.value)}
-            placeholder={isCondition ? "Required, e.g. TECHNICAL" : "Optional, e.g. approved"}
-            maxLength={255}
-            className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
-          />
-          {isCondition && <span className="mt-1 block text-[10px] leading-4 text-[var(--text-tertiary)]">This label must exactly match the Condition value, including letter case.</span>}
-        </label>
+        <BranchConditionField edge={edge} source={sourceNode} nodes={nodes} edges={edges} isReadOnly={isReadOnly} onChange={onConditionChange} />
         {errors.map((error) => <p key={error.code} role="alert" className="text-[10px] text-red-500">{error.message}</p>)}
         {!isReadOnly && (
           <button type="button" onClick={onDelete} className="h-8 px-3 rounded-[6px] border border-red-500/30 text-red-500 hover:bg-red-500/10 text-[12px] font-medium">
@@ -392,6 +392,8 @@ export default function WorkflowBuilder({
   const [saveState, setSaveState] = useState("saved");
   const [saveError, setSaveError] = useState(null);
   const [builderNotice, setBuilderNotice] = useState("");
+  const [publicationWarning, setPublicationWarning] = useState("");
+  const [scheduleRevision, setScheduleRevision] = useState(0);
   const [isValidating, setIsValidating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
@@ -665,10 +667,10 @@ export default function WorkflowBuilder({
     markUnsaved();
   }, [isCanvasReadOnly, markUnsaved, setEdges, recordHistory]);
 
-  const handleEdgeConditionChange = useCallback((value) => {
-    if (isCanvasReadOnly || publishingRef.current || !selectedEdgeId) return;
+  const handleEdgeConditionChange = useCallback((value, edgeId = selectedEdgeId) => {
+    if (isCanvasReadOnly || publishingRef.current || !edgeId) return;
     recordHistory();
-    setEdges((current) => current.map((edge) => edge.id === selectedEdgeId
+    setEdges((current) => current.map((edge) => edge.id === edgeId
       ? { ...edge, data: { ...edge.data, condition: value || null }, label: value || "" }
       : edge));
     markUnsaved();
@@ -784,9 +786,14 @@ export default function WorkflowBuilder({
         data: { condition: null },
       };
       setEdges((eds) => addEdge(newEdge, eds));
+      if (nodes.some((node) => node.id === connection.source && ["human.approval", "logic.condition"].includes(node.data?.typeId))) {
+        setSelectedEdgeId(tempEdgeId);
+        setSelectedNodeId(null);
+        setIsInspectorOpen(true);
+      }
       markUnsaved();
     },
-    [isCanvasReadOnly, markUnsaved, setEdges, recordHistory]
+    [isCanvasReadOnly, markUnsaved, setEdges, recordHistory, nodes]
   );
 
   // ── Edge: changes (local; deletes mark unsaved) ───────────────────────────
@@ -1172,22 +1179,30 @@ export default function WorkflowBuilder({
           return;
         }
         if (editRevisionRef.current !== publishRevision) throw new Error("Workflow changed during validation. Save your changes and retry publishing.");
-        const published = await publishWorkflow(workflowId, versionNumber);
-        if (published?.status !== "published") throw new Error("Publishing was not confirmed.");
+        const outcome = await publishWithSchedule(
+          workflowId, versionNumber, version?.id,
+          () => readPayloadDraft(workflowId, payloadStorage()), scheduleOperations,
+          (publishedWorkflow) => { setCurrentVersionStatus("published"); onRefresh(publishedWorkflow); },
+        );
+        if (outcome.schedule && outcome.payloadDraft?.dirty && readPayloadDraft(workflowId, payloadStorage()).text === outcome.payloadDraft.text) clearPayloadDraft(workflowId, payloadStorage());
+        setPublicationWarning(outcome.schedulingError
+          ? `Workflow published — scheduling needs attention. ${outcome.schedulingError}`
+          : outcome.publicationWarning || "");
+        setScheduleRevision((value) => value + 1);
       }
-      setCurrentVersionStatus("published");
-      onRefresh();
+      const scheduledNode = serverNodesRef.current.find((node) => node.node_type === "trigger.schedule");
+      if (scheduledNode) { setSelectedNodeId(scheduledNode.rfId); setSelectedEdgeId(null); setIsInspectorOpen(true); }
     } catch (err) {
       setValidationResult({ isValid: false, errors: [{
         code: "PUBLISH_FAILED",
-        message: err?.status ? `Publishing failed: ${err.message}` : "Publishing could not be confirmed. Check your connection, reload the version, and retry. Any changes made during validation must be saved first.",
+        message: err?.status && err.status < 500 ? `Publishing failed: ${err.message}` : "Publishing could not be confirmed. Refresh workflow state before retrying; publication may already have completed. Any changes made during validation must be saved first.",
       }] });
       setValidationOpen(true);
     } finally {
       publishingRef.current = false;
       setIsPublishing(false);
     }
-  }, [isCanvasReadOnly, saveState, handleSave, workflowId, versionNumber, onRefresh, nodes, edges]);
+  }, [isCanvasReadOnly, saveState, handleSave, workflowId, versionNumber, onRefresh, nodes, edges, version]);
 
   // ── Edit Workflow (create draft from published) ───────────────────────────
   const handleEditWorkflow = useCallback(async () => {
@@ -1242,6 +1257,17 @@ export default function WorkflowBuilder({
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full w-full bg-[var(--canvas)] select-none overflow-hidden font-sans">
+      {publicationWarning && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-[var(--text-primary)]"><span>{publicationWarning}</span><button type="button" disabled={isPublishing} onClick={async () => {
+        if (publishingRef.current) return;
+        publishingRef.current = true; setIsPublishing(true);
+        const draft = readPayloadDraft(workflowId, payloadStorage());
+        try {
+          const result = await retryScheduleActivation(workflowId, draft, scheduleOperations);
+          if (result.schedule && draft.dirty && readPayloadDraft(workflowId, payloadStorage()).text === draft.text) clearPayloadDraft(workflowId, payloadStorage());
+          onRefresh(result.workflow); setPublicationWarning("");
+        } catch (error) { setPublicationWarning(`Workflow published — scheduling needs attention. ${error.message}`); }
+        finally { publishingRef.current = false; setIsPublishing(false); setScheduleRevision((value) => value + 1); }
+      }} className="rounded border border-[var(--border-default)] px-3 py-1.5 disabled:opacity-50">Retry schedule activation</button></div>}
       {builderNotice && <div role="alert" className="fixed left-1/2 top-4 z-[140] flex -translate-x-1/2 items-center gap-2 rounded-lg border border-amber-500/30 bg-[var(--surface)] px-4 py-3 text-[12px] text-[var(--text-primary)] shadow-xl"><span className="grid h-5 w-5 place-items-center rounded-full border border-amber-500/40 text-amber-500">!</span><span>{builderNotice}</span><button type="button" onClick={() => setBuilderNotice("")} aria-label="Dismiss notification" className="ml-2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">×</button></div>}
       {/* ── 1. Top Toolbar ─────────────────────────────────────────────────── */}
       <WorkflowToolbar
@@ -1256,6 +1282,7 @@ export default function WorkflowBuilder({
         versionNumber={versionNumber}
         versions={versions}
         publishedVersionId={workflow?.published_version_id}
+        workflowNodes={nodes}
         onSelectVersion={(nextVersion) => {
           if (saveState !== "saved") {
             setSaveError("Save or discard your changes before switching versions.");
@@ -1415,7 +1442,8 @@ export default function WorkflowBuilder({
           <EdgeInspector
             edge={selectedEdge}
             isReadOnly={isCanvasReadOnly}
-            isCondition={nodes.some((node) => node.id === selectedEdge.source && node.data?.typeId === "logic.condition")}
+            nodes={nodes}
+            edges={edges}
             errors={validateConditionBranches(nodes, edges).filter((error) => error.edgeId === selectedEdge.id)}
             onConditionChange={handleEdgeConditionChange}
             onDelete={() => handleDeleteEdge(selectedEdge.id)}
@@ -1432,9 +1460,12 @@ export default function WorkflowBuilder({
               isReadOnly={isCanvasReadOnly || isPublishing}
               workflowId={workflowId}
               workflowVersionId={version?.id}
+              scheduleBusy={isPublishing}
+              scheduleRevision={`${currentVersionStatus}:${workflow?.status}:${workflow?.published_version_id}:${scheduleRevision}`}
               workflowNodes={nodes}
               workflowEdges={edges}
               onSelectEdge={handleEdgeSelect}
+              onEdgeConditionChange={handleEdgeConditionChange}
             />
           </div>
         )}

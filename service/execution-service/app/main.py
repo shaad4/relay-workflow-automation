@@ -7,6 +7,8 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.grpc.server import start_grpc_server
+
 from app.kafka.consumer import (
     start_consumer,
     stop_consumer,
@@ -25,6 +27,12 @@ from app.routes.ai_provider_connections import (
 async def lifespan(app: FastAPI):
     await start_consumer()
 
+    try:
+        grpc_server = await start_grpc_server()
+    except Exception:
+        await stop_consumer()
+        raise
+
     consumer_task = asyncio.create_task(
         consume_workflow_triggered()
     )
@@ -39,7 +47,10 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
-        await stop_consumer()
+        try:
+            await stop_consumer()
+        finally:
+            await grpc_server.stop(grace=5)
 
 
 app = FastAPI(

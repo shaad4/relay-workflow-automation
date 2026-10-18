@@ -68,6 +68,7 @@ export async function apiRequest(
   endpoint,
   options = {}
 ) {
+  const { skipAuthRetry = false, ...fetchOptions } = options;
   const request = (requestOptions) => {
     const headers = new Headers(requestOptions.headers);
     if (typeof FormData !== "undefined" && requestOptions.body instanceof FormData) {
@@ -82,15 +83,15 @@ export async function apiRequest(
     });
   };
 
-  let response = await request(options);
+  let response = await request(fetchOptions);
   let text = await response.text();
   let data = parseResponse(response, text);
 
   const isRefreshRequest = endpoint === "/auth/refresh";
-  if (response.status === 401 && !isRefreshRequest && typeof window !== "undefined") {
+  if (response.status === 401 && !isRefreshRequest && !skipAuthRetry && typeof window !== "undefined") {
     const refreshedTokens = await refreshAuthTokens();
     if (refreshedTokens) {
-      response = await request(options);
+      response = await request(fetchOptions);
       text = await response.text();
       data = parseResponse(response, text);
       if (response.status === 401) {

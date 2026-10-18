@@ -21,28 +21,26 @@ function WorkflowIcon(props) {
 
 export default function WorkflowEmptyState({ onCreateNew }) {
   return (
-    <div className="w-full bg-[var(--surface)] border border-[var(--border-subtle)] rounded-xl p-8 sm:p-12 text-center my-4 select-none">
-      <div className="mx-auto w-12 h-12 rounded-[8px] bg-[var(--elevated)] border border-[var(--border-subtle)] flex items-center justify-center mb-4 text-[var(--text-tertiary)]">
-        <WorkflowIcon className="w-6 h-6 stroke-[1.5]" />
+    <section className="relative overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-12 text-center sm:px-12 sm:py-16">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(ellipse_at_50%_0,var(--accent),transparent_70%)] opacity-[.10]" />
+      <div className="relative mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl border border-[var(--accent)]/20 bg-[var(--accent)]/10 text-[var(--accent)]">
+        <WorkflowIcon aria-hidden="true" className="h-6 w-6 stroke-[1.5]" />
       </div>
-
-      <h3 className="text-[16px] font-semibold text-[var(--text-primary)] tracking-tight mb-1">
-        No workflows yet
-      </h3>
-
-      <p className="text-[14px] text-[var(--text-secondary)] max-w-sm mx-auto mb-6 leading-relaxed">
-        Create your first workflow to automate a process.
-      </p>
-
-      <button
-        type="button"
-        onClick={onCreateNew}
-        disabled={!onCreateNew}
-        className="inline-flex items-center gap-2 h-9 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[14px] transition-all duration-100 ease-out focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/40 cursor-pointer shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-          <PlusIcon className="w-4 h-4 stroke-[2]" />
-          <span>New Workflow</span>
+      <p className="relative mb-2 font-mono text-[10px] uppercase tracking-[.17em] text-[var(--accent)]">Make your work flow</p>
+      <h2 className="relative text-[18px] font-semibold tracking-tight text-[var(--text-primary)] sm:text-[20px]">No workflows yet</h2>
+      <p className="relative mx-auto mt-2 max-w-md text-[13px] leading-6 text-[var(--text-secondary)]">Turn a repeatable task into a workflow. Connect your tools, add logic or approvals, and let each step lead to the next.</p>
+      <button type="button" onClick={onCreateNew} disabled={!onCreateNew} className="relative mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-50">
+        <PlusIcon aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />Create your first workflow
       </button>
-    </div>
+      <ol className="relative mx-auto mt-10 grid max-w-xl grid-cols-1 gap-4 border-t border-[var(--border-subtle)] pt-5 text-left sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-[var(--border-subtle)]">
+        {[
+          ["Choose a trigger", "Start manually, on a schedule, or from a webhook."],
+          ["Connect your steps", "Add actions, AI, and human approvals."],
+          ["Publish your workflow", "Validate your setup and put it to work."],
+        ].map(([title, description], index) => (
+          <li key={title} className="px-3"><span className="font-mono text-[10px] text-[var(--text-tertiary)]">0{index + 1}</span><p className="mt-1 text-[11px] font-medium text-[var(--text-primary)]">{title}</p><p className="mt-1 text-[11px] leading-4 text-[var(--text-tertiary)]">{description}</p></li>
+        ))}
+      </ol>
+    </section>
   );
 }

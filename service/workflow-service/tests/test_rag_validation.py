@@ -76,14 +76,42 @@ def test_approval_branching_preserved_and_ambiguous_branch_rejected():
     assert "INVALID_BRANCHING" in {error["code"] for error in validate(nodes, edges)["errors"]}
 
 @pytest.mark.parametrize("valid", [True, False])
-def test_publish_gates_actual_rag_configuration(valid):
+def test_publish_gates_actual_rag_configuration(valid, integration_client):
     workflow = NS(id=WORKFLOW_ID, status="inactive", published_version_id=None)
     version = NS(id=VERSION_ID, version=1, status="draft")
     nodes = [node("t", "trigger.webhook"), node("r", "ai.rag_search", {**VALID, "top_k": 5 if valid else 0})]
-    session = FakeSession([Result(scalar=workflow), Result(scalar=version), Result(scalar=workflow), Result(scalar=version), Result(scalars=nodes), Result(scalars=[edge("t", "r")])])
+    session = FakeSession([Result(scalar=workflow), Result(scalar=version), Result(scalar=workflow), Result(scalar=version), Result(scalars=nodes), Result(scalars=[edge("t", "r")]), Result(scalar=None)])
     if valid:
         assert asyncio.run(service.publish_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, session))["status"] == "published"
+        integration_client.sync_workflow_schedule.assert_awaited_once_with(
+            workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
+            workflow_version_id=VERSION_ID, has_schedule_trigger=False, workflow_active=True,
+        )
+        integration_client.close.assert_awaited_once()
     else:
         with pytest.raises(ValueError, match="validation failed"):
             asyncio.run(service.publish_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, session))
         assert session.commits == 0 and version.status == "draft"
+        integration_client.sync_workflow_schedule.assert_not_awaited()
+
+
+@pytest.mark.parametrize("body_format", [None, "plain", "html"])
+def test_email_format_schema_and_publication_preserve_legacy_config(body_format):
+    from app.schemas.node_configuration import EmailConfig
+    config = {"connection_id": str(uuid4()), "to": "{{trigger.data.recipient_email}}", "subject": "Student Report - {{trigger.data.student_name}}", "body": "{{nodes.generate_1.content}}"}
+    if body_format is not None:
+        config["body_format"] = body_format
+    parsed = EmailConfig.model_validate(config)
+    assert parsed.body_format == (body_format or "plain")
+    assert parsed.model_dump()["body"] == config["body"]
+    assert validate([node("t", "trigger.webhook"), node("mail", "action.email", config)], [edge("t", "mail")])["valid"]
+
+
+@pytest.mark.parametrize("body_format", ["HTML", "markdown", "", None, 42, []])
+def test_email_format_rejected_by_schema_and_publication(body_format):
+    from app.schemas.node_configuration import EmailConfig
+    config = {"body_format": body_format}
+    with pytest.raises(ValidationError):
+        EmailConfig.model_validate(config)
+    result = validate([node("t", "trigger.webhook"), node("mail", "action.email", config)], [edge("t", "mail")])
+    assert "INVALID_EMAIL_CONFIGURATION" in {error["code"] for error in result["errors"]}

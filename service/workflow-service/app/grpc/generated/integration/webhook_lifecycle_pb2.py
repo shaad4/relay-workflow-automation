@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#integration/webhook_lifecycle.proto\x12\x11relay.integration\"g\n\x1d\x44\x65leteWorkflowWebhooksRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x02 \x01(\t\x12\x1b\n\x13workflow_version_id\x18\x03 \x01(\t\"7\n\x1e\x44\x65leteWorkflowWebhooksResponse\x12\x15\n\rdeleted_count\x18\x01 \x01(\r\"B\n\'ActivateWorkflowVersionWebhooksResponse\x12\x17\n\x0f\x61\x63tivated_count\x18\x01 \x01(\r2\xad\x02\n\x1aIntegrationInternalService\x12}\n\x16\x44\x65leteWorkflowWebhooks\x12\x30.relay.integration.DeleteWorkflowWebhooksRequest\x1a\x31.relay.integration.DeleteWorkflowWebhooksResponse\x12\x8f\x01\n\x1f\x41\x63tivateWorkflowVersionWebhooks\x12\x30.relay.integration.DeleteWorkflowWebhooksRequest\x1a:.relay.integration.ActivateWorkflowVersionWebhooksResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#integration/webhook_lifecycle.proto\x12\x11relay.integration\"g\n\x1d\x44\x65leteWorkflowWebhooksRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x02 \x01(\t\x12\x1b\n\x13workflow_version_id\x18\x03 \x01(\t\"7\n\x1e\x44\x65leteWorkflowWebhooksResponse\x12\x15\n\rdeleted_count\x18\x01 \x01(\r\"B\n\'ActivateWorkflowVersionWebhooksResponse\x12\x17\n\x0f\x61\x63tivated_count\x18\x01 \x01(\r\"M\n WorkflowScheduleLifecycleRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x02 \x01(\t\"\x9c\x01\n\x1bSyncWorkflowScheduleRequest\x12\x13\n\x0bworkflow_id\x18\x01 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x02 \x01(\t\x12\x1b\n\x13workflow_version_id\x18\x03 \x01(\t\x12\x1c\n\x14has_schedule_trigger\x18\x04 \x01(\x08\x12\x17\n\x0fworkflow_active\x18\x05 \x01(\x08\";\n!WorkflowScheduleLifecycleResponse\x12\x16\n\x0e\x61\x66\x66\x65\x63ted_count\x18\x01 \x01(\r2\xb8\x05\n\x1aIntegrationInternalService\x12}\n\x16\x44\x65leteWorkflowWebhooks\x12\x30.relay.integration.DeleteWorkflowWebhooksRequest\x1a\x31.relay.integration.DeleteWorkflowWebhooksResponse\x12\x8f\x01\n\x1f\x41\x63tivateWorkflowVersionWebhooks\x12\x30.relay.integration.DeleteWorkflowWebhooksRequest\x1a:.relay.integration.ActivateWorkflowVersionWebhooksResponse\x12|\n\x14SyncWorkflowSchedule\x12..relay.integration.SyncWorkflowScheduleRequest\x1a\x34.relay.integration.WorkflowScheduleLifecycleResponse\x12\x84\x01\n\x17SuspendWorkflowSchedule\x12\x33.relay.integration.WorkflowScheduleLifecycleRequest\x1a\x34.relay.integration.WorkflowScheduleLifecycleResponse\x12\x83\x01\n\x16\x44\x65leteWorkflowSchedule\x12\x33.relay.integration.WorkflowScheduleLifecycleRequest\x1a\x34.relay.integration.WorkflowScheduleLifecycleResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -37,6 +37,12 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_DELETEWORKFLOWWEBHOOKSRESPONSE']._serialized_end=218
   _globals['_ACTIVATEWORKFLOWVERSIONWEBHOOKSRESPONSE']._serialized_start=220
   _globals['_ACTIVATEWORKFLOWVERSIONWEBHOOKSRESPONSE']._serialized_end=286
-  _globals['_INTEGRATIONINTERNALSERVICE']._serialized_start=289
-  _globals['_INTEGRATIONINTERNALSERVICE']._serialized_end=590
+  _globals['_WORKFLOWSCHEDULELIFECYCLEREQUEST']._serialized_start=288
+  _globals['_WORKFLOWSCHEDULELIFECYCLEREQUEST']._serialized_end=365
+  _globals['_SYNCWORKFLOWSCHEDULEREQUEST']._serialized_start=368
+  _globals['_SYNCWORKFLOWSCHEDULEREQUEST']._serialized_end=524
+  _globals['_WORKFLOWSCHEDULELIFECYCLERESPONSE']._serialized_start=526
+  _globals['_WORKFLOWSCHEDULELIFECYCLERESPONSE']._serialized_end=585
+  _globals['_INTEGRATIONINTERNALSERVICE']._serialized_start=588
+  _globals['_INTEGRATIONINTERNALSERVICE']._serialized_end=1284
 # @@protoc_insertion_point(module_scope)

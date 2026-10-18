@@ -59,7 +59,7 @@ async def create_execution(event: dict) -> Execution:
                 event["workflow_version_id"]
             ),
             status=ExecutionStatus.PENDING,
-            trigger_type=event["event_type"],
+            trigger_type=event.get("trigger_type", "webhook"),
             trigger_data=event.get("payload"),
             context={},
             started_at=datetime.now(timezone.utc),

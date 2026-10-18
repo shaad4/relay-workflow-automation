@@ -109,6 +109,17 @@ function WorkflowCanvasInner({
     []
   );
 
+  const coloredEdges = useMemo(() => edges.map((edge) => {
+    const color = edge.data?.condition === "approved" ? "#789b88"
+      : edge.data?.condition === "rejected" ? "#ac7d86" : null;
+    if (!color) return edge;
+    return {
+      ...edge,
+      style: { ...edge.style, stroke: color, filter: "none" },
+      labelStyle: { ...edge.labelStyle, fill: color },
+    };
+  }), [edges]);
+
   const handleDragOver = useCallback((event) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
@@ -160,7 +171,7 @@ function WorkflowCanvasInner({
     >
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={coloredEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}

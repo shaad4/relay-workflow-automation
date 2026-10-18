@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import WorkflowStatus from "../workflows/WorkflowStatus";
 import { activateWorkflow, deactivateWorkflow, deleteWorkflow, deleteWorkflowVersion, updateWorkflow } from "@/services/workflows";
+import RunWorkflowButton from "./RunWorkflowButton";
 
 function CheckIcon(props) {
   return (
@@ -72,6 +73,7 @@ export default function WorkflowToolbar({
   versionNumber = 1,
   versions = [],
   publishedVersionId,
+  workflowNodes,
   onSelectVersion,
   saveState = "saved", // 'saved' | 'unsaved' | 'saving' | 'failed'
   saveError = null,
@@ -118,7 +120,6 @@ export default function WorkflowToolbar({
     (item) => Number(item.version_number ?? item.version) === Number(versionNumber)
   );
   const hasDraftVersion = sortedVersions.some((item) => String(item.status).toLowerCase() === "draft");
-
   useEffect(() => {
     if (!workflowMenuOpen) return;
     const closeOnOutsideClick = (event) => {
@@ -485,6 +486,7 @@ export default function WorkflowToolbar({
 
       {/* Right: Save indicator + actions */}
       <div className="flex items-center gap-3 shrink-0">
+        <RunWorkflowButton workflowId={workflowId} workflowName={workflowName} workflowStatus={workflowStatus} publishedVersionId={publishedVersionId} versions={versions} draftNodes={workflowNodes} />
         {!isReadOnly && (
           <div className="flex items-center gap-1 border-r border-[var(--border-subtle)] pr-2">
             <button type="button" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" aria-label="Undo" className="h-8 w-8 rounded-[6px] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-35 disabled:cursor-not-allowed">↶</button>
@@ -588,6 +590,7 @@ export default function WorkflowToolbar({
           </button>
         )}
       </div>
+
     </div>
   );
 }

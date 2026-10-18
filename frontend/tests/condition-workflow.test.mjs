@@ -54,7 +54,7 @@ test('empty, duplicate and padded Condition labels block validation before publi
   const padded = edges.map((edge) => edge.id === 'branch-GENERAL' ? { ...edge, data: { condition: ' GENERAL' } } : edge);
   assert.ok(validateConditionBranches(nodes, padded).some((error) => error.edgeId === 'branch-GENERAL'));
   const cased = edges.map((edge) => edge.id === 'branch-BILLING' ? { ...edge, data: { condition: 'technical' }, label: 'technical' } : edge);
-  assert.deepEqual(validateConditionBranches(nodes, cased), []);
+  assert.ok(validateConditionBranches(nodes, cased).some((error) => error.edgeId === 'branch-BILLING'));
 });
 
 test('legacy Condition settings survive draft load and save until explicit replacement', () => {

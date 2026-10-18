@@ -659,6 +659,13 @@ def test_application_health_and_lifespan(monkeypatch):
             calls.append("cancelled")
             raise
     async def stop(): calls.append("stop")
+    async def start_grpc():
+        calls.append("grpc_start")
+        async def stop_grpc(grace):
+            assert grace == 5
+            calls.append("grpc_stop")
+        return SimpleNamespace(stop=stop_grpc)
+    monkeypatch.setattr("app.main.start_grpc_server", start_grpc)
     monkeypatch.setattr("app.main.start_consumer", start)
     monkeypatch.setattr("app.main.consume_workflow_triggered", consume)
     monkeypatch.setattr("app.main.stop_consumer", stop)
@@ -668,4 +675,150 @@ def test_application_health_and_lifespan(monkeypatch):
             await asyncio.sleep(0)
     asyncio.run(exercise())
     assert calls[0] == "start"
-    assert set(calls[1:]) == {"cancelled", "stop"}
+    assert set(calls[1:]) == {"grpc_start", "cancelled", "stop", "grpc_stop"}
+
+
+@pytest.mark.parametrize("decision", ["approved", "rejected"])
+@pytest.mark.parametrize("resume_fails", [False, True])
+def test_approval_response_does_not_wait_for_workflow_resume(monkeypatch, decision, resume_fails):
+    from fastapi import BackgroundTasks
+    from contextlib import asynccontextmanager
+
+    now = datetime.now(timezone.utc)
+    approval = SimpleNamespace(
+        id=uuid4(), execution_id=uuid4(), execution_step_id=uuid4(),
+        message="Review", status=decision, decision=decision,
+        timeout_at=None, created_at=now, updated_at=now,
+    )
+    execution = SimpleNamespace(
+        id=approval.execution_id, workflow_id=uuid4(),
+        workflow_version_id=uuid4(), workspace_id=uuid4(), context={},
+    )
+    step = SimpleNamespace(node_id="approval")
+    calls = []
+
+    async def decide(**kwargs):
+        calls.append("decision committed")
+        return approval_result(approval, execution, step, kwargs["decision"], "next")
+
+    async def run(**kwargs):
+        calls.append("resume")
+        assert kwargs["start_node_id"] == "next"
+        if resume_fails:
+            raise ActionExecutionFailed("email", "Provider failed")
+        return {"context": {"nodes": {"email": {"sent": True}}}}
+
+    async def get(_model, _id): return execution
+    async def commit(): calls.append("execution committed")
+    async def rollback(): calls.append("execution rolled back")
+    worker_session = SimpleNamespace(get=get, commit=commit, rollback=rollback)
+
+    @asynccontextmanager
+    async def worker_sessions():
+        calls.append("new session")
+        yield worker_session
+
+    monkeypatch.setattr(approval_routes, "decide_approval", decide)
+    monkeypatch.setattr(approval_routes, "run_execution", run)
+    monkeypatch.setattr(approval_routes, "AsyncSessionLocal", worker_sessions)
+
+    async def scenario():
+        tasks = BackgroundTasks()
+        endpoint = approval_routes.approve if decision == "approved" else approval_routes.reject
+        response = await endpoint(approval.id, {"workspace_id": "w", "user_id": "u"}, object(), tasks)
+        assert response.id == approval.id and response.decision == decision
+        assert calls == ["decision committed"]
+        assert len(tasks.tasks) == 1
+        await tasks()
+        assert calls[1:3] == ["new session", "resume"]
+        assert execution.status == (ExecutionStatus.FAILED if resume_fails else ExecutionStatus.COMPLETED)
+        assert calls[-1] == "execution committed"
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("action,decision", [("approve", "approved"), ("reject", "rejected")])
+def test_approval_http_response_is_sent_before_resume(monkeypatch, action, decision):
+    from fastapi import FastAPI
+    import httpx
+
+    now = datetime.now(timezone.utc)
+    approval = SimpleNamespace(
+        id=uuid4(), execution_id=uuid4(), execution_step_id=uuid4(),
+        message="Review", status=decision, decision=decision,
+        timeout_at=None, created_at=now, updated_at=now,
+    )
+    result = SimpleNamespace(approval=approval, start_node_id="ai_generate")
+    events = []
+    app = FastAPI()
+    app.include_router(approval_routes.router)
+
+    async def identity(): return {"workspace_id": "w", "user_id": "u"}
+    async def db(): yield object()
+    async def decide(**kwargs):
+        assert kwargs["decision"] == decision
+        events.append("committed")
+        return result
+    async def resume(_result, response):
+        assert response.decision == decision
+        assert events == ["committed", "response sent"]
+        events.append("resume")
+
+    app.dependency_overrides[approval_routes.get_current_identity] = identity
+    app.dependency_overrides[approval_routes.get_db] = db
+    monkeypatch.setattr(approval_routes, "decide_approval", decide)
+    monkeypatch.setattr(approval_routes, "_resume_approval_in_background", resume)
+
+    async def observed_app(scope, receive, send):
+        async def observed_send(message):
+            await send(message)
+            if message["type"] == "http.response.body" and not message.get("more_body", False):
+                events.append("response sent")
+        await app(scope, receive, observed_send)
+
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=observed_app), base_url="http://test") as client:
+            response = await client.post(f"/approvals/{approval.id}/{action}/")
+        assert response.status_code == 200
+        assert response.json()["decision"] == decision
+        assert events == ["committed", "response sent", "resume"]
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("body_format", [None, "plain", "html"])
+def test_student_report_email_resolves_expressions_and_forwards_format(monkeypatch, body_format):
+    body = '<h1>Student Report</h1><table><tr><td>Math</td><td>95</td></tr></table>'
+    email_config = {
+        "connection_id": "existing-gmail-connection",
+        "to": "{{trigger.data.recipient_email}}",
+        "subject": "Student Report - {{trigger.data.student_name}}",
+        "body": "{{nodes.generate_1.content}}",
+    }
+    if body_format is not None:
+        email_config["body_format"] = body_format
+    nodes = [
+        {"node_id": "webhook", "node_type": "trigger.webhook", "configuration": {}},
+        {"node_id": "generate_1", "node_type": "ai.generate", "configuration": {
+            "instructions": "Return valid HTML without Markdown code fences.",
+        }},
+        {"node_id": "email", "node_type": "action.email", "configuration": email_config},
+    ]
+    edges = [{"source_node_id": "webhook", "target_node_id": "generate_1"}, {"source_node_id": "generate_1", "target_node_id": "email"}]
+    async def generate(**_kwargs):
+        return {"content": body, "model": "mock", "input_tokens": 1, "output_tokens": 1}
+    monkeypatch.setattr(runner, "execute_ai_generate", generate)
+    state = runner_setup(monkeypatch, nodes, edges)
+    asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "x", {
+        "recipient_email": "student@example.test", "student_name": "Zoë",
+    }))
+    request = state["actions"][0]
+    assert request["provider"] == "gmail" and request["action"] == "send_email"
+    assert json.loads(request["input_data_json"]) == {
+        "connection_id": "existing-gmail-connection", "to": "student@example.test",
+        "subject": "Student Report - Zoë", "body": body, "body_format": body_format or "plain",
+    }
+    if body_format is None:
+        assert "body_format" not in email_config
+    else:
+        assert email_config["body_format"] == body_format

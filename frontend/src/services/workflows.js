@@ -179,3 +179,11 @@ export async function publishWorkflow(workflowId, versionNumber) {
     }
   );
 }
+
+export async function runWorkflow(workflowId, input) {
+  return apiRequest(`/workflows/${workflowId}/run`, {
+    method: "POST",
+    body: JSON.stringify({ input }),
+    skipAuthRetry: true,
+  });
+}

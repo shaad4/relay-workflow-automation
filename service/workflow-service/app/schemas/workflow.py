@@ -15,6 +15,7 @@ class WorkflowResponse(BaseModel):
     name: str
     description: str | None
     status: str
+    published_version_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -16,7 +16,8 @@ from app.routes.connections import router as connections_router
 from app.routes.approvals import router as approvals_router
 from app.routes.knowledge_bases import router as knowledge_base_router
 from app.routes.ai_provider_connections import router as ai_provider_connections_router
-
+from app.routes.manual_triggers import router as manual_triggers_router
+from app.routes.schedules import router as schedules_router
 
 load_dotenv()
 
@@ -72,6 +73,8 @@ app.include_router(connections_router)
 app.include_router(approvals_router)
 app.include_router(knowledge_base_router)
 app.include_router(ai_provider_connections_router)
+app.include_router(manual_triggers_router)
+app.include_router(schedules_router)
 
 @app.get("/health")
 async def health():

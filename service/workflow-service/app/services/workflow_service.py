@@ -8,13 +8,20 @@ from pydantic import ValidationError
 from app.models import Workflow, WorkflowVersion, WorkflowEdge, WorkflowNode
 from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 from app.schemas.node_configuration import (
+    EmailConfig,
     RagSearchConfig,
     AIDecisionConfig,
     ConditionConfig,
     AIGenerateConfig,
+    ManualTriggerConfig,
+    ScheduledTriggerConfig,
 )
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
 from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
+from app.grpc.integration_client import IntegrationGrpcClient
+
+class ScheduleSynchronizationError(RuntimeError):
+    """Publication committed, but schedule lifecycle synchronization failed."""
 
 
 async def create_workflow(
@@ -122,9 +129,7 @@ async def delete_workflow(
             Workflow.workspace_id == workspace_id,
         )
     )
-
     workflow = result.scalar_one_or_none()
-
     if workflow is None:
         return False
 
@@ -135,28 +140,40 @@ async def delete_workflow(
         )
 
     try:
-        # Break the workflow -> published version reference before deleting its
-        # versions so the database foreign key remains valid.
         workflow.published_version_id = None
         await session.flush()
-
         version_ids = select(WorkflowVersion.id).where(
-            WorkflowVersion.workflow_id == workflow_id,
+            WorkflowVersion.workflow_id == workflow_id
         )
         await session.execute(
-            delete(WorkflowNode).where(WorkflowNode.workflow_version_id.in_(version_ids))
+            delete(WorkflowNode).where(
+                WorkflowNode.workflow_version_id.in_(version_ids)
+            )
         )
         await session.execute(
-            delete(WorkflowEdge).where(WorkflowEdge.workflow_version_id.in_(version_ids))
+            delete(WorkflowEdge).where(
+                WorkflowEdge.workflow_version_id.in_(version_ids)
+            )
         )
         await session.execute(
-            delete(WorkflowVersion).where(WorkflowVersion.workflow_id == workflow_id)
+            delete(WorkflowVersion).where(
+                WorkflowVersion.workflow_id == workflow_id
+            )
         )
         await session.delete(workflow)
         await session.commit()
     except Exception:
         await session.rollback()
         raise
+
+    client = IntegrationGrpcClient()
+    try:
+        await client.delete_workflow_schedule(
+            workflow_id=workflow_id,
+            workspace_id=workspace_id,
+        )
+    finally:
+        await client.close()
 
     return True
 
@@ -856,7 +873,6 @@ async def delete_workflow_edge(
 
 
 
-
 async def validate_workflow(
     workflow_id: UUID,
     version_number: int,
@@ -929,6 +945,19 @@ async def validate_workflow(
                 "message": "Workflow contains duplicate node IDs.",
             }
         )
+
+    for node in nodes:
+        if node.node_type != "action.email":
+            continue
+        try:
+            EmailConfig.model_validate(node.configuration or {})
+        except ValidationError as exc:
+            for error in exc.errors():
+                errors.append({
+                    "code": "INVALID_EMAIL_CONFIGURATION",
+                    "node_id": node.node_id,
+                    "message": f"Send Email node '{node.node_id}': body_format - {error['msg']}",
+                })
 
     # 7. Validate RAG Search configurations
     for node in nodes:
@@ -1042,7 +1071,59 @@ async def validate_workflow(
                     }
                 )
 
-    # 11. Validate supported node types
+    # 11. Validate Manual Trigger configurations
+    for node in nodes:
+        if node.node_type != "trigger.manual":
+            continue
+
+        try:
+            ManualTriggerConfig.model_validate(
+                node.configuration or {}
+            )
+        except ValidationError as exc:
+            for error in exc.errors():
+                field = ".".join(
+                    str(part) for part in error["loc"]
+                ) or "configuration"
+                errors.append(
+                    {
+                        "code": "INVALID_MANUAL_TRIGGER_CONFIGURATION",
+                        "node_id": node.node_id,
+                        "message": (
+                            f"Manual Trigger node '{node.node_id}': "
+                            f"{field} - {error['msg']}"
+                        ),
+                    }
+                )
+
+    # 12. Validate Scheduled Trigger configurations
+    for node in nodes:
+        if node.node_type != "trigger.schedule":
+            continue
+
+        try:
+            ScheduledTriggerConfig.model_validate(
+                node.configuration or {}
+            )
+
+        except ValidationError as exc:
+            for error in exc.errors():
+                field = ".".join(
+                    str(part) for part in error["loc"]
+                ) or "configuration"
+
+                errors.append(
+                    {
+                        "code": "INVALID_SCHEDULE_CONFIGURATION",
+                        "node_id": node.node_id,
+                        "message": (
+                            f"Scheduled Trigger node '{node.node_id}': "
+                            f"{field} - {error['msg']}"
+                        ),
+                    }
+                )
+
+    # 13. Validate supported node types
     trigger_types = {
         "trigger.webhook",
         "trigger.manual",
@@ -1092,7 +1173,7 @@ async def validate_workflow(
                 }
             )
 
-    # 12. Validate edge references
+    # 13. Validate edge references
     for edge in edges:
         if edge.source_node_id not in node_ids:
             errors.append(
@@ -1116,7 +1197,7 @@ async def validate_workflow(
                 }
             )
 
-    # 13. Build graph adjacency and indegree
+    # 14. Build graph adjacency and indegree
     outgoing = {
         node_id: []
         for node_id in node_ids
@@ -1135,7 +1216,7 @@ async def validate_workflow(
             outgoing[edge.source_node_id].append(edge)
             indegree[edge.target_node_id] += 1
 
-    # 14. Validate branching
+    # 15. Validate branching
     for node in nodes:
         branches = outgoing[node.node_id]
 
@@ -1185,7 +1266,7 @@ async def validate_workflow(
                 }
             )
 
-    # 15. Detect workflow cycles using Kahn's algorithm
+    # 16. Detect workflow cycles using Kahn's algorithm
     pending = [
         node_id
         for node_id, count in indegree.items()
@@ -1215,7 +1296,7 @@ async def validate_workflow(
             }
         )
 
-    # 16. Verify all nodes are reachable from trigger
+    # 17. Verify all nodes are reachable from trigger
     if len(triggers) == 1:
         reachable = set()
         pending = [triggers[0].node_id]
@@ -1244,13 +1325,25 @@ async def validate_workflow(
                 }
             )
 
-    # 17. Return validation result
+    # 18. Return validation result
     return {
         "valid": not errors,
         "errors": errors,
         "warnings": warnings,
     }
 
+
+async def _published_version_has_schedule_trigger(
+    version_id: UUID,
+    session: AsyncSession,
+) -> bool:
+    result = await session.execute(
+        select(WorkflowNode.id).where(
+            WorkflowNode.workflow_version_id == version_id,
+            WorkflowNode.node_type == "trigger.schedule",
+        ).limit(1)
+    )
+    return result.scalar_one_or_none() is not None
 
 
 async def publish_workflow(
@@ -1265,9 +1358,7 @@ async def publish_workflow(
             Workflow.workspace_id == workspace_id,
         )
     )
-
     workflow = workflow_result.scalar_one_or_none()
-
     if workflow is None:
         return None
 
@@ -1277,9 +1368,7 @@ async def publish_workflow(
             WorkflowVersion.version == version_number,
         )
     )
-
     version = version_result.scalar_one_or_none()
-
     if version is None:
         return None
 
@@ -1298,18 +1387,19 @@ async def publish_workflow(
             workspace_id=workspace_id,
             session=session,
         )
-
         if validation_result is None:
             return None
-
         if not validation_result["valid"]:
             raise ValueError("Workflow validation failed")
 
-        version.status = "published"
+    has_schedule_trigger = await _published_version_has_schedule_trigger(
+        version.id, session
+    )
 
+    if not already_published:
+        version.status = "published"
         workflow.status = "active"
         workflow.published_version_id = version.id
-
         try:
             await session.commit()
             await session.refresh(version)
@@ -1317,12 +1407,29 @@ async def publish_workflow(
             await session.rollback()
             raise
 
+    client = IntegrationGrpcClient()
+    try:
+        await client.sync_workflow_schedule(
+            workflow_id=workflow_id,
+            workspace_id=workspace_id,
+            workflow_version_id=version.id,
+            has_schedule_trigger=has_schedule_trigger,
+            workflow_active=True,
+        )
+    except Exception as exc:
+        raise ScheduleSynchronizationError(
+            "Workflow was published, but schedule synchronization could not be confirmed."
+        ) from exc
+    finally:
+        await client.close()
+
     return {
         "id": version.id,
         "workflow_id": workflow_id,
         "version": version.version,
         "status": version.status,
     }
+
 
 async def deactivate_workflow(
     workflow_id: UUID,
@@ -1335,27 +1442,32 @@ async def deactivate_workflow(
             Workflow.workspace_id == workspace_id,
         )
     )
-
     workflow = workflow_result.scalar_one_or_none()
-
     if workflow is None:
         return None
-
     if workflow.published_version_id is None:
         raise ValueError("Workflow has no published version")
-
     if workflow.status == "inactive":
         raise ValueError("Workflow is already inactive")
 
-    workflow.status = "inactive"
+    # Suspend first so a failed gRPC request cannot leave an active schedule
+    # after the workflow is marked inactive.
+    client = IntegrationGrpcClient()
+    try:
+        await client.suspend_workflow_schedule(
+            workflow_id=workflow_id,
+            workspace_id=workspace_id,
+        )
+    finally:
+        await client.close()
 
+    workflow.status = "inactive"
     try:
         await session.commit()
         await session.refresh(workflow)
     except Exception:
         await session.rollback()
         raise
-
     return workflow
 
 
@@ -1370,25 +1482,36 @@ async def activate_workflow(
             Workflow.workspace_id == workspace_id,
         )
     )
-
     workflow = workflow_result.scalar_one_or_none()
-
     if workflow is None:
         return None
-
     if workflow.published_version_id is None:
         raise ValueError("Workflow has no published version")
-
     if workflow.status == "active":
         raise ValueError("Workflow is already active")
 
-    workflow.status = "active"
+    has_schedule_trigger = await _published_version_has_schedule_trigger(
+        workflow.published_version_id, session
+    )
 
+    workflow.status = "active"
     try:
         await session.commit()
         await session.refresh(workflow)
     except Exception:
         await session.rollback()
         raise
+
+    client = IntegrationGrpcClient()
+    try:
+        await client.sync_workflow_schedule(
+            workflow_id=workflow_id,
+            workspace_id=workspace_id,
+            workflow_version_id=workflow.published_version_id,
+            has_schedule_trigger=has_schedule_trigger,
+            workflow_active=True,
+        )
+    finally:
+        await client.close()
 
     return workflow

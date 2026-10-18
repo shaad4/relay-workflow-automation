@@ -9,25 +9,19 @@ function SearchIcon(props) {
   );
 }
 
-export default function WorkflowSearchEmptyState({ query = "", onClearSearch }) {
+export default function WorkflowSearchEmptyState({ query = "", statusFilter = "all", onClearSearch }) {
   return (
-    <div className="w-full bg-[var(--surface)] border border-[var(--border-subtle)] rounded-xl p-8 sm:p-12 text-center my-4 select-none">
-      <div className="mx-auto w-12 h-12 rounded-[8px] bg-[var(--elevated)] border border-[var(--border-subtle)] flex items-center justify-center mb-4 text-[var(--text-tertiary)]">
+    <div className="w-full bg-[var(--surface)] border border-[var(--border-subtle)] rounded-2xl px-6 py-12 text-center">
+      <div className="mx-auto w-12 h-12 rounded-xl bg-[var(--elevated)] border border-[var(--border-subtle)] flex items-center justify-center mb-4 text-[var(--text-tertiary)]">
         <SearchIcon className="w-6 h-6 stroke-[1.5]" />
       </div>
 
       <h3 className="text-[16px] font-semibold text-[var(--text-primary)] tracking-tight mb-1">
-        No workflows found
+        No matching workflows
       </h3>
 
-      <p className="text-[14px] text-[var(--text-secondary)] max-w-sm mx-auto mb-5 leading-relaxed">
-        {query ? (
-          <>
-            No workflows matching &quot;<span className="text-[var(--text-primary)] font-medium">{query}</span>&quot;.
-          </>
-        ) : (
-          "Try a different search term."
-        )}
+      <p className="text-[13px] text-[var(--text-secondary)] max-w-md mx-auto mb-5 leading-6 break-words">
+        {query.trim() ? <>No {statusFilter !== "all" ? `${statusFilter} ` : ""}workflows match “<span className="font-medium text-[var(--text-primary)]">{query.trim()}</span>”. Try another name or description.</> : `You don’t have any ${statusFilter === "all" ? "matching" : statusFilter} workflows. Choose another status to see more.`}
       </p>
 
       {onClearSearch && (
@@ -36,7 +30,7 @@ export default function WorkflowSearchEmptyState({ query = "", onClearSearch }) 
           onClick={onClearSearch}
           className="inline-flex items-center h-8 px-3 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--elevated)] text-[13px] font-medium text-[var(--text-primary)] transition-all duration-100 ease-out focus:outline-none focus:ring-1 focus:ring-[var(--accent)] cursor-pointer"
         >
-          Clear search
+          Reset filters
         </button>
       )}
     </div>
