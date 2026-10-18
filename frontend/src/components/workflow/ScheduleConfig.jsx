@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createSchedule, listSchedules, updateSchedule, deleteSchedule } from "@/services/schedules";
-import { getWorkflow, getWorkflowVersions, getWorkflowNodes } from "@/services/workflows";
-import { payloadDraftFromSchedule, parseTriggerPayload, readPayloadDraft, writePayloadDraft, clearPayloadDraft, createScheduleIfMissing, CRON_PRESETS, INTERVAL_PRESETS, normalizeSchedule, validateSchedule, schedulePayload, scheduleSummary, scheduleDate, scheduleStatus, scheduleError } from "./scheduleTrigger";
+import { createSchedule, listSchedules, getSchedule, updateSchedule, deleteSchedule } from "@/services/schedules";
+import { getWorkflow, getWorkflowVersions, getWorkflowNodes, publishWorkflow } from "@/services/workflows";
+import { refreshScheduleConfiguration, payloadDraftFromSchedule, parseTriggerPayload, readPayloadDraft, writePayloadDraft, clearPayloadDraft, reconcilePublishedSchedule, retryScheduleActivation, CRON_PRESETS, INTERVAL_PRESETS, normalizeSchedule, validateSchedule, schedulePayload, scheduleSummary, scheduleDate, scheduleStatus, scheduleError } from "./scheduleTrigger";
 
 const inputClass = "mt-1 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2 py-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] disabled:opacity-60";
 const buttonClass = "rounded-[6px] border border-[var(--border-default)] px-3 py-2 text-[11px] hover:bg-[var(--elevated)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] disabled:opacity-50 disabled:cursor-not-allowed";
@@ -30,7 +30,7 @@ function ScheduleFields({ config, onChange, disabled }) {
   </div>;
 }
 
-export default function ScheduleConfig({ config, onChange, isReadOnly, workflowId, revision }) {
+export default function ScheduleConfig({ config, onChange, isReadOnly, workflowId, revision, externalPending = false }) {
   const [payloadDraft, setPayloadDraft] = useState(() => readPayloadDraft(workflowId, draftStorage()));
   const payloadDraftRef = useRef(payloadDraft);
   const parsedPayload = parseTriggerPayload(payloadDraft.text);
@@ -38,11 +38,13 @@ export default function ScheduleConfig({ config, onChange, isReadOnly, workflowI
   const [activeConfig, setActiveConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [needsRefresh, setNeedsRefresh] = useState(false);
-  const [pending, setPending] = useState(false);
+  const [isSaving, setPending] = useState(false);
+  const pending = isSaving || externalPending;
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
+  const liveEditsRef = useRef({});
   const [refresh, setRefresh] = useState(0);
   const lock = useRef(false);
   const generation = useRef(0);
@@ -65,7 +67,7 @@ export default function ScheduleConfig({ config, onChange, isReadOnly, workflowI
       if (!cancelled) {
         setState({ workflow, schedule, trigger });
         setNeedsRefresh(false);
-        setActiveConfig((previous) => previous || normalizeSchedule(schedule || trigger?.config || trigger?.configuration || trigger?.data?.config));
+        setActiveConfig(refreshScheduleConfiguration(schedule || trigger?.configuration || trigger?.config || trigger?.data?.config, liveEditsRef.current));
         if (!payloadDraftRef.current.dirty) {
           const next = payloadDraftFromSchedule(payloadDraftRef.current, schedule);
           payloadDraftRef.current = next;
@@ -77,11 +79,17 @@ export default function ScheduleConfig({ config, onChange, isReadOnly, workflowI
     return () => { cancelled = true; generation.current += 1; };
   }, [workflowId, revision, refresh]);
   const mutate = async (action, savesPayload = false) => {
-    if (lock.current || loading || needsRefresh || !state) return;
+    if (lock.current || pending || loading || needsRefresh || !state) return;
     lock.current = true; setPending(true); setError(""); setNotice("");
     const currentGeneration = generation.current;
     try {
-      const result = await action();
+      let result = await action();
+      // The returned mutation alone is not enough after uncertain writes.
+      if (result) result = await getSchedule(result.id);
+      else {
+        const rows = rowsOf(await listSchedules());
+        result = rows.find((item) => String(item.workflow_id) === String(workflowId)) || null;
+      }
       if (generation.current !== currentGeneration) return;
       setState((previous) => ({ ...previous, schedule: result }));
       if (result) setActiveConfig(normalizeSchedule(result));
@@ -91,12 +99,13 @@ export default function ScheduleConfig({ config, onChange, isReadOnly, workflowI
         setPayloadDraft(next);
         clearPayloadDraft(workflowId, draftStorage());
       }
+      liveEditsRef.current = {};
       setEditing(false); setConfirmDelete(false); setNotice(result ? "Schedule saved." : "Schedule deleted. Future automatic runs have stopped.");
     } catch (failure) {
       if (generation.current === currentGeneration) { setError(scheduleError(failure)); setNeedsRefresh(true); setConfirmDelete(false); }
     } finally { lock.current = false; setPending(false); }
   };
-  const status = state ? scheduleStatus(state.workflow, Boolean(state.trigger), state.schedule) : "";
+  const status = needsRefresh ? "Scheduling needs attention" : state ? scheduleStatus(state.workflow, Boolean(state.trigger), state.schedule) : "";
   const canApply = state && Boolean(state.trigger) && ["active", "published"].includes(String(state.workflow.status).toLowerCase());
   const inconsistent = state?.schedule && state?.trigger && String(state.schedule.workflow_version_id) !== String(state.workflow.published_version_id);
   const schedule = state?.schedule;
@@ -120,19 +129,27 @@ export default function ScheduleConfig({ config, onChange, isReadOnly, workflowI
       <div className="flex items-center justify-between gap-2"><h3 className="font-semibold text-[var(--text-primary)]">Live schedule</h3>{status && <span className={`rounded-full border px-2 py-0.5 text-[10px] ${status === "Active" ? "border-emerald-500/30 text-emerald-500" : "border-[var(--border-default)]"}`}>{status}</span>}</div>
       {loading ? <p role="status">Loading schedule…</p> : state && <>
         {!schedule && <p className="leading-5">{canApply ? "No schedule exists. Activate scheduling using the published trigger configuration." : "Publish a Scheduled Trigger and activate the workflow to set up automatic runs."}</p>}
-        {inconsistent && <p role="alert" className="text-amber-500">The schedule does not match the published version. Refresh its state. If this persists, republish the workflow before updating scheduling.</p>}
+        {inconsistent && <p role="alert" className="text-amber-500">The schedule does not match the published version. Retry schedule activation to synchronize it.</p>}
         {schedule && <div className="space-y-2 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3"><p className="font-medium text-[var(--text-primary)]">{scheduleSummary(schedule)}</p><dl className="space-y-2 text-[10px]"><div><dt>Schedule type</dt><dd className="capitalize text-[var(--text-primary)]">{schedule.schedule_type}</dd></div><div><dt>Timezone</dt><dd className="text-[var(--text-primary)]">{schedule.timezone}</dd></div><div><dt>Next scheduled run</dt><dd className="text-[var(--text-primary)]">{scheduleDate(schedule.next_run_at, schedule.timezone)}</dd></div><div><dt>Last scheduled dispatch</dt><dd className="text-[var(--text-primary)]">{schedule.last_run_at ? scheduleDate(schedule.last_run_at, schedule.timezone) : "No dispatch yet"}</dd></div></dl><p className="text-[10px] text-[var(--text-tertiary)]">Times shown in {schedule.timezone}. Dispatch does not confirm execution success.</p></div>}
-        {schedule && <div className="flex flex-wrap gap-2"><button type="button" disabled={pending || needsRefresh || !canApply || inconsistent} onClick={() => mutate(() => updateSchedule(schedule.id, { enabled: !schedule.enabled }))} className={buttonClass}>{pending ? "Saving…" : schedule.enabled ? "Pause schedule" : "Resume schedule"}</button><button type="button" disabled={pending || needsRefresh || !canApply || inconsistent} onClick={() => setEditing(!editing)} className={buttonClass}>{editing ? "Cancel editing" : "Edit live schedule"}</button></div>}
-        {(!schedule || editing) && canApply && !inconsistent && <><p className="text-[10px] leading-4">{schedule ? "These changes apply directly to the live schedule. Its paused state is preserved unless you change Enabled." : "Review the published trigger configuration before activating."}</p><ScheduleFields key={`${schedule?.id || "new"}:${refresh}:${revision}`} config={activeConfig} onChange={setActiveConfig} disabled={pending}/><button type="button" disabled={pending || needsRefresh || Boolean(parsedPayload.error) || validateSchedule(activeConfig).length > 0} onClick={() => mutate(async () => {
+        {inconsistent && <button type="button" disabled={pending || needsRefresh} onClick={() => mutate(async () => {
+          const result = await retryScheduleActivation(workflowId, payloadDraftRef.current, { getWorkflow, getWorkflowVersions, getWorkflowNodes, publishWorkflow, listSchedules, getSchedule, createSchedule, updateSchedule });
+          return result.schedule;
+        }, true)} className={buttonClass}>Retry schedule activation</button>}
+        {schedule && <div className="flex flex-wrap gap-2"><button type="button" disabled={pending || needsRefresh || !canApply || inconsistent} onClick={() => mutate(() => updateSchedule(schedule.id, { enabled: !schedule.enabled || !schedule.next_run_at }))} className={buttonClass}>{pending ? "Saving…" : schedule.enabled && schedule.next_run_at ? "Pause schedule" : "Resume schedule"}</button><button type="button" disabled={pending || needsRefresh || !canApply || inconsistent} onClick={() => { liveEditsRef.current = {}; setActiveConfig(normalizeSchedule(schedule)); setEditing(!editing); }} className={buttonClass}>{editing ? "Cancel editing" : "Edit live schedule"}</button></div>}
+        {(!schedule || editing) && canApply && !inconsistent && <><p className="text-[10px] leading-4">{schedule ? "These changes apply directly to the live schedule. Its paused state is preserved unless you change Enabled." : "Review the published trigger configuration before activating."}</p><ScheduleFields key={`${schedule?.id || "new"}:${refresh}:${revision}`} config={activeConfig} onChange={(next) => { const baseline = normalizeSchedule(state.schedule || state.trigger?.configuration || state.trigger?.config); for (const field of ["schedule_type", "interval_minutes", "cron_expression", "timezone", "enabled"]) { if (next[field] !== activeConfig[field]) liveEditsRef.current[field] = next[field]; if (next[field] === baseline[field]) delete liveEditsRef.current[field]; } setActiveConfig(next); }} disabled={pending}/><button type="button" disabled={pending || needsRefresh || Boolean(parsedPayload.error) || validateSchedule(activeConfig).length > 0} onClick={() => mutate(async () => {
           const payload = parseTriggerPayload(payloadDraftRef.current.text);
           if (payload.error) throw new Error(payload.error);
           const configuration = { ...activeConfig, input_data: payload.input };
-          if (schedule) return updateSchedule(schedule.id, schedulePayload(configuration));
-          const saved = await createScheduleIfMissing(workflowId, configuration, { listSchedules, createSchedule });
-          // A concurrent creator may have won. Reuse its record and save only
-          // the payload explicitly submitted here, preserving its schedule.
-          if (JSON.stringify(saved.input_data ?? {}) !== JSON.stringify(payload.input)) return updateSchedule(saved.id, { input_data: payload.input });
-          return saved;
+          if (schedule) {
+            const changes = { ...liveEditsRef.current };
+            if (changes.schedule_type) Object.assign(changes, { interval_minutes: schedulePayload(configuration).interval_minutes, cron_expression: schedulePayload(configuration).cron_expression });
+            if (payloadDraftRef.current.dirty) changes.input_data = payload.input;
+            return updateSchedule(schedule.id, changes);
+          }
+          const result = await reconcilePublishedSchedule(workflowId, payloadDraftRef.current, {
+            getWorkflow, getWorkflowVersions, getWorkflowNodes, listSchedules, getSchedule, createSchedule, updateSchedule,
+          }, configuration);
+          return result.schedule;
         }, true)} className={`${buttonClass} w-full bg-[var(--accent)] text-white`}>{pending ? "Saving…" : schedule ? "Update Schedule" : "Activate schedule"}</button></>}
         {schedule && !editing && <button type="button" disabled={pending || needsRefresh || Boolean(parsedPayload.error) || !payloadDraft.dirty || Boolean(inconsistent)} onClick={() => {
           const payload = parseTriggerPayload(payloadDraftRef.current.text);

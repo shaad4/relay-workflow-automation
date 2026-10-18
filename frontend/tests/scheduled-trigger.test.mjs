@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { parseTriggerPayload, readPayloadDraft, writePayloadDraft, clearPayloadDraft, payloadDraftFromSchedule, createScheduleIfMissing, normalizeSchedule, validateSchedule, validCron, schedulePayload, scheduleNodePayload, scheduleStatus, scheduleDate } from "../src/components/workflow/scheduleTrigger.js";
+import { retryScheduleActivation, publishWithSchedule, reconcilePublishedSchedule, refreshScheduleConfiguration, parseTriggerPayload, readPayloadDraft, writePayloadDraft, clearPayloadDraft, payloadDraftFromSchedule, createScheduleIfMissing, normalizeSchedule, validateSchedule, validCron, schedulePayload, scheduleNodePayload, scheduleStatus, scheduleDate } from "../src/components/workflow/scheduleTrigger.js";
 import { validateNodeConfiguration } from "../src/components/workflow/configValidation.js";
 
 test("interval and cron node configurations round-trip with incompatible fields cleared", () => {
@@ -36,9 +36,9 @@ test("lifecycle statuses and backend timestamps remain distinct", () => {
   assert.equal(scheduleStatus({}, true, null), "Publish required");
   assert.equal(scheduleStatus(workflow, false, null), "Schedule unavailable");
   assert.equal(scheduleStatus({ ...workflow, status: "inactive" }, true, { enabled: true }), "Workflow inactive");
-  assert.equal(scheduleStatus(workflow, true, { enabled: false }), "Paused");
-  assert.equal(scheduleStatus(workflow, true, { enabled: true }), "Not scheduled");
-  assert.equal(scheduleStatus(workflow, true, { enabled: true, next_run_at: "2026-10-16T12:00:00Z" }), "Active");
+  assert.equal(scheduleStatus(workflow, true, { enabled: false, workflow_version_id: "version" }), "Paused");
+  assert.equal(scheduleStatus(workflow, true, { enabled: true, workflow_version_id: "version" }), "Scheduling needs attention");
+  assert.equal(scheduleStatus(workflow, true, { enabled: true, workflow_version_id: "version", next_run_at: "2026-10-16T12:00:00Z" }), "Active");
   assert.equal(scheduleDate(null, "UTC"), "Not scheduled");
   assert.match(scheduleDate("2026-10-16T12:00:00Z", "Asia/Kolkata"), /5:30 PM/);
 });
@@ -163,4 +163,148 @@ test("payload textarea is visible above live schedule for draft and published in
     assert.ok(markup.indexOf('id="schedule-trigger-payload"') < markup.indexOf('aria-label="Live schedule"'));
     assert.match(markup, /trigger.data.field_name/);
   }
+});
+
+function publishingFixture({ existing, trigger = "trigger.schedule", failPublish, failCreate, concurrent } = {}) {
+  const calls = [];
+  let workflow = { id: "workflow", status: "draft", published_version_id: null };
+  let schedule = existing;
+  const config = { schedule_type: "interval", interval_minutes: 5, cron_expression: null, timezone: "Asia/Kolkata", enabled: true };
+  const api = {
+    publishWorkflow: async () => {
+      calls.push("publish");
+      if (failPublish === "before") throw new Error("Validation failed");
+      workflow = { ...workflow, status: "active", published_version_id: "version" };
+      if (schedule) schedule = { ...schedule, workflow_version_id: "version" };
+      if (failPublish === "after") throw Object.assign(new Error("Schedule synchronization could not be confirmed"), { status: 503 });
+    },
+    getWorkflow: async () => { calls.push("workflow"); return { ...workflow }; },
+    getWorkflowVersions: async () => [{ id: "version", version: 2, status: "published" }],
+    getWorkflowNodes: async () => [{ node_type: trigger, configuration: config }],
+    listSchedules: async () => { calls.push("list"); return schedule ? [{ ...schedule }] : []; },
+    getSchedule: async () => { calls.push("get"); return { ...schedule }; },
+    createSchedule: async (data) => {
+      calls.push(["create", data]);
+      if (concurrent) {
+        schedule = { ...data, id: "concurrent", workflow_version_id: "version", next_run_at: "2026-10-18T12:00:00Z" };
+        throw Object.assign(new Error("Duplicate"), { status: 409 });
+      }
+      if (failCreate) throw Object.assign(new Error("Unavailable"), { status: 503 });
+      schedule = { ...data, id: "new", workflow_version_id: "version", next_run_at: data.enabled ? "2026-10-18T12:00:00Z" : null };
+      return { ...schedule };
+    },
+    updateSchedule: async (id, changes) => { calls.push(["update", id, changes]); schedule = { ...schedule, ...changes, next_run_at: schedule.enabled ? "2026-10-18T12:00:00Z" : null }; return { ...schedule }; },
+  };
+  return { api, calls, config };
+}
+
+test("Publish confirms publication before creating exactly one schedule using saved configuration and payload", async () => {
+  const { api, calls } = publishingFixture();
+  const result = await publishWithSchedule("workflow", 2, "version", { dirty: true, text: '{"test_id":"scheduled"}' }, api);
+  assert.equal(result.workflow.status, "active");
+  assert.equal(result.schedule.interval_minutes, 5);
+  assert.equal(result.schedule.timezone, "Asia/Kolkata");
+  assert.equal(result.schedule.workflow_version_id, "version");
+  assert.ok(result.schedule.next_run_at);
+  assert.deepEqual(result.schedule.input_data, { test_id: "scheduled" });
+  const creates = calls.filter((call) => Array.isArray(call) && call[0] === "create");
+  assert.equal(creates.length, 1);
+  assert.ok(calls.indexOf("publish") < calls.indexOf("workflow"));
+  assert.ok(calls.indexOf("workflow") < calls.indexOf(creates[0]));
+});
+
+test("Republish updates existing interval, keeps its ID, preserves payload and manual pause", async () => {
+  for (const enabled of [true, false]) {
+    const { api, calls } = publishingFixture({ existing: { id: "existing", workflow_id: "workflow", workflow_version_id: "old", schedule_type: "interval", interval_minutes: 30, cron_expression: null, timezone: "Asia/Kolkata", enabled, next_run_at: enabled ? "2026-10-18T12:00:00Z" : null, input_data: { report: "keep" } } });
+    const result = await publishWithSchedule("workflow", 2, "version", { dirty: false, text: "{}" }, api);
+    assert.equal(result.schedule.id, "existing");
+    assert.equal(result.schedule.workflow_version_id, "version");
+    assert.equal(result.schedule.interval_minutes, 5);
+    assert.equal(result.schedule.enabled, enabled);
+    assert.deepEqual(result.schedule.input_data, { report: "keep" });
+    if (!enabled) assert.equal(result.schedule.next_run_at, null);
+    assert.equal(calls.filter((call) => call[0] === "create").length, 0);
+    assert.deepEqual(calls.find((call) => call[0] === "update")[2], { interval_minutes: 5 });
+    const again = await reconcilePublishedSchedule("workflow", { dirty: false }, api);
+    assert.equal(again.schedule.id, "existing");
+    assert.equal(calls.filter((call) => call[0] === "update").length, 1);
+  }
+});
+
+test("Publish failures before commit never create schedules; post-commit failures retain published state", async () => {
+  const failed = publishingFixture({ failPublish: "before" });
+  await assert.rejects(publishWithSchedule("workflow", 2, "version", {}, failed.api), /Validation failed/);
+  assert.equal(failed.calls.includes("list"), false);
+  const committed = publishingFixture({ failPublish: "after" });
+  let published = false;
+  const outcome = await publishWithSchedule("workflow", 2, "version", {}, committed.api, () => { published = true; });
+  assert.equal(published, true);
+  assert.equal(outcome.workflow.status, "active");
+  assert.match(outcome.publicationWarning, /synchronization/);
+  assert.ok(outcome.schedule);
+});
+
+test("Schedule POST failure leaves publication intact and retry reconciles without republishing", async () => {
+  const { api, calls } = publishingFixture({ failCreate: true });
+  let published = false;
+  const result = await publishWithSchedule("workflow", 2, "version", {}, api, () => { published = true; });
+  assert.equal(published, true);
+  assert.equal(result.workflow.status, "active");
+  assert.match(result.schedulingError, /unavailable/);
+  assert.equal(calls.filter((call) => call[0] === "create").length, 1);
+  assert.equal(calls.filter((call) => call === "list").length, 2);
+  api.createSchedule = async (data) => ({ ...data, id: "recovered", workflow_version_id: "version", next_run_at: "2026-10-18T12:00:00Z" });
+  api.getSchedule = async () => ({ id: "recovered", enabled: true, workflow_version_id: "version", next_run_at: "2026-10-18T12:00:00Z" });
+  assert.equal((await reconcilePublishedSchedule("workflow", {}, api)).schedule.id, "recovered");
+  assert.equal(calls.filter((call) => call === "publish").length, 1);
+});
+
+test("Concurrent creation refreshes after 409 without a second POST", async () => {
+  const { api, calls } = publishingFixture({ concurrent: true });
+  const result = await publishWithSchedule("workflow", 2, "version", {}, api);
+  assert.equal(result.schedule.id, "concurrent");
+  assert.equal(calls.filter((call) => call[0] === "create").length, 1);
+  assert.equal(calls.filter((call) => call === "list").length, 2);
+});
+
+test("Manual and Webhook publishing never create or reactivate schedules", async () => {
+  for (const trigger of ["trigger.manual", "trigger.webhook"]) {
+    const { api, calls } = publishingFixture({ trigger });
+    const result = await publishWithSchedule("workflow", 2, "version", {}, api);
+    assert.equal(result.scheduled, false);
+    assert.equal(calls.includes("list"), false);
+    assert.equal(result.schedule, null);
+  }
+});
+
+test("Version mismatch and missing/invalid next-run data cannot display Active", () => {
+  const workflow = { status: "active", published_version_id: "new" };
+  const schedule = { enabled: true, workflow_version_id: "old", next_run_at: "2026-10-18T12:00:00Z" };
+  assert.equal(scheduleStatus(workflow, true, schedule), "Version mismatch");
+  assert.equal(scheduleStatus(workflow, true, { ...schedule, workflow_version_id: "new", next_run_at: "invalid" }), "Scheduling needs attention");
+  assert.equal(scheduleStatus(workflow, true, null), "Schedule not created");
+  assert.equal(scheduleStatus(workflow, false, schedule), "Schedule unavailable");
+});
+
+test("Refreshing live configuration replaces untouched stale values while preserving edited fields", () => {
+  const refreshed = refreshScheduleConfiguration({ interval_minutes: 5, timezone: "UTC", enabled: false }, { timezone: "Asia/Kolkata" });
+  assert.equal(refreshed.interval_minutes, 5);
+  assert.equal(refreshed.timezone, "Asia/Kolkata");
+  assert.equal(refreshed.enabled, false);
+});
+
+
+test("Activation recovery retries lifecycle synchronization only for a confirmed version mismatch", async () => {
+  const fixture = publishingFixture();
+  await fixture.api.publishWorkflow();
+  let version = "old";
+  const record = { id: "existing", workflow_id: "workflow", ...fixture.config, input_data: {}, next_run_at: "2026-10-18T12:00:00Z" };
+  fixture.api.listSchedules = async () => [{ ...record, workflow_version_id: version }];
+  fixture.api.getSchedule = async () => ({ ...record, workflow_version_id: version });
+  fixture.api.publishWorkflow = async () => { fixture.calls.push("sync-retry"); version = "version"; };
+  const result = await retryScheduleActivation("workflow", {}, fixture.api);
+  assert.equal(result.schedule.workflow_version_id, "version");
+  assert.equal(fixture.calls.filter((call) => call === "sync-retry").length, 1);
+  await retryScheduleActivation("workflow", {}, fixture.api);
+  assert.equal(fixture.calls.filter((call) => call === "sync-retry").length, 1);
 });

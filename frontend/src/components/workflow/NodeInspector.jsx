@@ -857,6 +857,7 @@ export default function NodeInspector({
   workflowId,
   workflowVersionId,
   scheduleRevision,
+  scheduleBusy = false,
   className = "",
   workflowNodes = [],
   workflowEdges = [],
@@ -1003,7 +1004,7 @@ export default function NodeInspector({
           if (onUpdateNode) onUpdateNode(selectedNode.id, { config: nextConfig });
         }} />;
       case "trigger.schedule":
-        return <ScheduleConfig key={`${selectedNode.id}:${scheduleRevision}`} config={formData} onChange={handleFieldChange} isReadOnly={isReadOnly} workflowId={workflowId} revision={scheduleRevision} />;
+        return <ScheduleConfig key={`${selectedNode.id}:${scheduleRevision}`} config={formData} onChange={handleFieldChange} isReadOnly={isReadOnly} workflowId={workflowId} revision={scheduleRevision} externalPending={scheduleBusy} />;
       case "trigger.manual":
         return <ManualConfig config={formData} onChange={handleFieldChange} isReadOnly={isReadOnly} />;
       case "action.http_request":

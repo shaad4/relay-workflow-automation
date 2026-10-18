@@ -249,21 +249,54 @@ async def update_schedule(
         elif changes["schedule_type"] == "cron":
             changes["interval_minutes"] = None
 
+    # Validate against the current published definition before allowing any
+    # update to put a suspended schedule back on the due queue.
+    compatible = False
+    client = WorkflowGrpcClient()
+    try:
+        published = await client.get_published_version(
+            workflow_id=str(schedule.workflow_id), workspace_id=str(workspace_id),
+        )
+        definition = await client.get_workflow_definition(
+            workflow_id=str(schedule.workflow_id), version_id=published.version_id,
+            workspace_id=str(workspace_id),
+        )
+        nodes = json.loads(definition.nodes_json)
+        triggers = [node for node in nodes if isinstance(node, dict) and str(node.get("node_type", "")).startswith("trigger.")]
+        compatible = (
+            str(schedule.workflow_version_id) == str(published.version_id)
+            and len(triggers) == 1 and triggers[0]["node_type"] == "trigger.schedule"
+        )
+    except grpc.aio.AioRpcError as exc:
+        if exc.code() not in {grpc.StatusCode.NOT_FOUND, grpc.StatusCode.FAILED_PRECONDITION}:
+            raise HTTPException(
+                status_code=504 if exc.code() == grpc.StatusCode.DEADLINE_EXCEEDED else 503,
+                detail="Workflow eligibility could not be confirmed. Refresh before retrying.",
+            ) from exc
+    except (ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(status_code=502, detail="Invalid published workflow definition") from exc
+    finally:
+        await client.close()
+
+    explicit_resume = changes.get("enabled") is True
+    if explicit_resume and not compatible:
+        raise HTTPException(status_code=409, detail="Activate a compatible published workflow and synchronize its schedule before resuming.")
+
+    configuration = {field: changes.get(field, getattr(schedule, field)) for field in (
+        "schedule_type", "interval_minutes", "cron_expression", "timezone",
+    )}
+    next_run = calculate_next_run(
+        schedule_type=configuration["schedule_type"],
+        interval_minutes=configuration["interval_minutes"],
+        cron_expression=configuration["cron_expression"],
+        timezone_name=configuration["timezone"],
+    )
+    enabled = changes.get("enabled", schedule.enabled)
+    # enabled=true,next_run_at=null is lifecycle suspension, not consent to resume.
+    may_schedule = compatible and enabled and (schedule.next_run_at is not None or explicit_resume)
     for field, value in changes.items():
         setattr(schedule, field, value)
-
-    # Validate the complete updated configuration,
-    # not only the submitted fields.
-    next_run = calculate_next_run(
-        schedule_type=schedule.schedule_type,
-        interval_minutes=schedule.interval_minutes,
-        cron_expression=schedule.cron_expression,
-        timezone_name=schedule.timezone,
-    )
-
-    schedule.next_run_at = (
-        next_run if schedule.enabled else None
-    )
+    schedule.next_run_at = next_run if may_schedule else None
 
     await session.commit()
     await session.refresh(schedule)

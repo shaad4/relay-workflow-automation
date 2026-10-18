@@ -513,3 +513,22 @@ def test_auth_dependency_rejects_invalid_token_and_closes_client(monkeypatch):
     assert error.value.status_code == 401
     assert error.value.detail == "Invalid or expired access token"
     assert calls == {"token": "bad-token", "closed": True}
+
+
+def test_get_workflow_includes_published_version_id(client, monkeypatch):
+    async def get_workflow(**kwargs):
+        return SimpleNamespace(**{**vars(workflow), "published_version_id": VERSION_ID})
+    monkeypatch.setattr(workflows, "get_workflow", get_workflow)
+    response = client.get(f"/workflows/{WORKFLOW_ID}/")
+    assert response.status_code == 200
+    assert response.json()["published_version_id"] == str(VERSION_ID)
+
+
+def test_publish_reports_schedule_sync_failure_after_commit(client, monkeypatch):
+    async def publish(**kwargs):
+        raise workflows.ScheduleSynchronizationError("already committed")
+    monkeypatch.setattr(workflows, "publish_workflow", publish)
+    response = client.post(f"/workflows/{WORKFLOW_ID}/versions/1/publish/")
+    assert response.status_code == 503
+    assert "Workflow published" in response.json()["detail"]
+    assert "scheduling needs attention" in response.json()["detail"]

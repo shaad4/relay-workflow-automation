@@ -8,6 +8,8 @@ import {
   addEdge,
 } from "@xyflow/react";
 
+import * as scheduleApi from "@/services/schedules";
+import { publishWithSchedule, readPayloadDraft, clearPayloadDraft, retryScheduleActivation } from "./scheduleTrigger";
 import { workflowSaveSnapshot, workflowChangedDuringSave } from "./workflowSaveState";
 import WorkflowToolbar from "./WorkflowToolbar";
 import NodeLibrary from "./NodeLibrary";
@@ -27,8 +29,14 @@ import {
   updateWorkflowEdge,
   validateWorkflow,
   publishWorkflow,
+  getWorkflow,
+  getWorkflowVersions,
+  getWorkflowNodes,
   createDraftVersion,
 } from "@/services/workflows";
+
+const scheduleOperations = { ...scheduleApi, publishWorkflow, getWorkflow, getWorkflowVersions, getWorkflowNodes };
+const payloadStorage = () => { try { return window.sessionStorage; } catch { return undefined; } };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Icons
@@ -392,6 +400,8 @@ export default function WorkflowBuilder({
   const [saveState, setSaveState] = useState("saved");
   const [saveError, setSaveError] = useState(null);
   const [builderNotice, setBuilderNotice] = useState("");
+  const [publicationWarning, setPublicationWarning] = useState("");
+  const [scheduleRevision, setScheduleRevision] = useState(0);
   const [isValidating, setIsValidating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
@@ -1172,24 +1182,30 @@ export default function WorkflowBuilder({
           return;
         }
         if (editRevisionRef.current !== publishRevision) throw new Error("Workflow changed during validation. Save your changes and retry publishing.");
-        const published = await publishWorkflow(workflowId, versionNumber);
-        if (published?.status !== "published") throw new Error("Publishing was not confirmed.");
+        const outcome = await publishWithSchedule(
+          workflowId, versionNumber, version?.id,
+          () => readPayloadDraft(workflowId, payloadStorage()), scheduleOperations,
+          (publishedWorkflow) => { setCurrentVersionStatus("published"); onRefresh(publishedWorkflow); },
+        );
+        if (outcome.schedule && outcome.payloadDraft?.dirty && readPayloadDraft(workflowId, payloadStorage()).text === outcome.payloadDraft.text) clearPayloadDraft(workflowId, payloadStorage());
+        setPublicationWarning(outcome.schedulingError
+          ? `Workflow published — scheduling needs attention. ${outcome.schedulingError}`
+          : outcome.publicationWarning || "");
+        setScheduleRevision((value) => value + 1);
       }
-      setCurrentVersionStatus("published");
       const scheduledNode = serverNodesRef.current.find((node) => node.node_type === "trigger.schedule");
       if (scheduledNode) { setSelectedNodeId(scheduledNode.rfId); setSelectedEdgeId(null); setIsInspectorOpen(true); }
-      onRefresh();
     } catch (err) {
       setValidationResult({ isValid: false, errors: [{
         code: "PUBLISH_FAILED",
-        message: err?.status ? `Publishing failed: ${err.message}` : "Publishing could not be confirmed. Check your connection, reload the version, and retry. Any changes made during validation must be saved first.",
+        message: err?.status && err.status < 500 ? `Publishing failed: ${err.message}` : "Publishing could not be confirmed. Refresh workflow state before retrying; publication may already have completed. Any changes made during validation must be saved first.",
       }] });
       setValidationOpen(true);
     } finally {
       publishingRef.current = false;
       setIsPublishing(false);
     }
-  }, [isCanvasReadOnly, saveState, handleSave, workflowId, versionNumber, onRefresh, nodes, edges]);
+  }, [isCanvasReadOnly, saveState, handleSave, workflowId, versionNumber, onRefresh, nodes, edges, version]);
 
   // ── Edit Workflow (create draft from published) ───────────────────────────
   const handleEditWorkflow = useCallback(async () => {
@@ -1244,6 +1260,17 @@ export default function WorkflowBuilder({
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full w-full bg-[var(--canvas)] select-none overflow-hidden font-sans">
+      {publicationWarning && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-[var(--text-primary)]"><span>{publicationWarning}</span><button type="button" disabled={isPublishing} onClick={async () => {
+        if (publishingRef.current) return;
+        publishingRef.current = true; setIsPublishing(true);
+        const draft = readPayloadDraft(workflowId, payloadStorage());
+        try {
+          const result = await retryScheduleActivation(workflowId, draft, scheduleOperations);
+          if (result.schedule && draft.dirty && readPayloadDraft(workflowId, payloadStorage()).text === draft.text) clearPayloadDraft(workflowId, payloadStorage());
+          onRefresh(result.workflow); setPublicationWarning("");
+        } catch (error) { setPublicationWarning(`Workflow published — scheduling needs attention. ${error.message}`); }
+        finally { publishingRef.current = false; setIsPublishing(false); setScheduleRevision((value) => value + 1); }
+      }} className="rounded border border-[var(--border-default)] px-3 py-1.5 disabled:opacity-50">Retry schedule activation</button></div>}
       {builderNotice && <div role="alert" className="fixed left-1/2 top-4 z-[140] flex -translate-x-1/2 items-center gap-2 rounded-lg border border-amber-500/30 bg-[var(--surface)] px-4 py-3 text-[12px] text-[var(--text-primary)] shadow-xl"><span className="grid h-5 w-5 place-items-center rounded-full border border-amber-500/40 text-amber-500">!</span><span>{builderNotice}</span><button type="button" onClick={() => setBuilderNotice("")} aria-label="Dismiss notification" className="ml-2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">×</button></div>}
       {/* ── 1. Top Toolbar ─────────────────────────────────────────────────── */}
       <WorkflowToolbar
@@ -1434,7 +1461,8 @@ export default function WorkflowBuilder({
               isReadOnly={isCanvasReadOnly || isPublishing}
               workflowId={workflowId}
               workflowVersionId={version?.id}
-              scheduleRevision={`${currentVersionStatus}:${workflow?.status}:${workflow?.published_version_id}`}
+              scheduleBusy={isPublishing}
+              scheduleRevision={`${currentVersionStatus}:${workflow?.status}:${workflow?.published_version_id}:${scheduleRevision}`}
               workflowNodes={nodes}
               workflowEdges={edges}
               onSelectEdge={handleEdgeSelect}

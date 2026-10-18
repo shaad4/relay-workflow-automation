@@ -19,6 +19,10 @@ from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
 from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
 from app.grpc.integration_client import IntegrationGrpcClient
 
+class ScheduleSynchronizationError(RuntimeError):
+    """Publication committed, but schedule lifecycle synchronization failed."""
+
+
 async def create_workflow(
     data: WorkflowCreate,
     workspace_id: str,
@@ -1398,6 +1402,10 @@ async def publish_workflow(
             has_schedule_trigger=has_schedule_trigger,
             workflow_active=True,
         )
+    except Exception as exc:
+        raise ScheduleSynchronizationError(
+            "Workflow was published, but schedule synchronization could not be confirmed."
+        ) from exc
     finally:
         await client.close()
 

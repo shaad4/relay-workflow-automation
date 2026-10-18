@@ -60,9 +60,10 @@ export function scheduleDate(value, timezone) {
 export function scheduleStatus(workflow, available, schedule) {
   if (!workflow?.published_version_id) return "Publish required";
   if (!available) return "Schedule unavailable";
-  if (!["active", "published"].includes(String(workflow.status).toLowerCase())) return "Workflow inactive";
-  if (!schedule) return "Ready to set up";
-  return !schedule.enabled ? "Paused" : schedule.next_run_at ? "Active" : "Not scheduled";
+  if (String(workflow.status).toLowerCase() !== "active") return "Workflow inactive";
+  if (!schedule) return "Schedule not created";
+  if (String(schedule.workflow_version_id) !== String(workflow.published_version_id)) return "Version mismatch";
+  return !schedule.enabled ? "Paused" : schedule.next_run_at && Number.isFinite(Date.parse(schedule.next_run_at)) ? "Active" : "Scheduling needs attention";
 }
 export function scheduleError(error) {
   return ({ 401: "Your session has expired. Sign in again.", 404: "The workflow or schedule was not found. Refresh its state.", 409: "The schedule conflicts with the current workflow. Refresh, check that the workflow is active and its published version contains a Scheduled Trigger, then try again.", 422: "The schedule was rejected. Check the interval, five-field cron expression, timezone, and JSON input.", 503: "Scheduling is temporarily unavailable. Try again later.", 504: "The request timed out. Refresh schedule state before trying again." })[error?.status] || "The request could not be confirmed. Refresh schedule state before trying again.";
@@ -108,4 +109,88 @@ export function clearPayloadDraft(workflowId, storage) {
 
 export function payloadDraftFromSchedule(draft, schedule) {
   return draft.dirty ? draft : { text: JSON.stringify(schedule?.input_data ?? {}, null, 2), dirty: false };
+}
+
+const scheduleRows = (response, key) => Array.isArray(response) ? response : response?.[key] || response?.results || response?.data || [];
+const canonicalJSON = (value) => JSON.stringify(value, (_, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+
+export async function reconcilePublishedSchedule(workflowId, payloadDraft, api, intendedConfig) {
+  const workflow = await api.getWorkflow(workflowId);
+  if (!workflow.published_version_id) throw new Error("Publish this workflow before activating its schedule.");
+  const versions = scheduleRows(await api.getWorkflowVersions(workflowId), "versions");
+  const version = versions.find((item) => String(item.id) === String(workflow.published_version_id));
+  if (!version || version.status !== "published") throw new Error("The published workflow version could not be confirmed. Refresh and try again.");
+  const nodes = scheduleRows(await api.getWorkflowNodes(workflowId, version.version_number ?? version.version), "nodes");
+  const trigger = nodes.find((node) => (node.node_type || node.type || node.data?.typeId) === "trigger.schedule");
+  if (!trigger) return { workflow, schedule: null, scheduled: false };
+  if (workflow.status !== "active") throw new Error("Activate the workflow before scheduling automatic runs.");
+  const config = intendedConfig ?? trigger.configuration ?? trigger.config ?? trigger.data?.config ?? {};
+  const parsed = payloadDraft?.dirty ? parseTriggerPayload(payloadDraft.text) : { input: {} };
+  if (parsed.error) throw new Error(parsed.error);
+  const findExisting = async () => scheduleRows(await api.listSchedules(), "schedules").find((item) => String(item.workflow_id) === String(workflowId));
+  let existing = await findExisting();
+  if (!existing) {
+    const desired = schedulePayload({ ...config, input_data: parsed.input });
+    const errors = validateSchedule(desired);
+    if (errors.length) throw new Error(errors[0].message);
+    try { existing = await api.createSchedule({ workflow_id: workflowId, ...desired }); }
+    catch (error) {
+      // Reconcile an uncertain POST once; never blindly repeat a creation.
+      if (error.status && ![409, 503, 504].includes(error.status)) throw error;
+      existing = await findExisting();
+      if (!existing) throw error;
+    }
+  }
+  if (String(existing.workflow_version_id) !== String(workflow.published_version_id)) throw Object.assign(new Error("Schedule version mismatch. Workflow publication succeeded, but lifecycle synchronization needs attention. Retry schedule activation to synchronize the published version."), { code: "SCHEDULE_VERSION_MISMATCH" });
+  const desired = schedulePayload({ ...config, enabled: existing.enabled, input_data: payloadDraft?.dirty ? parsed.input : existing.input_data ?? {} });
+  const errors = validateSchedule(desired);
+  if (errors.length) throw new Error(errors[0].message);
+  const changes = {};
+  for (const field of ["schedule_type", "interval_minutes", "cron_expression", "timezone", "input_data"]) {
+    if (canonicalJSON(existing[field] ?? null) !== canonicalJSON(desired[field])) changes[field] = desired[field];
+  }
+  if (Object.keys(changes).length) await api.updateSchedule(existing.id, changes);
+  const schedule = await api.getSchedule(existing.id);
+  if (String(schedule.workflow_version_id) !== String(workflow.published_version_id)) throw new Error("Schedule version mismatch. Refresh schedule state and retry activation.");
+  if (schedule.enabled && (!schedule.next_run_at || !Number.isFinite(Date.parse(schedule.next_run_at)))) throw new Error("Automatic scheduling could not be confirmed. Refresh schedule state and explicitly resume the schedule if appropriate.");
+  return { workflow, schedule, scheduled: true };
+}
+
+export async function publishWithSchedule(workflowId, versionNumber, versionId, payloadDraft, api, onPublished = () => {}) {
+  let publicationError;
+  try { await api.publishWorkflow(workflowId, versionNumber); }
+  catch (error) { publicationError = error; }
+  let workflow;
+  try { workflow = await api.getWorkflow(workflowId); }
+  catch (error) { throw publicationError || error; }
+  if (String(workflow.published_version_id) !== String(versionId) || workflow.status !== "active") {
+    throw publicationError || new Error("Publishing was not confirmed. Refresh workflow state before retrying.");
+  }
+  onPublished(workflow);
+  const draft = typeof payloadDraft === "function" ? payloadDraft() : payloadDraft;
+  try {
+    const result = await reconcilePublishedSchedule(workflowId, draft, api);
+    return { ...result, payloadDraft: draft, publicationWarning: publicationError ? `Workflow published, but lifecycle synchronization was not fully confirmed. ${publicationError.message || "Refresh its state before retrying synchronization."}` : null };
+  } catch (error) {
+    return { workflow, schedulingError: error.status ? scheduleError(error) : error.message };
+  }
+}
+
+export function refreshScheduleConfiguration(configuration, unsavedChanges = {}) {
+  return { ...normalizeSchedule(configuration), ...unsavedChanges };
+}
+
+export async function retryScheduleActivation(workflowId, payloadDraft, api) {
+  try { return await reconcilePublishedSchedule(workflowId, payloadDraft, api); }
+  catch (error) {
+    if (error.code !== "SCHEDULE_VERSION_MISMATCH") throw error;
+    const workflow = await api.getWorkflow(workflowId);
+    const versions = scheduleRows(await api.getWorkflowVersions(workflowId), "versions");
+    const version = versions.find((item) => String(item.id) === String(workflow.published_version_id));
+    if (!version || workflow.status !== "active") throw error;
+    // The publish endpoint is idempotent for this already-published active
+    // version: retry its lifecycle synchronization, without a new publication.
+    await api.publishWorkflow(workflowId, version.version_number ?? version.version);
+    return reconcilePublishedSchedule(workflowId, payloadDraft, api);
+  }
 }

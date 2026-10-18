@@ -11,6 +11,7 @@ from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeResponse, 
 from app.schemas.workflow_version import WorkflowVersionResponse
 from app.schemas.workflow_edge import WorkflowEdgeResponse, WorkflowEdgeCreate, WorkflowEdgeUpdate
 from app.services.workflow_service import (
+    ScheduleSynchronizationError,
     create_workflow,
     list_workflows,
     get_workflow,
@@ -589,6 +590,11 @@ async def publish_workflow_version_route(
             workspace_id=identity["workspace_id"],
             session=session,
         )
+    except ScheduleSynchronizationError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Workflow published — scheduling needs attention. Schedule synchronization could not be confirmed. Refresh workflow and schedule state before retrying activation.",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
