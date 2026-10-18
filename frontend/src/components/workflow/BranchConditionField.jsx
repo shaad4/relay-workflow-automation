@@ -1,5 +1,6 @@
 "use client";
 
+import { InspectorInput, InspectorSelect } from "./InspectorControls";
 import { branchOptions } from "./branchOptions";
 
 export default function BranchConditionField({ edge, source, nodes, edges, isReadOnly, onChange }) {
@@ -14,13 +15,13 @@ export default function BranchConditionField({ edge, source, nodes, edges, isRea
       <label className="block">
         <span className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">{isBranch ? "Run this branch when" : "Condition label"}</span>
         {options !== null ? (
-          <select aria-label="Branch outcome" aria-invalid={!!stale} value={value} disabled={isReadOnly} onChange={(event) => onChange(event.target.value)} className={className}>
+          <InspectorSelect aria-label="Branch outcome" aria-invalid={!!stale} value={value} readOnly={isReadOnly} onChange={(event) => onChange(event.target.value)} className={className}>
             <option value="">Choose an outcome…</option>
             {stale && <option value={value} disabled>{value} — unavailable</option>}
             {options.map((option) => <option key={option.value} value={option.value} disabled={used.has(option.value) && option.value !== value}>{option.label}{used.has(option.value) && option.value !== value ? " — already connected" : ""}</option>)}
-          </select>
+          </InspectorSelect>
         ) : (
-          <input value={value} disabled={isReadOnly} onChange={(event) => onChange(event.target.value)} placeholder={isBranch ? "Exact outcome value" : "Optional label"} maxLength={255} className={className} />
+          <InspectorInput value={value} readOnly={isReadOnly} onChange={(event) => onChange(event.target.value)} placeholder={isBranch ? "Exact outcome value" : "Optional label"} maxLength={255} className={className} />
         )}
       </label>
       {stale && <p role="alert" className="mt-1 text-[10px] text-red-500">This outcome is no longer available. Choose a current outcome.</p>}

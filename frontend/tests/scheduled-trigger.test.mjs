@@ -152,13 +152,26 @@ test("payload textarea is visible above live schedule for draft and published in
   const helpers = await import("../src/components/workflow/scheduleTrigger.js");
   const source = await readFile(new URL("../src/components/workflow/ScheduleConfig.jsx", import.meta.url), "utf8");
   const compiled = await transform(source, { filename: "ScheduleConfig.jsx", jsc: { parser: { syntax: "ecmascript", jsx: true }, transform: { react: { runtime: "automatic" } } }, module: { type: "commonjs" } });
+  const controlsSource = await readFile(new URL("../src/components/workflow/InspectorControls.jsx", import.meta.url), "utf8");
+  const controlsCompiled = await transform(controlsSource, { filename: "InspectorControls.jsx", jsc: { parser: { syntax: "ecmascript", jsx: true }, transform: { react: { runtime: "automatic" } } }, module: { type: "commonjs" } });
+  const controls = {};
+  new Function("require", "exports", controlsCompiled.code)(require, controls);
   const exports = {};
-  const importMock = (name) => name === "./scheduleTrigger" ? helpers : name.startsWith("@/services/") ? {} : require(name);
+  const importMock = (name) => name === "./InspectorControls" ? controls : name === "./scheduleTrigger" ? helpers : name.startsWith("@/services/") ? {} : require(name);
   new Function("require", "exports", compiled.code)(importMock, exports);
   for (const isReadOnly of [false, true]) {
     const markup = renderToStaticMarkup(React.createElement(exports.default, { config: normalizeSchedule(), onChange() {}, workflowId: "visible-payload-test", isReadOnly }));
     assert.match(markup, /Trigger Payload \(JSON\)/);
     assert.match(markup, /Optional/);
+    const payloadTag = markup.match(/<textarea[^>]*id="schedule-trigger-payload"[^>]*>/)[0];
+    assert.equal(payloadTag.includes('readOnly=""'), isReadOnly);
+    assert.ok(!payloadTag.includes('disabled=""'));
+    if (isReadOnly) {
+      assert.ok(!markup.match(/<fieldset[^>]*disabled=""/));
+      assert.match(markup, /<button[^>]*aria-label="Schedule enabled"[^>]*disabled=""/);
+      assert.match(markup, /<input[^>]*aria-label="Interval in minutes"[^>]*readOnly=""/);
+      assert.match(markup, /<input[^>]*readOnly=""[^>]*value="Asia\/Kolkata"/);
+    }
     assert.match(markup, /<textarea[^>]*id="schedule-trigger-payload"[^>]*>\{\}<\/textarea>/);
     assert.ok(markup.indexOf('id="schedule-trigger-payload"') < markup.indexOf('aria-label="Live schedule"'));
     assert.match(markup, /trigger.data.field_name/);
