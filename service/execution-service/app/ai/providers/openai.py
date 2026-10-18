@@ -25,7 +25,7 @@ class OpenAIProvider(AIProvider):
 
         client = AsyncOpenAI(
             api_key=api_key,
-            timeout=30.0,
+            timeout=90.0,
             max_retries=0,
         )
 
