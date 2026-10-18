@@ -289,7 +289,7 @@ def test_validate_workflow_reports_empty_workflow_and_invalid_edges():
     }
 
 
-def test_publish_workflow_updates_version_and_workflow():
+def test_publish_workflow_updates_version_and_workflow(integration_client):
     import asyncio
 
     draft = SimpleNamespace(id=VERSION_ID, version=3, status="draft")
@@ -304,6 +304,7 @@ def test_publish_workflow_updates_version_and_workflow():
             Result(scalar=draft),
             Result(scalars=[SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={})]),
             Result(scalars=[]),
+            Result(scalar=None),  # Published version has no Scheduled Trigger.
         ]
     )
     published = asyncio.run(
@@ -315,8 +316,14 @@ def test_publish_workflow_updates_version_and_workflow():
     assert active_workflow.published_version_id == VERSION_ID
     assert session.commits == 1
 
+    integration_client.sync_workflow_schedule.assert_awaited_once_with(
+        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
+        workflow_version_id=VERSION_ID, has_schedule_trigger=False, workflow_active=True,
+    )
+    integration_client.close.assert_awaited_once()
 
-def test_delete_workflow_returns_false_when_missing_and_deletes_when_found():
+
+def test_delete_workflow_returns_false_when_missing_and_deletes_when_found(integration_client):
     missing_session = FakeSession([Result(scalar=None)])
     assert asyncio.run(
         service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, missing_session)
@@ -330,9 +337,14 @@ def test_delete_workflow_returns_false_when_missing_and_deletes_when_found():
     assert session.deleted == [found]
     assert session.commits == 1
 
+    integration_client.delete_workflow_schedule.assert_awaited_once_with(
+        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
+    )
+    integration_client.close.assert_awaited_once()
+
 
 @pytest.mark.parametrize("status", ["draft", "inactive"])
-def test_delete_workflow_accepts_draft_and_inactive(status):
+def test_delete_workflow_accepts_draft_and_inactive(status, integration_client):
     workflow = SimpleNamespace(id=WORKFLOW_ID, status=status)
     session = FakeSession([Result(scalar=workflow), Result(), Result(), Result(), Result()])
 
@@ -341,6 +353,11 @@ def test_delete_workflow_accepts_draft_and_inactive(status):
     ) is True
     assert session.deleted == [workflow]
     assert session.commits == 1
+    integration_client.delete_workflow_schedule.assert_awaited_once_with(
+        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
+    )
+    integration_client.close.assert_awaited_once()
+
 
 
 def test_delete_workflow_rolls_back_if_cascade_delete_fails():
@@ -480,7 +497,7 @@ def test_validate_workflow_reports_duplicate_node_ids():
     assert result["errors"][0]["code"] == "DUPLICATE_NODE_ID"
 
 
-def test_activate_and_deactivate_require_published_version():
+def test_activate_and_deactivate_require_published_version(integration_client):
     unpublished = SimpleNamespace(published_version_id=None, status="inactive")
     session = FakeSession([Result(scalar=unpublished)])
     with pytest.raises(ValueError, match="no published version"):
@@ -498,6 +515,11 @@ def test_activate_and_deactivate_require_published_version():
     )
     assert deactivated.status == "inactive"
     assert session.commits == 1
+
+    integration_client.suspend_workflow_schedule.assert_awaited_once_with(
+        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
+    )
+    integration_client.close.assert_awaited_once()
 
 
 def test_publish_rejects_invalid_workflow():
@@ -623,7 +645,7 @@ def test_delete_node_and_edge_return_none_when_not_found():
 
 @pytest.mark.parametrize(
     ("operation", "result_count"),
-    [("workflow", 1), ("node", 1), ("edge", 1), ("draft", 4), ("publish", 6)],
+    [("workflow", 1), ("node", 1), ("edge", 1), ("draft", 4), ("publish", 7)],
 )
 def test_mutation_failures_roll_back(operation, result_count):
     from app.schemas.workflow_edge import WorkflowEdgeCreate
@@ -643,7 +665,7 @@ def test_mutation_failures_roll_back(operation, result_count):
         "node": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=None)],
         "edge": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=object()), Result(scalar=object())],
         "draft": [Result(scalar=workflow), Result(scalars=[draft]), Result(scalars=[]), Result(scalars=[])],
-        "publish": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=workflow), Result(scalar=draft), Result(scalars=[SimpleNamespace(node_id="ok", node_type="trigger.webhook", configuration={})]), Result(scalars=[])],
+        "publish": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=workflow), Result(scalar=draft), Result(scalars=[SimpleNamespace(node_id="ok", node_type="trigger.webhook", configuration={})]), Result(scalars=[]), Result(scalar=None)],
     }
     session = FakeSession(results_by_operation[operation], fail_commit=True)
     with pytest.raises(RuntimeError, match="commit failed"):
@@ -768,7 +790,7 @@ def test_list_edges_and_validation_missing_workflow_or_version():
     assert asyncio.run(service.validate_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, missing_version)) is None
 
 
-def test_publish_requires_draft_and_activation_transitions():
+def test_publish_requires_draft_and_activation_transitions(integration_client):
     workflow = SimpleNamespace(id=WORKFLOW_ID, status="inactive", published_version_id=VERSION_ID)
     published = SimpleNamespace(id=VERSION_ID, version=1, status="published")
     session = FakeSession([Result(scalar=workflow), Result(scalar=published)])
@@ -781,7 +803,13 @@ def test_publish_requires_draft_and_activation_transitions():
         asyncio.run(service.deactivate_workflow(WORKFLOW_ID, WORKSPACE_ID, session))
 
     inactive.status = "inactive"
-    session = FakeSession([Result(scalar=inactive)])
+    session = FakeSession([Result(scalar=inactive), Result(scalar=None)])
     activated = asyncio.run(service.activate_workflow(WORKFLOW_ID, WORKSPACE_ID, session))
     assert activated.status == "active"
     assert session.commits == 1
+
+    integration_client.sync_workflow_schedule.assert_awaited_once_with(
+        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
+        workflow_version_id=VERSION_ID, has_schedule_trigger=False, workflow_active=True,
+    )
+    integration_client.close.assert_awaited_once()
