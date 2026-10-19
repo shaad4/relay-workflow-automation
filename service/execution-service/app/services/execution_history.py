@@ -113,3 +113,35 @@ class ExecutionHistoryService:
             "error": execution.error,
         }
 
+
+    
+    async def list_execution_steps(
+        self,
+        execution_id: UUID,
+        workspace_id: UUID,
+    ) -> list[dict] | None:
+        steps = await self.repository.list_execution_steps(
+            execution_id=execution_id,
+            workspace_id=workspace_id,
+        )
+
+        if steps is None:
+            return None
+
+        return [
+            {
+                "id": step.id,
+                "execution_id": step.execution_id,
+                "node_id": step.node_id,
+                "status": step.status,
+                "sequence": step.sequence,
+                "attempt": step.attempt,
+                "started_at": step.started_at,
+                "completed_at": step.completed_at,
+                "duration_ms": step.duration_ms,
+                "created_at": step.created_at,
+            }
+            for step in steps
+        ]
+
+

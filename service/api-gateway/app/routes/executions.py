@@ -41,6 +41,17 @@ async def get_execution_details(
     )
 
 
+@router.get("/{execution_id}/steps/")
+async def get_execution_steps(
+    request: Request,
+    execution_id: str,
+):
+    return await proxy_execution_request(
+        request,
+        f"{execution_id}/steps",
+    )
+
+
 async def proxy_execution_request(
     request: Request,
     path: str,

@@ -5,6 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.execution import Execution
+from app.models.execution_step import ExecutionStep
 
 
 class ExecutionRepository:
@@ -93,4 +94,54 @@ class ExecutionRepository:
 
             raise RuntimeError(
                 "Failed to retrieve execution details"
+            ) from exc
+
+
+    async def list_execution_steps(
+        self,
+        execution_id: UUID,
+        workspace_id: UUID,
+    ) -> list[ExecutionStep] | None:
+        try:
+            statement = (
+                select(ExecutionStep)
+                .join(
+                    Execution,
+                    ExecutionStep.execution_id == Execution.id,
+                )
+                .where(
+                    Execution.id == execution_id,
+                    Execution.workspace_id == workspace_id,
+                )
+                .order_by(
+                    ExecutionStep.sequence.asc(),
+                    ExecutionStep.created_at.asc(),
+                    ExecutionStep.id.asc(),
+                )
+            )
+
+            result = await self.session.execute(
+                statement
+            )
+
+            steps = list(result.scalars().all())
+
+            # Distinguish an unknown execution
+            # from a valid execution with no steps.
+            if not steps:
+                execution = await self.get_execution_by_id(
+                    execution_id=execution_id,
+                    workspace_id=workspace_id,
+                )
+
+                if execution is None:
+                    return None
+
+            return steps
+
+        except SQLAlchemyError as exc:
+            await self.session.rollback()
+
+            raise RuntimeError(
+                "Failed to retrieve execution steps"
             ) from exc

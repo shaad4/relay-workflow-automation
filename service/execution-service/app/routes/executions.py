@@ -9,6 +9,7 @@ from app.repositories.execution import ExecutionRepository
 from app.schemas.executions import (
     ExecutionListResponse,
     ExecutionDetailResponse,
+    ExecutionStepsListResponse,
 )
 from app.services.execution_history import ExecutionHistoryService
 
@@ -85,4 +86,41 @@ async def get_execution_details(
         raise HTTPException(
             status_code=500,
             detail="Unable to retrieve execution details",
+        ) from exc
+
+
+
+
+@router.get(
+    "/{execution_id}/steps/",
+    response_model=ExecutionStepsListResponse,
+)
+async def get_execution_steps(
+    execution_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        workspace_id = UUID(identity["workspace_id"])
+
+        repository = ExecutionRepository(session)
+        service = ExecutionHistoryService(repository)
+
+        steps = await service.list_execution_steps(
+            execution_id=execution_id,
+            workspace_id=workspace_id,
+        )
+
+        if steps is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Execution not found",
+            )
+
+        return {"items": steps}
+
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve execution steps",
         ) from exc

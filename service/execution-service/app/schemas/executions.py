@@ -28,3 +28,23 @@ class ExecutionListResponse(BaseModel):
 class ExecutionDetailResponse(ExecutionListItem):
     workspace_id: UUID
     error: dict | None = None
+
+
+class ExecutionStepResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    execution_id: UUID
+    node_id: str
+    status: str
+    sequence: int = Field(ge=1)
+    attempt: int = Field(ge=1)
+    started_at: datetime | None
+    completed_at: datetime | None
+    duration_ms: int | None = Field(default=None, ge=0)
+    created_at: datetime
+
+
+class ExecutionStepsListResponse(BaseModel):
+    items: list[ExecutionStepResponse]
+
