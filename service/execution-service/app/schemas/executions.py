@@ -10,6 +10,7 @@ class ExecutionListItem(BaseModel):
     id: UUID
     workflow_id: UUID
     workflow_version_id: UUID
+    workflow_name: str | None = None
     status: str
     trigger_type: str
     started_at: datetime | None
@@ -36,6 +37,8 @@ class ExecutionStepResponse(BaseModel):
     id: UUID
     execution_id: UUID
     node_id: str
+    node_name: str | None = None
+    node_type: str | None = None
     status: str
     sequence: int = Field(ge=1)
     attempt: int = Field(ge=1)

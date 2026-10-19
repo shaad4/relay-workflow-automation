@@ -50,6 +50,7 @@ class ExecutionHistoryService:
                         "workflow_version_id": (
                             execution.workflow_version_id
                         ),
+                        "workflow_name": execution.workflow_name,
                         "status": execution.status,
                         "trigger_type": execution.trigger_type,
                         "started_at": execution.started_at,
@@ -104,6 +105,7 @@ class ExecutionHistoryService:
             "workspace_id": execution.workspace_id,
             "workflow_id": execution.workflow_id,
             "workflow_version_id": execution.workflow_version_id,
+            "workflow_name": execution.workflow_name,
             "status": execution.status,
             "trigger_type": execution.trigger_type,
             "started_at": execution.started_at,
@@ -133,6 +135,8 @@ class ExecutionHistoryService:
                 "id": step.id,
                 "execution_id": step.execution_id,
                 "node_id": step.node_id,
+                "node_name": step.node_name,
+                "node_type": step.node_type,
                 "status": step.status,
                 "sequence": step.sequence,
                 "attempt": step.attempt,
