@@ -67,3 +67,30 @@ class ExecutionRepository:
             raise RuntimeError(
                 "Failed to retrieve execution history"
             ) from exc
+
+
+    
+    async def get_execution_by_id(
+        self,
+        execution_id: UUID,
+        workspace_id: UUID,
+    ) -> Execution | None:
+        try:
+            statement = (
+                select(Execution)
+                .where(
+                    Execution.id == execution_id,
+                    Execution.workspace_id == workspace_id,
+                )
+            )
+
+            result = await self.session.execute(statement)
+
+            return result.scalar_one_or_none()
+
+        except SQLAlchemyError as exc:
+            await self.session.rollback()
+
+            raise RuntimeError(
+                "Failed to retrieve execution details"
+            ) from exc

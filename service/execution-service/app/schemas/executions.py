@@ -23,3 +23,8 @@ class ExecutionListResponse(BaseModel):
     total: int = Field(ge=0)
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
+
+
+class ExecutionDetailResponse(ExecutionListItem):
+    workspace_id: UUID
+    error: dict | None = None
