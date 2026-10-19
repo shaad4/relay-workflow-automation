@@ -101,6 +101,30 @@ async def run_execution(
             workspace_id=workspace_id,
         )
 
+        workflow_name = response.workflow_name
+
+        async with AsyncSessionLocal() as session:
+            execution = await session.get(
+                Execution,
+                execution_id,
+            )
+
+            if execution is None:
+                raise ValueError(
+                    "Execution not found"
+                )
+
+            if execution.workspace_id != UUID(workspace_id):
+                raise ValueError(
+                    "Execution does not belong to workspace"
+                )
+
+            if execution.workflow_name is None:
+                execution.workflow_name = workflow_name
+
+                await _commit_session(session)
+
+
         nodes = json.loads(response.nodes_json)
         edges = json.loads(response.edges_json)
 
@@ -710,6 +734,7 @@ async def run_execution(
         return {
             "workflow_id": workflow_id,
             "workflow_version_id": workflow_version_id,
+            "workflow_name": workflow_name,
             "execution_order": execution_order,
             "action_nodes": action_nodes,
             "context": context.to_dict(),
