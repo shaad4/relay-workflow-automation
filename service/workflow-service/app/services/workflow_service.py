@@ -1377,8 +1377,13 @@ async def publish_workflow(
         and workflow.published_version_id == version.id
         and workflow.status == "active"
     )
-    if version.status != "draft" and not already_published:
-        raise ValueError("Only draft versions can be published")
+    # Historical published snapshots can be explicitly restored after the live
+    # version was deleted. Activation alone must never choose a replacement.
+    restoring_deleted_publication = (
+        version.status == "published" and workflow.published_version_id is None
+    )
+    if version.status != "draft" and not already_published and not restoring_deleted_publication:
+        raise ValueError("Only draft versions can be published unless restoring a workflow with no live version")
 
     if not already_published:
         validation_result = await validate_workflow(

@@ -216,6 +216,10 @@ export default function WorkflowToolbar({
 
   const toggleWorkflowStatus = async () => {
     if (isTogglingWorkflow) return;
+    if (normalizedWorkflowStatus !== "active" && !publishedVersionId) {
+      setWorkflowStatusError("Publish a version before activating this workflow.");
+      return;
+    }
     setIsTogglingWorkflow(true);
     setWorkflowStatusError("");
     try {
@@ -294,9 +298,9 @@ export default function WorkflowToolbar({
               role="switch"
               aria-checked={normalizedWorkflowStatus === "active"}
               aria-label={`${normalizedWorkflowStatus === "active" ? "Deactivate" : "Activate"} entire workflow`}
-              title="Switch applies to the entire workflow, across all versions"
+              title={normalizedWorkflowStatus !== "active" && !publishedVersionId ? "Publish a version before activating this workflow" : "Activate or deactivate the workflow’s live version"}
               onClick={() => { setWorkflowStatusError(""); setShowWorkflowStatusConfirm(true); }}
-              disabled={isTogglingWorkflow}
+              disabled={isTogglingWorkflow || (normalizedWorkflowStatus !== "active" && !publishedVersionId)}
               className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50 disabled:cursor-not-allowed disabled:opacity-60 ${normalizedWorkflowStatus === "active" ? "bg-[#3FB950]" : "bg-[var(--border-strong)]"}`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${normalizedWorkflowStatus === "active" ? "translate-x-[18px]" : "translate-x-0.5"}`} />
@@ -470,7 +474,8 @@ export default function WorkflowToolbar({
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-red-500/25 bg-red-500/10 font-mono text-[15px] text-red-500">!</span>
               <div>
                 <h2 id="workflow-version-delete-title" className="text-[15px] font-semibold text-[var(--text-primary)]">Delete version {versionToDelete.version_number ?? versionToDelete.version}?</h2>
-                <p className="mt-1.5 text-[12px] leading-5 text-[var(--text-secondary)]">This permanently removes this version’s nodes and connections. Its webhook endpoints and credentials will also be revoked. Other versions are not affected.</p>
+                <p className="mt-1.5 text-[12px] leading-5 text-[var(--text-secondary)]">This permanently removes this version’s nodes and connections. Its webhook endpoints and credentials will also be revoked. Other versions are preserved.</p>
+                {versionToDelete.id === publishedVersionId && <p className="mt-3 rounded-md border border-amber-500/25 bg-amber-500/5 p-3 text-xs leading-5 text-[var(--text-primary)]">This is the workflow’s live version. After deleting it, the workflow will remain inactive until you explicitly publish another version. An older version will not be activated automatically.</p>}
               </div>
             </div>
             {deleteVersionError && <p role="alert" className="mt-3 rounded-lg border border-red-500/25 bg-red-500/5 p-2.5 text-[11px] text-red-500">{deleteVersionError}</p>}
@@ -574,8 +579,8 @@ export default function WorkflowToolbar({
           <span>Validate</span>
         </button>
 
-        {/* Publish (draft only) */}
-        {!isReadOnly && (
+        {/* Draft publication or explicit recovery of a historical snapshot. */}
+        {(!isReadOnly || !publishedVersionId) && (
           <button
             type="button"
             onClick={onPublish}
@@ -587,7 +592,7 @@ export default function WorkflowToolbar({
             ) : (
               <RocketIcon className="w-3.5 h-3.5 stroke-[1.5]" />
             )}
-            <span>Publish</span>
+            <span>{isPublishing ? "Publishing…" : isReadOnly ? `Publish v${versionNumber} & activate` : "Publish"}</span>
           </button>
         )}
       </div>

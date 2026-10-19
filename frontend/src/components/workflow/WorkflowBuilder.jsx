@@ -1150,7 +1150,7 @@ export default function WorkflowBuilder({
 
   // ── Publish ───────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async () => {
-    if (isCanvasReadOnly || publishingRef.current) return;
+    if ((isCanvasReadOnly && workflow?.published_version_id) || publishingRef.current) return;
     if (savingRef.current) {
       setValidationResult({ isValid: false, errors: [{ code: "SAVE_IN_PROGRESS", message: "Wait for the current save to finish, then retry publishing." }] });
       setValidationOpen(true);
@@ -1209,7 +1209,7 @@ export default function WorkflowBuilder({
       publishingRef.current = false;
       setIsPublishing(false);
     }
-  }, [isCanvasReadOnly, saveState, handleSave, workflowId, versionNumber, onRefresh, nodes, edges, version]);
+  }, [isCanvasReadOnly, workflow?.published_version_id, saveState, handleSave, workflowId, versionNumber, onRefresh, nodes, edges, version]);
 
   // ── Edit Workflow (create draft from published) ───────────────────────────
   const handleEditWorkflow = useCallback(async () => {
@@ -1264,6 +1264,7 @@ export default function WorkflowBuilder({
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full w-full bg-[var(--canvas)] select-none overflow-hidden font-sans">
+      {!workflow?.published_version_id && workflow?.status === "inactive" && <div role="status" className="flex flex-wrap items-center gap-2 border-b border-amber-500/25 bg-amber-500/5 px-4 py-2.5 text-xs text-[var(--text-secondary)]"><span className="font-medium text-[var(--text-primary)]">No live version.</span> Choose a version, review it, and publish it to activate this workflow.</div>}
       {publicationWarning && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-[var(--text-primary)]"><span>{publicationWarning}</span><button type="button" disabled={isPublishing} onClick={async () => {
         if (publishingRef.current) return;
         publishingRef.current = true; setIsPublishing(true);

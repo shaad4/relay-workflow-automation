@@ -813,3 +813,58 @@ def test_publish_requires_draft_and_activation_transitions(integration_client):
         workflow_version_id=VERSION_ID, has_schedule_trigger=False, workflow_active=True,
     )
     integration_client.close.assert_awaited_once()
+
+
+@pytest.mark.parametrize("has_schedule", [False, True])
+def test_restore_historical_publication_after_live_version_deleted(monkeypatch, integration_client, has_schedule):
+    from unittest.mock import AsyncMock
+    workflow = SimpleNamespace(id=WORKFLOW_ID, status="inactive", published_version_id=None)
+    version = SimpleNamespace(id=VERSION_ID, version=5, status="published")
+    validate = AsyncMock(return_value={"valid": True, "errors": []})
+    monkeypatch.setattr(service, "validate_workflow", validate)
+    session = FakeSession([Result(scalar=workflow), Result(scalar=version), Result(scalar=uuid4() if has_schedule else None)])
+    result = asyncio.run(service.publish_workflow(WORKFLOW_ID, 5, WORKSPACE_ID, session))
+    assert result["id"] == VERSION_ID
+    assert workflow.published_version_id == VERSION_ID
+    assert workflow.status == "active"
+    assert session.commits == 1
+    validate.assert_awaited_once()
+    integration_client.sync_workflow_schedule.assert_awaited_once_with(
+        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
+        workflow_version_id=VERSION_ID, has_schedule_trigger=has_schedule, workflow_active=True,
+    )
+
+
+def test_restore_requires_valid_historical_version(monkeypatch, integration_client):
+    from unittest.mock import AsyncMock
+    workflow = SimpleNamespace(id=WORKFLOW_ID, status="inactive", published_version_id=None)
+    version = SimpleNamespace(id=VERSION_ID, version=5, status="published")
+    monkeypatch.setattr(service, "validate_workflow", AsyncMock(return_value={"valid": False}))
+    session = FakeSession([Result(scalar=workflow), Result(scalar=version)])
+    with pytest.raises(ValueError, match="validation failed"):
+        asyncio.run(service.publish_workflow(WORKFLOW_ID, 5, WORKSPACE_ID, session))
+    assert workflow.published_version_id is None
+    assert workflow.status == "inactive"
+    assert session.commits == 0
+    integration_client.sync_workflow_schedule.assert_not_awaited()
+
+
+def test_recovery_cannot_silently_replace_an_existing_live_version(integration_client):
+    workflow = SimpleNamespace(id=WORKFLOW_ID, status="inactive", published_version_id=uuid4())
+    version = SimpleNamespace(id=VERSION_ID, version=5, status="published")
+    session = FakeSession([Result(scalar=workflow), Result(scalar=version)])
+    with pytest.raises(ValueError, match="Only draft versions"):
+        asyncio.run(service.publish_workflow(WORKFLOW_ID, 5, WORKSPACE_ID, session))
+    assert session.commits == 0
+    integration_client.sync_workflow_schedule.assert_not_awaited()
+
+
+def test_deleting_live_version_leaves_explicit_publication_required():
+    workflow = SimpleNamespace(id=WORKFLOW_ID, status="inactive", published_version_id=VERSION_ID)
+    version = SimpleNamespace(id=VERSION_ID, version=6, status="published")
+    session = FakeSession([Result(scalar=workflow), Result(scalar=version), Result(), Result()])
+    assert asyncio.run(service.delete_workflow_version(WORKFLOW_ID, 6, WORKSPACE_ID, session))
+    assert workflow.published_version_id is None
+    assert workflow.status == "inactive"
+    assert session.deleted == [version]
+    assert session.commits == 1
