@@ -30,6 +30,16 @@ class ExecutionStep(Base):
         index=True,
     )
 
+    node_name: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
+    node_type: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
