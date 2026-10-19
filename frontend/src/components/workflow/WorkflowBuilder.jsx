@@ -8,12 +8,14 @@ import {
   addEdge,
 } from "@xyflow/react";
 
+import { canvasExecutionState } from "@/lib/executions";
 import * as scheduleApi from "@/services/schedules";
 import { publishWithSchedule, readPayloadDraft, clearPayloadDraft, retryScheduleActivation } from "./scheduleTrigger";
 import { workflowSaveSnapshot, workflowChangedDuringSave } from "./workflowSaveState";
 import WorkflowToolbar from "./WorkflowToolbar";
 import NodeLibrary from "./NodeLibrary";
 import WorkflowCanvas from "./WorkflowCanvas";
+import WorkflowExecutionPanel from "./WorkflowExecutionPanel";
 import NodeInspector from "./NodeInspector";
 import BranchConditionField from "./BranchConditionField";
 import WorkflowValidation from "./WorkflowValidation";
@@ -373,6 +375,11 @@ export default function WorkflowBuilder({
   // ── UI states ─────────────────────────────────────────────────────────────
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [getViewportCenter, setGetViewportCenter] = useState(null);
+  const [executionSnapshot, setExecutionSnapshot] = useState(null);
+  const [runRequest, setRunRequest] = useState(null);
+  const [executionFocus, setExecutionFocus] = useState(null);
+  const canvasNodes = useMemo(() => canvasExecutionState(nodes, executionSnapshot, version?.id).nodes, [nodes, executionSnapshot, version?.id]);
+  const focusExecutionNode = useCallback((nodeId) => setExecutionFocus({ nodeId, key: Date.now() }), []);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
@@ -1276,6 +1283,7 @@ export default function WorkflowBuilder({
         onNavigate={navigateWithGuard}
         workflowDescription={workflow?.description || ""}
         workflowId={workflowId}
+        onRunRequested={(request) => { setExecutionSnapshot(null); setRunRequest(request); }}
         onWorkflowUpdated={onRefresh}
         onWorkflowStatusChange={(status) => onRefresh({ status })}
         onWorkflowDeleted={() => router.push("/workflows")}
@@ -1396,7 +1404,8 @@ export default function WorkflowBuilder({
           )}
 
           <WorkflowCanvas
-            nodes={nodes}
+            executionFocus={executionFocus}
+            nodes={canvasNodes}
             edges={edges}
             onNodesChange={handleNodeChanges}
             onEdgesChange={handleEdgesChange}
@@ -1411,6 +1420,13 @@ export default function WorkflowBuilder({
             onContextMenu={handleCanvasContextMenu}
             isReadOnly={isCanvasReadOnly || isPublishing}
           />
+
+          <WorkflowExecutionPanel key={runRequest?.requestedAt || "initial"} workflowId={workflowId} versionId={version?.id} runRequest={runRequest} onSnapshot={setExecutionSnapshot} onFocusNode={focusExecutionNode} nodes={nodes} canViewRunVersion={saveState === "saved"} onViewRunVersion={(runVersionId) => {
+            if (saveState !== "saved") return;
+            const target = versions.find(item => item.id === runVersionId);
+            if (target) onSelectVersion(target.version_number ?? target.version);
+            else setBuilderNotice("This run’s workflow version is no longer available.");
+          }}/>
 
           {contextMenu && (
             <div

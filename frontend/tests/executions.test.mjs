@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
-  formatDuration, formatTime, normalizeStatus, pollingDelay, statusLabel, workflowName,
+  canvasExecutionState, latestCanvasRun, formatDuration, formatTime, normalizeStatus, pollingDelay, statusLabel, workflowName,
   validateExecutionList, validateExecutionSteps, executionError,
 } from "../src/lib/executions.js";
 
@@ -92,4 +92,45 @@ test("execution API uses authenticated shared requests, supported filters, encod
     await api.getExecutions();
     assert.equal(calls[3][0], "/executions/?page=1&page_size=10");
   } finally { delete globalThis.__executionApiTest; }
+});
+
+test("canvas discovery prefers active runs of the displayed version and scopes to the workflow", () => {
+  const run = (id, version, status, time, workflow = "wf") => ({ id, workflow_id: workflow, workflow_version_id: version, status, created_at: time });
+  const active = run("active", "v1", "running", "2026-10-19T10:00:00Z");
+  const other = run("other-version", "v2", "running", "2026-10-19T11:00:00Z");
+  const completed = run("done", "v1", "completed", "2026-10-19T10:30:00Z");
+  assert.equal(latestCanvasRun([other, completed, active], "wf", "v1").id, "active");
+  assert.equal(latestCanvasRun([other, completed], "wf", "v1").id, "done");
+  assert.equal(latestCanvasRun([other], "wf", "v1").id, "other-version");
+  assert.equal(latestCanvasRun([active], "different-workflow", "v1"), null);
+  assert.equal(latestCanvasRun([], "wf", "v1"), null);
+});
+
+test("branched canvases show only recorded nodes, including concurrent active steps", () => {
+  const nodes = ["condition", "approved", "rejected", "parallel"].map(nodeId => ({ id: `uuid-${nodeId}`, data: { nodeId } }));
+  const snapshot = { execution: { workflow_version_id: "v6", status: "running" }, steps: [
+    { node_id: "condition", sequence: 1, attempt: 1, status: "completed" },
+    { node_id: "approved", sequence: 2, attempt: 1, status: "running" },
+    { node_id: "parallel", sequence: 3, attempt: 1, status: "running" },
+  ] };
+  const result = canvasExecutionState(nodes, snapshot, "v6");
+  assert.deepEqual(result.nodes.map(node => node.data.executionStatus), ["completed", "running", undefined, "running"]);
+  assert.equal(result.unmatched.length, 0);
+  assert.equal(nodes[0].data.executionStatus, undefined);
+  const otherVersion = canvasExecutionState(nodes, snapshot, "v5");
+  assert.equal(otherVersion.matchingVersion, false);
+  assert.ok(otherVersion.nodes.every(node => !node.data.executionStatus));
+});
+
+test("canvas mapping uses latest attempt, reports missing IDs, and stops terminal motion", () => {
+  const nodes = [{ id: "node", data: { nodeId: "logical" } }];
+  const snapshot = { execution: { workflow_version_id: "v1", status: "completed" }, steps: [
+    { node_id: "logical", sequence: 1, attempt: 2, status: "completed" },
+    { node_id: "logical", sequence: 1, attempt: 1, status: "running" },
+    { node_id: "missing", sequence: 2, attempt: 1, status: "completed" },
+  ] };
+  const result = canvasExecutionState(nodes, snapshot, "v1");
+  assert.equal(result.nodes[0].data.executionStatus, "completed");
+  assert.equal(result.nodes[0].data.executionActive, false);
+  assert.equal(result.unmatched[0].node_id, "missing");
 });

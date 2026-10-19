@@ -44,3 +44,14 @@ test('revision guard detects edits before React updates the canvas ref', () => {
   const current = { nodes: [node()], edges: [] };
   assert.equal(workflowChangedDuringSave(workflowSaveSnapshot(current.nodes, current.edges), current, 1, 2), true);
 });
+
+test('live execution status changes never mark the workflow as unsaved', () => {
+  const original = node();
+  const saved = workflowSaveSnapshot([original], []);
+  for (const executionStatus of ['pending', 'running', 'completed', 'failed', 'waiting_for_approval']) {
+    const decorated = { ...original, data: { ...original.data, executionStatus } };
+    assert.equal(workflowChangedDuringSave(saved, { nodes: [decorated], edges: [] }, 1, 1), false);
+    assert.equal(JSON.parse(workflowSaveSnapshot([decorated], [])).nodes[0].executionStatus, undefined);
+  }
+  assert.equal(original.data.executionStatus, undefined);
+});

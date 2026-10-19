@@ -62,3 +62,34 @@ export function validateExecutionSteps(data) {
   }
   return { ...data, items: [...data.items].sort((a, b) => a.sequence - b.sequence || a.attempt - b.attempt || a.id.localeCompare(b.id)) };
 }
+
+// Prefer runs from the canvas version; never paint another version's activity.
+export function latestCanvasRun(runs, workflowId, versionId) {
+  const matching = runs.filter(run => run.workflow_id === workflowId);
+  const compatible = matching.filter(run => run.workflow_version_id === versionId);
+  const newest = list => [...list].sort((a, b) =>
+    (Date.parse(b.created_at || b.started_at) || 0) - (Date.parse(a.created_at || a.started_at) || 0));
+  return newest(compatible.filter(run => pollingDelay(run.status) !== null))[0]
+    || newest(compatible)[0] || newest(matching)[0] || null;
+}
+
+// Match recorded steps independently: topology does not imply a branch executed.
+export function canvasExecutionState(nodes, snapshot, versionId) {
+  const matchingVersion = Boolean(snapshot && versionId && snapshot.execution.workflow_version_id === versionId);
+  const byNode = new Map();
+  const steps = matchingVersion ? snapshot.steps : [];
+  for (const step of steps) {
+    const previous = byNode.get(String(step.node_id));
+    if (!previous || step.sequence > previous.sequence ||
+        (step.sequence === previous.sequence && step.attempt >= previous.attempt)) byNode.set(String(step.node_id), step);
+  }
+  const matchedIds = new Set();
+  const decorated = nodes.map(node => {
+    const logicalId = String(node.data?.nodeId ?? node.data?.node_id ?? node.id);
+    const step = byNode.get(logicalId);
+    if (step) matchedIds.add(String(step.node_id));
+    return { ...node, data: { ...node.data, executionStatus: step?.status,
+      executionActive: matchingVersion && ["running", "pending"].includes(normalizeStatus(snapshot.execution.status)) } };
+  });
+  return { nodes: decorated, matchingVersion, unmatched: steps.filter(step => !matchedIds.has(String(step.node_id))) };
+}

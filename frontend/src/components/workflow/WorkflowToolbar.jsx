@@ -67,6 +67,7 @@ export default function WorkflowToolbar({
   workflowDescription = "",
   workflowId,
   onWorkflowUpdated,
+  onRunRequested,
   onWorkflowStatusChange,
   onWorkflowDeleted,
   onNavigate,
@@ -486,7 +487,7 @@ export default function WorkflowToolbar({
 
       {/* Right: Save indicator + actions */}
       <div className="flex items-center gap-3 shrink-0">
-        <RunWorkflowButton workflowId={workflowId} workflowName={workflowName} workflowStatus={workflowStatus} publishedVersionId={publishedVersionId} versions={versions} draftNodes={workflowNodes} />
+        <RunWorkflowButton onRunRequested={onRunRequested} workflowId={workflowId} workflowName={workflowName} workflowStatus={workflowStatus} publishedVersionId={publishedVersionId} versions={versions} draftNodes={workflowNodes} />
         {!isReadOnly && (
           <div className="flex items-center gap-1 border-r border-[var(--border-subtle)] pr-2">
             <button type="button" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" aria-label="Undo" className="h-8 w-8 rounded-[6px] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-35 disabled:cursor-not-allowed">↶</button>
