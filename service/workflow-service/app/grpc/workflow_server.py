@@ -27,9 +27,7 @@ class WorkflowInternalService(
             workflow = result.scalar_one_or_none()
 
             if not workflow or not workflow.published_version_id:
-                context.set_code(
-                    grpc.StatusCode.NOT_FOUND
-                )
+                context.set_code(grpc.StatusCode.NOT_FOUND)
                 context.set_details(
                     "Published workflow version not found"
                 )
@@ -45,9 +43,7 @@ class WorkflowInternalService(
             version = version_result.scalar_one_or_none()
 
             if not version:
-                context.set_code(
-                    grpc.StatusCode.NOT_FOUND
-                )
+                context.set_code(grpc.StatusCode.NOT_FOUND)
                 context.set_details(
                     "Published workflow version not found"
                 )
@@ -148,8 +144,8 @@ class WorkflowInternalService(
                 status=version.status,
                 nodes_json=json.dumps(nodes_data),
                 edges_json=json.dumps(edges_data),
+                workflow_name=workflow.name,
             )
-
 
     async def ValidateWorkflowVersion(self, request, context):
         async with AsyncSessionLocal() as session:
