@@ -37,7 +37,7 @@ Relay is a **multi-tenant workflow automation platform** for processes that are 
 | 🙋 **Human approval** | Pause, wait for a decision, resume |
 | 🛡️ **Reliability** | Retries with backoff, idempotency keys, dead-letter queue, replay |
 | 🔍 **Observability** | Step-level execution history and audit logs |
-| 🔒 **Security** | Argon2id, JWT, RBAC, workspace isolation, credentials never exposed |
+| 🔒 **Security** | Argon2id, JWT, RBAC, workspace isolation, credentials never exposed   |
 
 ## 🏗️ Architecture
 
