@@ -25,7 +25,7 @@ async def get_db():
         yield session
 
 
-@router.get("", response_model=ExecutionListResponse)
+@router.get("/", response_model=ExecutionListResponse)
 async def list_executions(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
