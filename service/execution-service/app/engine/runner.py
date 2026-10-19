@@ -214,6 +214,8 @@ async def run_execution(
                     id=execution_step_id,
                     execution_id=execution_id,
                     node_id=node["node_id"],
+                    node_name=node.get("label") or node["node_id"],
+                    node_type=node.get("node_type"),
                     status=ExecutionStepStatus.PENDING,
                     sequence=sequence,
                 )
