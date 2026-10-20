@@ -17,6 +17,7 @@ from app.models.execution_step import ExecutionStep
 from app.engine.approval_status import HumanApprovalStatus
 from app.models.human_approval import HumanApproval
 from app.models.execution import Execution
+from app.utils.payload_sanitizer import sanitize_payload
 from app.engine.handlers.rag_search import execute_rag_search
 from app.engine.handlers.ai_decision import execute_ai_decision
 from app.engine.handlers.condition import evaluate_condition
@@ -66,9 +67,9 @@ async def mark_step_failed(
 
         step.status = ExecutionStepStatus.FAILED
         step.completed_at = completed_at
-        step.error = {
+        step.error = sanitize_payload({
             "message": error_message,
-        }
+        })
 
         if step.started_at:
             step.duration_ms = int(
@@ -204,18 +205,47 @@ async def run_execution(
             visited.add(node_id)
             execution_order.append(node)
 
+            
             configuration = node.get("configuration", {})
 
-            # Allocate the ID before commit so even refresh failures can close the step.
+            # Determine node type before creating the step.
+            node_type = node.get("node_type", "")
+
+            # Build an audit-only input snapshot.
+            # Keep the original execution data unchanged.
+            if node_type.startswith("trigger."):
+                node_input = (
+                    context.to_dict().get("trigger", {})
+                )
+            else:
+                node_input = resolver.resolve(
+                    configuration.copy()
+                )
+
+            # Hide HTTP headers in execution history.
+            if (
+                node_type == "action.http_request"
+                and isinstance(node_input, dict)
+            ):
+                node_input = {
+                    **node_input,
+                    "headers": "[REDACTED]",
+                }
+
+            safe_input = sanitize_payload(node_input)
+
+            # Allocate the step ID.
             execution_step_id = uuid4()
-            # Create execution step
+
+            # Create execution step with sanitized input.
             async with AsyncSessionLocal() as session:
                 execution_step = ExecutionStep(
                     id=execution_step_id,
                     execution_id=execution_id,
                     node_id=node["node_id"],
                     node_name=node.get("label") or node["node_id"],
-                    node_type=node.get("node_type"),
+                    node_type=node_type,
+                    input=safe_input,
                     status=ExecutionStepStatus.PENDING,
                     sequence=sequence,
                 )
@@ -240,7 +270,6 @@ async def run_execution(
 
                 await _commit_session(session)
 
-            node_type = node.get("node_type", "")
 
             print(
                 "Processing node:",
@@ -321,7 +350,7 @@ async def run_execution(
                     execution_step.status = (
                         ExecutionStepStatus.COMPLETED
                     )
-                    execution_step.output = result
+                    execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
 
                     if execution_step.started_at:
@@ -369,7 +398,7 @@ async def run_execution(
                         ExecutionStepStatus.COMPLETED
                     )
 
-                    execution_step.output = result
+                    execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
 
                     if execution_step.started_at:
@@ -423,7 +452,7 @@ async def run_execution(
                         ExecutionStepStatus.COMPLETED
                     )
 
-                    execution_step.output = result
+                    execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
 
                     if execution_step.started_at:
@@ -487,7 +516,7 @@ async def run_execution(
                         ExecutionStepStatus.COMPLETED
                     )
 
-                    execution_step.output = result
+                    execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
 
                     if execution_step.started_at:
@@ -687,7 +716,7 @@ async def run_execution(
                     )
 
                     execution_step.status = ExecutionStepStatus.COMPLETED
-                    execution_step.output = result
+                    execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
 
                     if execution_step.started_at:
@@ -714,9 +743,9 @@ async def run_execution(
 
                     execution_step.status = ExecutionStepStatus.FAILED
                     execution_step.completed_at = completed_at
-                    execution_step.error = {
-                        "message": response.error or "Action execution failed",
-                    }
+                    execution_step.error = sanitize_payload({
+                        "message": "Action execution failed",
+                    })
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
