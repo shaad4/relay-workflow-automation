@@ -77,7 +77,7 @@ function ExecutionStepItem({ step, maxDuration }) {
       <summary className="execution-step-summary">
         <div className="execution-step-title"><h3>{step.node_name || step.node_id}</h3><p>{step.node_type || "Unknown node type"}<span> · Attempt {step.attempt}</span></p></div>
         <div className="execution-step-duration"><span>{formatDuration(step.duration_ms)}</span><span className="execution-duration-track" aria-hidden="true"><i style={{ width: `${Math.max(3, (step.duration_ms || 0) / maxDuration * 100)}%` }}/></span></div>
-        <ExecutionStatusBadge status={step.status}/><span className="relay-execution-chevron" aria-hidden="true">⌄</span>
+        <ExecutionStatusBadge status={step.status}/><svg className="relay-execution-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
       </summary>
       {open && <ExecutionPayloadViewer step={step}/>}
       <dl className="execution-step-inspector"><ExecutionField label="Node ID" mono>{step.node_id}</ExecutionField><ExecutionField label="Node type" mono>{step.node_type}</ExecutionField><ExecutionField label="Status">{statusLabel(step.status)}</ExecutionField><ExecutionField label="Sequence">{step.sequence}</ExecutionField><ExecutionField label="Attempt">{step.attempt}</ExecutionField><ExecutionField label="Duration">{formatDuration(step.duration_ms)}</ExecutionField><ExecutionField label="Started">{formatTime(step.started_at)}</ExecutionField><ExecutionField label="Completed">{formatTime(step.completed_at)}</ExecutionField></dl>

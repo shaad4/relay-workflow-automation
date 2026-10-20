@@ -86,7 +86,7 @@ function ExecutionDetail({ executionId }) {
           <section className={`${executionPanel} execution-timeline-panel`} aria-labelledby="execution-timeline">
             <div className="execution-panel-heading"><div><h2 id="execution-timeline">Execution timeline</h2><p>Every step, from trigger to outcome.</p></div><span className="execution-record-count">{steps.length} steps</span></div>
             <div className="execution-progress-strip" aria-label={`${completed} of ${steps.length} recorded steps completed`}>{steps.map(step => <span key={step.id} data-status={normalizeStatus(step.status)} title={`${step.node_name || step.node_id}: ${statusLabel(step.status)}`}/>)}</div>
-            <div className="execution-timeline-caption"><span>Step / action</span><span>Duration & status</span></div>
+            <div className="execution-timeline-caption"><span>Step / action</span><span>Duration</span><span>Status</span><span aria-hidden="true"/></div>
             {steps.length > 0 ? <ExecutionStepTimeline steps={steps}/> : <div className="px-5 py-12 text-center"><h3 className="text-sm font-medium">No steps recorded yet</h3><p className="mt-2 text-xs text-[var(--text-secondary)]">{active ? "Steps will appear here as this execution progresses." : "No step history is available for this execution."}</p></div>}
             <div className="execution-timeline-footer"><span className={`execution-update-dot ${active && !error ? "is-live" : ""}`} aria-hidden="true"/><span role="status">{updateLabel}</span><span className="ml-auto">Expand a step to inspect</span></div>
           </section>
