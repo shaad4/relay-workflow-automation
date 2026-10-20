@@ -40,6 +40,25 @@ class Execution(Base):
         nullable=True,
     )
 
+    # Worker currently responsible for this execution.
+    claimed_by: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    # Last time the worker renewed its claim.
+    heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Deadline after which the claim is considered expired.
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
