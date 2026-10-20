@@ -1,11 +1,12 @@
-
 import asyncio
 import json
 import os
 
-from aiokafka import AIOKafkaConsumer
+from aiokafka import AIOKafkaConsumer, TopicPartition
 
-from app.services.execution_service import create_execution
+from app.services.execution_queue import (
+    create_pending_execution,
+)
 
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv(
@@ -16,23 +17,7 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv(
 KAFKA_TOPIC = "workflow.triggered"
 KAFKA_GROUP_ID = "execution-service"
 
-EXECUTION_MAX_CONCURRENCY = int(
-    os.getenv("EXECUTION_MAX_CONCURRENCY", "5")
-)
-
-if EXECUTION_MAX_CONCURRENCY < 1:
-    raise ValueError(
-        "EXECUTION_MAX_CONCURRENCY must be at least 1"
-    )
-
-
 consumer: AIOKafkaConsumer | None = None
-
-active_tasks: set[asyncio.Task] = set()
-
-execution_semaphore = asyncio.Semaphore(
-    EXECUTION_MAX_CONCURRENCY
-)
 
 
 async def start_consumer():
@@ -43,7 +28,7 @@ async def start_consumer():
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
         group_id=KAFKA_GROUP_ID,
         auto_offset_reset="earliest",
-        enable_auto_commit=True,
+        enable_auto_commit=False,
     )
 
     await consumer.start()
@@ -57,41 +42,12 @@ async def stop_consumer():
         consumer = None
 
 
-async def process_workflow_event(event: dict):
-    """
-    Process one workflow execution.
-
-    The semaphore slot is released after
-    execution finishes or fails.
-    """
-
-    try:
-        execution = await create_execution(event)
-
-        print(
-            "Execution finished:",
-            execution.id,
-            flush=True,
-        )
-
-    except asyncio.CancelledError:
-        raise
-
-    except Exception:
-        print(
-            "Failed to process workflow.triggered event",
-            flush=True,
-        )
-
-    finally:
-        execution_semaphore.release()
-
-
 async def consume_workflow_triggered():
     """
-    Consume Kafka events with bounded concurrency.
+    Persist Kafka events before acknowledging them.
 
-    Each workflow runs in its own asyncio task.
+    Workflow execution is handled separately by
+    the PostgreSQL-backed ExecutionDispatcher.
     """
 
     if consumer is None:
@@ -99,64 +55,35 @@ async def consume_workflow_triggered():
             "Kafka consumer is not started"
         )
 
-    try:
-        async for message in consumer:
+    async for message in consumer:
+        try:
+            event = json.loads(
+                message.value.decode("utf-8")
+            )
 
-            # Wait for an available execution slot.
-            await execution_semaphore.acquire()
-
-            try:
-                event = json.loads(
-                    message.value.decode("utf-8")
+            if not isinstance(event, dict):
+                raise ValueError(
+                    "Kafka event must be a JSON object"
                 )
 
-                if not isinstance(event, dict):
-                    raise ValueError(
-                        "Kafka event must be a JSON object"
-                    )
+            # Persist execution + idempotency key atomically.
+            await create_pending_execution(event)
 
-                task = asyncio.create_task(
-                    process_workflow_event(event)
-                )
+            # Commit the next offset only after DB commit.
+            partition = TopicPartition(
+                message.topic,
+                message.partition,
+            )
 
-                active_tasks.add(task)
+            await consumer.commit({
+                partition: message.offset + 1,
+            })
 
-                task.add_done_callback(
-                    active_tasks.discard
-                )
+        except asyncio.CancelledError:
+            raise
 
-            except asyncio.CancelledError:
-                execution_semaphore.release()
-                raise
-
-            except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-                execution_semaphore.release()
-
-                print(
-                    "Invalid workflow.triggered event",
-                    flush=True,
-                )
-
-            except Exception:
-                execution_semaphore.release()
-
-                print(
-                    "Unable to dispatch workflow execution",
-                    flush=True,
-                )
-
-    except asyncio.CancelledError:
-        raise
-
-
-async def wait_for_active_executions():
-    """
-    Wait for running workflows to finish
-    before shutting down dependencies.
-    """
-
-    if active_tasks:
-        await asyncio.gather(
-            *list(active_tasks),
-            return_exceptions=True,
-        )
+        except Exception:
+            # Do not acknowledge an event that failed
+            # durable persistence or validation.
+            # Stop consuming to prevent advancing past it.
+            raise

@@ -1,10 +1,12 @@
-
+import grpc
 import asyncio
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update, func
 from sqlalchemy.exc import IntegrityError
+
+from app.grpc.workflow_client import WorkflowClient
 
 from app.db.database import AsyncSessionLocal
 from app.engine.exceptions import (
@@ -60,6 +62,40 @@ async def create_pending_execution(event: dict) -> UUID:
         )
 
     event_key = f"workflow.triggered:{event_id}"
+
+    # Validate the workflow before accepting the event.
+    workflow_client = WorkflowClient()
+
+    try:
+        validation = await workflow_client.validate_workflow_version(
+            workflow_id=str(workflow_id),
+            version_id=str(workflow_version_id),
+            workspace_id=str(workspace_id),
+        )
+
+    except grpc.aio.AioRpcError as exc:
+        raise RuntimeError(
+            "Unable to validate workflow version"
+        ) from exc
+
+    finally:
+        await workflow_client.close()
+
+    if not validation.valid:
+        raise ValueError(
+            "Workflow or workflow version not found"
+        )
+
+    if validation.status.lower() != "published":
+        raise ValueError(
+            "Workflow version is not published"
+        )
+
+    if validation.workflow_status.lower() != "active":
+        raise ValueError(
+            "Workflow is inactive"
+        )
+
 
     async with AsyncSessionLocal() as session:
         repository = ExecutionQueueRepository(session)
