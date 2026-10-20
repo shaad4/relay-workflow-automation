@@ -20,6 +20,13 @@ export async function getExecutionDetails(executionId, { signal } = {}) {
   return validateExecution(await request(`/executions/${encodeURIComponent(executionId)}/`, signal));
 }
 
+/**
+ * @typedef {Object} ExecutionStepPayloads
+ * @property {unknown|null} input Sanitized input recorded by the API.
+ * @property {unknown|null} output Sanitized output recorded by the API.
+ * @property {unknown|null} error Sanitized error recorded by the API.
+ * Missing fields on older records are presented as empty, without coercing falsy values.
+ */
 export async function getExecutionSteps(executionId, { signal } = {}) {
   return validateExecutionSteps(await request(`/executions/${encodeURIComponent(executionId)}/steps/`, signal));
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import ExecutionPayloadViewer from "./ExecutionPayloadViewer";
 import { useState } from "react";
 import { formatDuration, formatTime, normalizeStatus, statusLabel } from "@/lib/executions";
 
@@ -65,15 +66,21 @@ export function ExecutionCopyId({ id }) {
 
 export function ExecutionStepTimeline({ steps }) {
   const maxDuration = Math.max(1, ...steps.map(step => step.duration_ms || 0));
-  return <ol className="execution-timeline-list">{steps.map((step) => <li key={step.id} className="execution-timeline-row">
+  return <ol className="execution-timeline-list">{steps.map(step => <ExecutionStepItem key={step.id} step={step} maxDuration={maxDuration}/>)}</ol>;
+}
+
+function ExecutionStepItem({ step, maxDuration }) {
+  const [open, setOpen] = useState(false);
+  return <li className="execution-timeline-row">
     <div className="execution-step-rail" aria-hidden="true"><span className="execution-step-number">{String(step.sequence).padStart(2, "0")}</span><span className="execution-node-icon" data-type={step.node_type?.split(".")[0]}><ExecutionIcon type={step.node_type || "generic"} className="h-5 w-5"/></span></div>
-    <details className="relay-execution-step execution-step-content" data-status={normalizeStatus(step.status)}>
+    <details onToggle={event => setOpen(event.currentTarget.open)} className="relay-execution-step execution-step-content" data-status={normalizeStatus(step.status)}>
       <summary className="execution-step-summary">
         <div className="execution-step-title"><h3>{step.node_name || step.node_id}</h3><p>{step.node_type || "Unknown node type"}<span> · Attempt {step.attempt}</span></p></div>
         <div className="execution-step-duration"><span>{formatDuration(step.duration_ms)}</span><span className="execution-duration-track" aria-hidden="true"><i style={{ width: `${Math.max(3, (step.duration_ms || 0) / maxDuration * 100)}%` }}/></span></div>
         <ExecutionStatusBadge status={step.status}/><span className="relay-execution-chevron" aria-hidden="true">⌄</span>
       </summary>
+      {open && <ExecutionPayloadViewer step={step}/>}
       <dl className="execution-step-inspector"><ExecutionField label="Node ID" mono>{step.node_id}</ExecutionField><ExecutionField label="Node type" mono>{step.node_type}</ExecutionField><ExecutionField label="Status">{statusLabel(step.status)}</ExecutionField><ExecutionField label="Sequence">{step.sequence}</ExecutionField><ExecutionField label="Attempt">{step.attempt}</ExecutionField><ExecutionField label="Duration">{formatDuration(step.duration_ms)}</ExecutionField><ExecutionField label="Started">{formatTime(step.started_at)}</ExecutionField><ExecutionField label="Completed">{formatTime(step.completed_at)}</ExecutionField></dl>
     </details>
-  </li>)}</ol>;
+  </li>;
 }
