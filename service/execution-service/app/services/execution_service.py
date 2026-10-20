@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import select
+
 from app.db.database import AsyncSessionLocal
 from app.engine.exceptions import (
     HumanApprovalRequired,
@@ -20,9 +22,55 @@ async def _commit_session(session):
         raise
 
 
-async def create_execution(event: dict) -> Execution:
+async def _update_execution_status(
+    execution_id: UUID,
+    status: str,
+    *,
+    context_data: dict | None = None,
+    error: dict | None = None,
+):
+    """Update execution state using a short-lived DB session."""
 
-    # 1. Validate workflow and version
+    async with AsyncSessionLocal() as session:
+        try:
+            result = await session.execute(
+                select(Execution).where(
+                    Execution.id == execution_id,
+                )
+            )
+
+            execution = result.scalar_one_or_none()
+
+            if execution is None:
+                raise ValueError("Execution not found")
+
+            execution.status = status
+
+            if context_data is not None:
+                execution.context = context_data
+
+            if error is not None:
+                execution.error = error
+
+            if status in {
+                ExecutionStatus.COMPLETED,
+                ExecutionStatus.FAILED,
+            }:
+                execution.completed_at = datetime.now(
+                    timezone.utc
+                )
+
+            await _commit_session(session)
+
+        except Exception:
+            await session.rollback()
+            raise
+
+
+async def create_execution(event: dict) -> Execution:
+    """Create and execute a workflow without holding a DB session open."""
+
+    # 1. Validate workflow version.
     workflow_client = WorkflowClient()
 
     try:
@@ -49,9 +97,8 @@ async def create_execution(event: dict) -> Execution:
             "Workflow is inactive"
         )
 
-    # 2. Create execution record
+    # 2. Create execution using a short-lived session.
     async with AsyncSessionLocal() as session:
-
         execution = Execution(
             workspace_id=UUID(event["workspace_id"]),
             workflow_id=UUID(event["workflow_id"]),
@@ -70,76 +117,66 @@ async def create_execution(event: dict) -> Execution:
         await _commit_session(session)
         await session.refresh(execution)
 
-        # 3. Mark execution as running
-        execution.status = ExecutionStatus.RUNNING
-        await _commit_session(session)
+        execution_id = execution.id
 
-        result = None
-        try:
-            # 4. Execute workflow
-            result = await run_execution(
-                execution_id=execution.id,
-                workflow_id=event["workflow_id"],
-                workflow_version_id=event["workflow_version_id"],
-                workspace_id=event["workspace_id"],
-                trigger_data=event.get("payload"),
-            )
+    # 3. Mark execution as running.
+    await _update_execution_status(
+        execution_id,
+        ExecutionStatus.RUNNING,
+    )
 
-            execution.context = result["context"]
-            execution.status = ExecutionStatus.COMPLETED
-            execution.completed_at = datetime.now(timezone.utc)
-            await _commit_session(session)
+    # 4. Execute without holding the outer DB session.
+    try:
+        result = await run_execution(
+            execution_id=execution_id,
+            workflow_id=event["workflow_id"],
+            workflow_version_id=event["workflow_version_id"],
+            workspace_id=event["workspace_id"],
+            trigger_data=event.get("payload"),
+        )
 
-        except HumanApprovalRequired:
-            # 5. Pause execution for human approval
-            await session.rollback()
-            await session.refresh(execution)
+        await _update_execution_status(
+            execution_id,
+            ExecutionStatus.COMPLETED,
+            context_data=result["context"],
+        )
 
-            execution.status = (
-                ExecutionStatus.WAITING_FOR_APPROVAL
-            )
+    except HumanApprovalRequired:
+        await _update_execution_status(
+            execution_id,
+            ExecutionStatus.WAITING_FOR_APPROVAL,
+        )
 
-            await _commit_session(session)
-
-            return execution
-
-        except ActionExecutionFailed as exc:
-            # 6. Handle known action failure
-            await session.rollback()
-            await session.refresh(execution)
-
-            execution.status = ExecutionStatus.FAILED
-            execution.completed_at = datetime.now(
-                timezone.utc
-            )
-
-            execution.error = {
+    except ActionExecutionFailed as exc:
+        await _update_execution_status(
+            execution_id,
+            ExecutionStatus.FAILED,
+            error={
                 "node_id": exc.node_id,
-                "message": exc.error,
-            }
+                "message": "Action execution failed",
+            },
+        )
 
-            await _commit_session(session)
-
-            return execution
-
-        except Exception:
-            # 7. Handle unexpected execution failure
-            await session.rollback()
-            await session.refresh(execution)
-
-            if result is not None:
-                execution.context = result["context"]
-            execution.status = ExecutionStatus.FAILED
-            execution.completed_at = datetime.now(
-                timezone.utc
-            )
-
-            execution.error = {
+    except Exception:
+        await _update_execution_status(
+            execution_id,
+            ExecutionStatus.FAILED,
+            error={
                 "message": "Workflow execution failed",
-            }
+            },
+        )
 
-            await _commit_session(session)
+    # 5. Return a fresh execution record.
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Execution).where(
+                Execution.id == execution_id,
+            )
+        )
 
-            return execution
+        execution = result.scalar_one_or_none()
+
+        if execution is None:
+            raise ValueError("Execution not found")
 
         return execution
