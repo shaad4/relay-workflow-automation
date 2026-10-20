@@ -13,6 +13,7 @@ from app.kafka.consumer import (
     start_consumer,
     stop_consumer,
     consume_workflow_triggered,
+    wait_for_active_executions,
 )
 
 from app.routes.approvals import (
@@ -22,6 +23,7 @@ from app.routes.ai_provider_connections import (
     router as ai_provider_connections_router,
 )
 from app.routes.executions import router as executions_router
+
 
 
 @asynccontextmanager
@@ -40,7 +42,9 @@ async def lifespan(app: FastAPI):
 
     try:
         yield
+
     finally:
+        # Stop fetching and dispatching new Kafka events.
         consumer_task.cancel()
 
         try:
@@ -49,9 +53,16 @@ async def lifespan(app: FastAPI):
             pass
 
         try:
-            await stop_consumer()
+            # Allow already dispatched workflows to finish.
+            await wait_for_active_executions()
+
         finally:
-            await grpc_server.stop(grace=5)
+            # Close Kafka and gRPC dependencies.
+            try:
+                await stop_consumer()
+            finally:
+                await grpc_server.stop(grace=5)
+
 
 
 app = FastAPI(
