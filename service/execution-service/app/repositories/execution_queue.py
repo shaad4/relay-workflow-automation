@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.execution import Execution
@@ -69,3 +69,50 @@ class ExecutionQueueRepository:
         await self.session.flush()
 
         return execution
+
+
+    async def claim_pending(
+        self,
+        execution_id: UUID,
+        worker_id: str,
+        lease_seconds: int = 120,
+    ) -> bool:
+        """
+        Atomically claim a pending execution.
+
+        Only one worker can change its status
+        from pending to running.
+        """
+
+        if not worker_id or len(worker_id) > 100:
+            raise ValueError("Invalid worker ID")
+
+        if lease_seconds < 1:
+            raise ValueError(
+                "lease_seconds must be positive"
+            )
+
+        statement = (
+            update(Execution)
+            .where(
+                Execution.id == execution_id,
+                Execution.status == ExecutionStatus.PENDING,
+            )
+            .values(
+                status=ExecutionStatus.RUNNING,
+                claimed_by=worker_id,
+                started_at=func.now(),
+                heartbeat_at=func.now(),
+                lease_expires_at=(
+                    func.now()
+                    + text(
+                        f"INTERVAL '{lease_seconds} seconds'"
+                    )
+                ),
+            )
+            .returning(Execution.id)
+        )
+
+        result = await self.session.execute(statement)
+
+        return result.scalar_one_or_none() is not None

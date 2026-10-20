@@ -90,3 +90,49 @@ async def create_pending_execution(event: dict) -> UUID:
         except Exception:
             await session.rollback()
             raise
+
+
+
+async def claim_pending_execution(
+    execution_id: UUID,
+    worker_id: str,
+    lease_seconds: int = 120,
+) -> bool:
+    """
+    Atomically claim a pending execution.
+
+    Returns:
+        True  - This worker successfully claimed it.
+        False - Execution is missing or already claimed.
+    """
+
+    if not worker_id or len(worker_id) > 100:
+        raise ValueError("Invalid worker ID")
+
+    if not 1 <= lease_seconds <= 3600:
+        raise ValueError(
+            "lease_seconds must be between 1 and 3600"
+        )
+
+    async with AsyncSessionLocal() as session:
+        repository = ExecutionQueueRepository(session)
+
+        try:
+            claimed = await repository.claim_pending(
+                execution_id=execution_id,
+                worker_id=worker_id,
+                lease_seconds=lease_seconds,
+            )
+
+            if not claimed:
+                await session.rollback()
+                return False
+
+            await session.commit()
+
+            return True
+
+        except Exception:
+            await session.rollback()
+            raise
+
