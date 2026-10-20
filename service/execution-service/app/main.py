@@ -1,6 +1,4 @@
-
 import asyncio
-
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -13,8 +11,9 @@ from app.kafka.consumer import (
     start_consumer,
     stop_consumer,
     consume_workflow_triggered,
-    wait_for_active_executions,
 )
+
+from app.services.execution_dispatcher import ExecutionDispatcher
 
 from app.routes.approvals import (
     router as approvals_router,
@@ -25,26 +24,63 @@ from app.routes.ai_provider_connections import (
 from app.routes.executions import router as executions_router
 
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 1. Start Kafka consumer.
     await start_consumer()
 
     try:
+        # 2. Start internal gRPC server.
         grpc_server = await start_grpc_server()
+
     except Exception:
         await stop_consumer()
         raise
 
+    dispatcher = ExecutionDispatcher()
+
+    # 3. Start background services.
+    dispatcher_task = asyncio.create_task(
+        dispatcher.run(),
+        name="execution-dispatcher",
+    )
+
     consumer_task = asyncio.create_task(
-        consume_workflow_triggered()
+        consume_workflow_triggered(),
+        name="kafka-workflow-consumer",
+    )
+
+    # 4. Register tasks for health monitoring.
+    app.state.consumer_task = consumer_task
+    app.state.dispatcher_task = dispatcher_task
+    app.state.background_worker_failed = False
+
+    # 5. Detect unexpected background task termination.
+    def handle_background_task_done(task: asyncio.Task):
+        if task.cancelled():
+            return
+
+        # Retrieve exceptions to prevent unhandled-task warnings.
+        try:
+            task.exception()
+        except asyncio.CancelledError:
+            return
+
+        app.state.background_worker_failed = True
+
+    consumer_task.add_done_callback(
+        handle_background_task_done
+    )
+
+    dispatcher_task.add_done_callback(
+        handle_background_task_done
     )
 
     try:
         yield
 
     finally:
-        # Stop fetching and dispatching new Kafka events.
+        # 6. Stop accepting new Kafka events.
         consumer_task.cancel()
 
         try:
@@ -52,17 +88,26 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
+        # 7. Stop dispatching new executions.
+        dispatcher_task.cancel()
+
         try:
-            # Allow already dispatched workflows to finish.
-            await wait_for_active_executions()
+            await dispatcher_task
+        except asyncio.CancelledError:
+            pass
+
+        # 8. Wait for active executions to finish.
+        try:
+            await dispatcher.shutdown()
 
         finally:
-            # Close Kafka and gRPC dependencies.
+            # 9. Close Kafka consumer.
             try:
                 await stop_consumer()
-            finally:
-                await grpc_server.stop(grace=5)
 
+            finally:
+                # 10. Stop internal gRPC server.
+                await grpc_server.stop(grace=5)
 
 
 app = FastAPI(
@@ -103,8 +148,43 @@ app.include_router(approvals_router)
 app.include_router(ai_provider_connections_router)
 app.include_router(executions_router)
 
+
 @app.get("/health")
-async def health():
+async def health(request: Request):
+    consumer_task = getattr(
+        request.app.state,
+        "consumer_task",
+        None,
+    )
+
+    dispatcher_task = getattr(
+        request.app.state,
+        "dispatcher_task",
+        None,
+    )
+
+    background_worker_failed = getattr(
+        request.app.state,
+        "background_worker_failed",
+        False,
+    )
+
+    if (
+        background_worker_failed
+        or consumer_task is None
+        or dispatcher_task is None
+        or consumer_task.done()
+        or dispatcher_task.done()
+    ):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "service": "execution-service",
+                "reason": "Background worker unavailable",
+            },
+        )
+
     return {
         "status": "ok",
         "service": "execution-service",
