@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from app.repositories.execution import ExecutionRepository
+from app.utils.payload_sanitizer import sanitize_payload
 
 
 class ExecutionHistoryService:
@@ -14,63 +15,58 @@ class ExecutionHistoryService:
         page_size: int = 10,
         status: str | None = None,
     ) -> dict:
-        try:
-            executions, total = (
-                await self.repository.list_executions(
-                    workspace_id=workspace_id,
-                    page=page,
-                    page_size=page_size,
-                    status=status,
+        executions, total = (
+            await self.repository.list_executions(
+                workspace_id=workspace_id,
+                page=page,
+                page_size=page_size,
+                status=status,
+            )
+        )
+
+        items = []
+
+        for execution in executions:
+            duration_ms = None
+
+            if (
+                execution.started_at is not None
+                and execution.completed_at is not None
+            ):
+                duration_ms = max(
+                    0,
+                    int(
+                        (
+                            execution.completed_at
+                            - execution.started_at
+                        ).total_seconds() * 1000
+                    ),
                 )
+
+            items.append(
+                {
+                    "id": execution.id,
+                    "workflow_id": execution.workflow_id,
+                    "workflow_version_id": (
+                        execution.workflow_version_id
+                    ),
+                    "workflow_name": execution.workflow_name,
+                    "status": execution.status,
+                    "trigger_type": execution.trigger_type,
+                    "started_at": execution.started_at,
+                    "completed_at": execution.completed_at,
+                    "created_at": execution.created_at,
+                    "duration_ms": duration_ms,
+                }
             )
 
-            items = []
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
 
-            for execution in executions:
-                duration_ms = None
-
-                if (
-                    execution.started_at is not None
-                    and execution.completed_at is not None
-                ):
-                    duration_ms = max(
-                        0,
-                        int(
-                            (
-                                execution.completed_at
-                                - execution.started_at
-                            ).total_seconds() * 1000
-                        ),
-                    )
-
-                items.append(
-                    {
-                        "id": execution.id,
-                        "workflow_id": execution.workflow_id,
-                        "workflow_version_id": (
-                            execution.workflow_version_id
-                        ),
-                        "workflow_name": execution.workflow_name,
-                        "status": execution.status,
-                        "trigger_type": execution.trigger_type,
-                        "started_at": execution.started_at,
-                        "completed_at": execution.completed_at,
-                        "created_at": execution.created_at,
-                        "duration_ms": duration_ms,
-                    }
-                )
-
-            return {
-                "items": items,
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-            }
-
-        except RuntimeError:
-            raise
-
-    
     async def get_execution_by_id(
         self,
         execution_id: UUID,
@@ -112,11 +108,9 @@ class ExecutionHistoryService:
             "completed_at": execution.completed_at,
             "created_at": execution.created_at,
             "duration_ms": duration_ms,
-            "error": execution.error,
+            "error": sanitize_payload(execution.error),
         }
 
-
-    
     async def list_execution_steps(
         self,
         execution_id: UUID,
@@ -140,6 +134,9 @@ class ExecutionHistoryService:
                 "status": step.status,
                 "sequence": step.sequence,
                 "attempt": step.attempt,
+                "input": sanitize_payload(step.input),
+                "output": sanitize_payload(step.output),
+                "error": sanitize_payload(step.error),
                 "started_at": step.started_at,
                 "completed_at": step.completed_at,
                 "duration_ms": step.duration_ms,
@@ -147,5 +144,3 @@ class ExecutionHistoryService:
             }
             for step in steps
         ]
-
-

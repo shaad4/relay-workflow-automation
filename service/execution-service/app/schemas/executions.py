@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -36,18 +37,31 @@ class ExecutionStepResponse(BaseModel):
 
     id: UUID
     execution_id: UUID
+
+    # Node metadata snapshots
     node_id: str
     node_name: str | None = None
     node_type: str | None = None
+
+    # Execution status
     status: str
     sequence: int = Field(ge=1)
     attempt: int = Field(ge=1)
+
+    # Sanitized execution payloads
+    input: Any | None = None
+    output: Any | None = None
+    error: Any | None = None
+
+    # Execution timestamps
     started_at: datetime | None
     completed_at: datetime | None
-    duration_ms: int | None = Field(default=None, ge=0)
+    duration_ms: int | None = Field(
+        default=None,
+        ge=0,
+    )
     created_at: datetime
 
 
 class ExecutionStepsListResponse(BaseModel):
     items: list[ExecutionStepResponse]
-
