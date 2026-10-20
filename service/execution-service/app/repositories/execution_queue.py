@@ -116,3 +116,47 @@ class ExecutionQueueRepository:
         result = await self.session.execute(statement)
 
         return result.scalar_one_or_none() is not None
+
+
+    
+    async def renew_lease(
+        self,
+        execution_id: UUID,
+        worker_id: str,
+        lease_seconds: int = 120,
+    ) -> bool:
+        """
+        Renew the lease only if this worker
+        still owns the running execution.
+        """
+
+        if not worker_id or len(worker_id) > 100:
+            raise ValueError("Invalid worker ID")
+
+        if not 1 <= lease_seconds <= 3600:
+            raise ValueError("Invalid lease duration")
+
+        statement = (
+            update(Execution)
+            .where(
+                Execution.id == execution_id,
+                Execution.status == ExecutionStatus.RUNNING,
+                Execution.claimed_by == worker_id,
+                Execution.lease_expires_at > func.now(),
+            )
+            .values(
+                heartbeat_at=func.now(),
+                lease_expires_at=(
+                    func.now()
+                    + func.make_interval(
+                        0, 0, 0, 0, 0, 0, lease_seconds
+                    )
+                ),
+            )
+            .returning(Execution.id)
+        )
+
+        result = await self.session.execute(statement)
+
+        return result.scalar_one_or_none() is not None
+
