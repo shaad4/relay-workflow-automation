@@ -23,6 +23,19 @@ from app.routes import gmail_oauth
 from app.main import app as action_app
 
 
+from cryptography.fernet import Fernet
+from app.core.encryption import CredentialEncryption
+
+
+@pytest.fixture(autouse=True)
+def credential_encryption_key(monkeypatch):
+    monkeypatch.setenv("ACTION_CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
+
+
+def encrypted(value):
+    return CredentialEncryption().encrypt(value) if value else None
+
+
 class FakeSession:
     async def __aenter__(self):
         return self
@@ -45,7 +58,7 @@ def make_request(**overrides):
 
 
 def test_execute_action_uses_connection_and_connector(monkeypatch):
-    connection = SimpleNamespace(provider="mock_payment", auth_type="oauth2", credential="refresh-token")
+    connection = SimpleNamespace(provider="mock_payment", auth_type="oauth2", credential=encrypted("refresh-token"))
     get_connection = SimpleNamespace(
         call=None,
     )
@@ -78,7 +91,7 @@ def test_execute_action_with_non_oauth_connection_and_empty_json(monkeypatch):
     monkeypatch.setattr(
         action_server,
         "get_connection",
-        AsyncMockConnectionLookup(SimpleNamespace(provider="mock_payment", auth_type="none", credential="ignored")),
+        AsyncMockConnectionLookup(SimpleNamespace(provider="mock_payment", auth_type="none", credential=encrypted("ignored"))),
     )
 
     class Connector:
@@ -116,14 +129,14 @@ def test_execute_action_returns_not_found(monkeypatch):
 @pytest.mark.parametrize(
     ("overrides", "expected_error"),
     [
-        ({"workspace_id": "not-a-uuid"}, "badly formed hexadecimal UUID string"),
+        ({"workspace_id": "not-a-uuid"}, "Invalid action configuration or credentials"),
         (
             {"config_json": "{"},
-            "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+            "Invalid JSON payload",
         ),
         (
             {"input_data_json": "{"},
-            "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+            "Invalid JSON payload",
         ),
     ],
 )
@@ -157,7 +170,7 @@ def test_execute_action_reports_connector_errors(monkeypatch):
     response = asyncio.run(
         action_server.ActionInternalService().ExecuteAction(make_request(provider="missing"), None)
     )
-    assert response.error == "Connector not found: missing"
+    assert response.error == "Invalid action configuration or credentials"
 
     class BrokenConnector:
         async def execute(self, **_kwargs):
@@ -166,7 +179,7 @@ def test_execute_action_reports_connector_errors(monkeypatch):
     monkeypatch.setattr(action_server.connector_registry, "get", lambda _provider: BrokenConnector())
     response = asyncio.run(action_server.ActionInternalService().ExecuteAction(make_request(), None))
     assert response.success is False
-    assert response.error == "Action execution failed: upstream unavailable"
+    assert response.error == "Action execution failed"
 
 
 def test_connector_registry_and_mock_payment():
@@ -360,7 +373,7 @@ def test_connection_test_auth_paths_and_http_responses(monkeypatch):
     monkeypatch.setattr(connection_service, "get_connection", lookup)
 
     async def check_error(auth_type, credential, config, expected):
-        connection.auth_type, connection.credential, connection.config = auth_type, credential, config
+        connection.auth_type, connection.credential, connection.config = auth_type, encrypted(credential), config
         with pytest.raises(ValueError, match=expected):
             await connection_service.test_connection(uuid4(), uuid4(), session)
     async def run_validation():
@@ -391,7 +404,7 @@ def test_connection_test_auth_paths_and_http_responses(monkeypatch):
         async def get(self, _url, **kwargs): self.request = kwargs; return self.response
     monkeypatch.setattr(connection_service.httpx, "AsyncClient", Client)
     async def test_auth(auth_type, credential, config):
-        connection.auth_type, connection.credential, connection.config = auth_type, credential, config
+        connection.auth_type, connection.credential, connection.config = auth_type, encrypted(credential), config
         return await connection_service.test_connection(uuid4(), uuid4(), session)
     result = asyncio.run(test_auth("bearer", "secret", {"test_url": "url"}))
     assert result.success and result.response == {"ok": True}
@@ -639,6 +652,9 @@ def test_gmail_oauth_routes_state_and_callback(monkeypatch):
     assert result["message"] == "Gmail connected successfully"
     assert result["email"] == "user@example.test"
     assert any(call[0] == "delete" for call in session.calls)
+    saved = next(call[1] for call in session.calls if call[0] == "add" and isinstance(call[1], FakeConnection))
+    assert saved.credential != "refresh"
+    assert CredentialEncryption().decrypt(saved.credential) == "refresh"
 
 
 @pytest.mark.parametrize("body_format,subtype", [(None, "plain"), ("plain", "plain"), ("html", "html")])
@@ -668,7 +684,7 @@ def test_gmail_body_format_mime_and_payload(monkeypatch, body_format, subtype):
         payload["body_format"] = body_format
     monkeypatch.setattr(action_server, "AsyncSessionLocal", FakeSession)
     monkeypatch.setattr(action_server, "get_connection", AsyncMockConnectionLookup(
-        SimpleNamespace(provider="gmail", auth_type="oauth2", credential="existing-refresh-token")
+        SimpleNamespace(provider="gmail", auth_type="oauth2", credential=encrypted("existing-refresh-token"))
     ))
     response = asyncio.run(action_server.ActionInternalService().ExecuteAction(make_request(
         provider="gmail", action="send_email", config_json="{}", input_data_json=json.dumps(payload),

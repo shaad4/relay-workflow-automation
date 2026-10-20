@@ -94,6 +94,8 @@ async def run_execution(
     action_client = ActionClient()
     context = None
     execution_step_id = None
+    node_id = None
+    node_type = None
 
     try:
         response = await workflow_client.get_workflow_definition(
@@ -211,6 +213,43 @@ async def run_execution(
             # Determine node type before creating the step.
             node_type = node.get("node_type", "")
 
+            # Allocate the step ID.
+            execution_step_id = uuid4()
+
+            # Create execution step with sanitized input.
+            async with AsyncSessionLocal() as session:
+                execution_step = ExecutionStep(
+                    id=execution_step_id,
+                    execution_id=execution_id,
+                    node_id=node["node_id"],
+                    node_name=node.get("label") or node["node_id"],
+                    node_type=node_type,
+                    input=None,
+                    status=ExecutionStepStatus.PENDING,
+                    sequence=sequence,
+                )
+
+                await _commit_session(
+                    session,
+                    add=execution_step,
+                    refresh=execution_step,
+                )
+
+            execution_step_id = execution_step.id
+
+            # Mark step as running
+            async with AsyncSessionLocal() as session:
+                execution_step = await session.get(
+                    ExecutionStep,
+                    execution_step_id,
+                )
+
+                execution_step.status = ExecutionStepStatus.RUNNING
+                execution_step.started_at = datetime.now(timezone.utc)
+
+                await _commit_session(session)
+
+
             # Build an audit-only input snapshot.
             # Keep the original execution data unchanged.
             if node_type.startswith("trigger."):
@@ -234,40 +273,9 @@ async def run_execution(
 
             safe_input = sanitize_payload(node_input)
 
-            # Allocate the step ID.
-            execution_step_id = uuid4()
-
-            # Create execution step with sanitized input.
             async with AsyncSessionLocal() as session:
-                execution_step = ExecutionStep(
-                    id=execution_step_id,
-                    execution_id=execution_id,
-                    node_id=node["node_id"],
-                    node_name=node.get("label") or node["node_id"],
-                    node_type=node_type,
-                    input=safe_input,
-                    status=ExecutionStepStatus.PENDING,
-                    sequence=sequence,
-                )
-
-                await _commit_session(
-                    session,
-                    add=execution_step,
-                    refresh=execution_step,
-                )
-
-            execution_step_id = execution_step.id
-
-            # Mark step as running
-            async with AsyncSessionLocal() as session:
-                execution_step = await session.get(
-                    ExecutionStep,
-                    execution_step_id,
-                )
-
-                execution_step.status = ExecutionStepStatus.RUNNING
-                execution_step.started_at = datetime.now(timezone.utc)
-
+                execution_step = await session.get(ExecutionStep, execution_step_id)
+                execution_step.input = safe_input
                 await _commit_session(session)
 
 

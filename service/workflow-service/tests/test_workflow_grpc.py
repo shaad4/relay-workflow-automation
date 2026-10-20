@@ -197,7 +197,7 @@ def test_get_workflow_definition_rejects_draft_version(monkeypatch):
 
 
 def test_get_workflow_definition_serializes_nodes_and_edges(monkeypatch):
-    workflow = SimpleNamespace(id="workflow-id", status="active")
+    workflow = SimpleNamespace(id="workflow-id", status="active", name="Test workflow")
     version = SimpleNamespace(
         id="version-id", workflow_id="workflow-id", version=3, status="published"
     )
@@ -225,6 +225,7 @@ def test_get_workflow_definition_serializes_nodes_and_edges(monkeypatch):
             FakeContext(),
         )
     )
+    assert response.workflow_name == "Test workflow"
     assert (response.version, response.status) == (3, "published")
     assert json.loads(response.nodes_json)[0]["configuration"] == {"key": "value"}
     assert json.loads(response.edges_json)[0]["condition"] == "ok"

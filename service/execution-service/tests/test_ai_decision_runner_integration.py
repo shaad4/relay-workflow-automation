@@ -71,6 +71,7 @@ async def run_case(should_fail: bool):
     ]
 
     definition = SimpleNamespace(
+        workflow_name="Test workflow",
         nodes_json=json.dumps(nodes),
         edges_json=json.dumps(edges),
     )

@@ -86,7 +86,7 @@ async def run_database_case(decision=..., duplicate=False):
 
     workspace_id, workflow_id, version_id, execution_id = (uuid4() for _ in range(4))
     nodes, edges = workflow(decision, duplicate)
-    definition = SimpleNamespace(nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
+    definition = SimpleNamespace(workflow_name="Test workflow", nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
 
     async with AsyncSessionLocal() as session:
         session.add(Execution(
@@ -217,6 +217,7 @@ def test_human_approval_edges_still_resolve_approved_and_rejected(monkeypatch):
     from app.services import approval_branch_service
 
     definition = SimpleNamespace(
+        workflow_name="Test workflow",
         nodes_json=json.dumps([
             {"node_id": "approval", "node_type": "human.approval"},
             {"node_id": "approved", "node_type": "action.email"},

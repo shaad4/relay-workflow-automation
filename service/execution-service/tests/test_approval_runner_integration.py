@@ -42,7 +42,7 @@ async def run_automatic_case(decision):
         {"source_node_id": "condition", "target_node_id": "approve_email", "condition": "APPROVE"},
         {"source_node_id": "condition", "target_node_id": "reject_email", "condition": "REJECT"},
     ]
-    definition = SimpleNamespace(nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
+    definition = SimpleNamespace(workflow_name="Test workflow", nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
     async with AsyncSessionLocal() as session:
         session.add(Execution(
             id=execution_id, workspace_id=workspace_id, workflow_id=workflow_id,
@@ -104,7 +104,7 @@ async def run_review_case(decision, generate_fails=False):
         {"source_node_id": "review", "target_node_id": "rejected_email", "condition": "rejected"},
         *([{"source_node_id": "generate", "target_node_id": "approved_email"}] if generate_fails else []),
     ]
-    definition = SimpleNamespace(nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
+    definition = SimpleNamespace(workflow_name="Test workflow", nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
     async with AsyncSessionLocal() as session:
         session.add(Execution(
             id=execution_id, workspace_id=workspace_id, workflow_id=workflow_id,
