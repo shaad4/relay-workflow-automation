@@ -397,3 +397,51 @@ async def execute_pending_execution(
             await heartbeat_task
         except asyncio.CancelledError:
             pass
+
+
+
+async def inspect_recoverable_executions(
+    limit: int = 100,
+) -> dict:
+    """
+    Inspect pending and expired executions.
+
+    Does not claim, retry, or modify any execution.
+    """
+
+    async with AsyncSessionLocal() as session:
+        repository = ExecutionQueueRepository(session)
+
+        pending = await repository.list_pending_executions(
+            limit=limit,
+        )
+
+        expired = await repository.list_expired_executions(
+            limit=limit,
+        )
+
+        return {
+            "pending": [
+                {
+                    "execution_id": str(item.id),
+                    "workspace_id": str(item.workspace_id),
+                    "status": item.status,
+                }
+                for item in pending
+            ],
+            "expired": [
+                {
+                    "execution_id": str(item.id),
+                    "workspace_id": str(item.workspace_id),
+                    "status": item.status,
+                    "claimed_by": item.claimed_by,
+                    "lease_expires_at": (
+                        item.lease_expires_at.isoformat()
+                        if item.lease_expires_at
+                        else None
+                    ),
+                    "recovery_status": "requires_review",
+                }
+                for item in expired
+            ],
+        }

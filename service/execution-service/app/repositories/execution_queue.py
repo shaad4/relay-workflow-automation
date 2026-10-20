@@ -160,3 +160,51 @@ class ExecutionQueueRepository:
 
         return result.scalar_one_or_none() is not None
 
+
+    async def list_expired_executions(
+        self,
+        limit: int = 100,
+    ) -> list[Execution]:
+        """Find running executions whose worker leases expired."""
+
+        if not 1 <= limit <= 100:
+            raise ValueError("Limit must be between 1 and 100")
+
+        statement = (
+            select(Execution)
+            .where(
+                Execution.status == ExecutionStatus.RUNNING,
+                Execution.lease_expires_at.is_not(None),
+                Execution.lease_expires_at <= func.now(),
+            )
+            .order_by(Execution.lease_expires_at)
+            .limit(limit)
+        )
+
+        result = await self.session.execute(statement)
+
+        return list(result.scalars().all())
+
+
+    async def list_pending_executions(
+        self,
+        limit: int = 100,
+    ) -> list[Execution]:
+        """Find executions that have not yet been claimed."""
+
+        if not 1 <= limit <= 100:
+            raise ValueError("Limit must be between 1 and 100")
+
+        statement = (
+            select(Execution)
+            .where(
+                Execution.status == ExecutionStatus.PENDING,
+            )
+            .order_by(Execution.created_at)
+            .limit(limit)
+        )
+
+        result = await self.session.execute(statement)
+
+        return list(result.scalars().all())
+
