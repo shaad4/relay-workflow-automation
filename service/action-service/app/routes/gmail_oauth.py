@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 
+from app.core.encryption import CredentialEncryption
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
 from app.models.connection import Connection
@@ -22,7 +23,9 @@ router = APIRouter(
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+GOOGLE_USERINFO_URL = (
+    "https://openidconnect.googleapis.com/v1/userinfo"
+)
 
 
 async def exchange_google_code(code: str) -> dict:
@@ -31,10 +34,14 @@ async def exchange_google_code(code: str) -> dict:
     redirect_uri = os.getenv("GOOGLE_GMAIL_REDIRECT_URI")
 
     if not client_id:
-        raise RuntimeError("GOOGLE_CLIENT_ID is not configured")
+        raise RuntimeError(
+            "GOOGLE_CLIENT_ID is not configured"
+        )
 
     if not client_secret:
-        raise RuntimeError("GOOGLE_CLIENT_SECRET is not configured")
+        raise RuntimeError(
+            "GOOGLE_CLIENT_SECRET is not configured"
+        )
 
     if not redirect_uri:
         raise RuntimeError(
@@ -57,7 +64,7 @@ async def exchange_google_code(code: str) -> dict:
 
     if response.status_code != 200:
         raise RuntimeError(
-            f"Google token exchange failed: {response.text}"
+            "Google token exchange failed"
         )
 
     return response.json()
@@ -74,7 +81,7 @@ async def get_google_user_email(access_token: str) -> str:
 
     if response.status_code != 200:
         raise RuntimeError(
-            f"Google user info request failed: {response.text}"
+            "Google user info request failed"
         )
 
     data = response.json()
@@ -96,7 +103,9 @@ async def start_gmail_oauth(
     redirect_uri = os.getenv("GOOGLE_GMAIL_REDIRECT_URI")
 
     if not client_id:
-        raise RuntimeError("GOOGLE_CLIENT_ID is not configured")
+        raise RuntimeError(
+            "GOOGLE_CLIENT_ID is not configured"
+        )
 
     if not redirect_uri:
         raise RuntimeError(
@@ -105,7 +114,10 @@ async def start_gmail_oauth(
 
     state = secrets.token_urlsafe(32)
 
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    expires_at = (
+        datetime.now(timezone.utc)
+        + timedelta(minutes=10)
+    )
 
     async with AsyncSessionLocal() as session:
         oauth_state = OAuthState(
@@ -118,6 +130,7 @@ async def start_gmail_oauth(
         try:
             session.add(oauth_state)
             await session.commit()
+
         except Exception:
             await session.rollback()
             raise
@@ -156,7 +169,7 @@ async def gmail_oauth_callback(
     if error:
         raise HTTPException(
             status_code=400,
-            detail=f"Google OAuth authorization failed: {error}",
+            detail="Google OAuth authorization failed",
         )
 
     if not code:
@@ -187,10 +200,13 @@ async def gmail_oauth_callback(
                 detail="Invalid OAuth state",
             )
 
-        if oauth_state.expires_at <= datetime.now(timezone.utc):
+        if oauth_state.expires_at <= datetime.now(
+            timezone.utc
+        ):
             try:
                 await session.delete(oauth_state)
                 await session.commit()
+
             except Exception:
                 await session.rollback()
                 raise
@@ -219,17 +235,29 @@ async def gmail_oauth_callback(
                 detail="Google refresh token was not returned",
             )
 
-        email = await get_google_user_email(access_token)
+        email = await get_google_user_email(
+            access_token
+        )
+
+        # Encrypt the Gmail refresh token before storage.
+        encryption = CredentialEncryption()
+
+        encrypted_refresh_token = encryption.encrypt(
+            refresh_token
+        )
 
         connection = Connection(
             workspace_id=workspace_id,
             name=f"Gmail - {email}",
             provider="gmail",
             auth_type="oauth2",
-            credential=refresh_token,
+            credential=encrypted_refresh_token,
             config={
                 "email": email,
-                "token_type": tokens.get("token_type", "Bearer"),
+                "token_type": tokens.get(
+                    "token_type",
+                    "Bearer",
+                ),
             },
         )
 
@@ -240,8 +268,8 @@ async def gmail_oauth_callback(
             await session.delete(oauth_state)
 
             await session.commit()
-
             await session.refresh(connection)
+
         except Exception:
             await session.rollback()
             raise
