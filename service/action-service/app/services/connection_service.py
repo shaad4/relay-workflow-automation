@@ -13,6 +13,64 @@ from app.schemas.connection import (
 )
 
 
+SENSITIVE_FIELDS = {
+    "authorization",
+    "proxy-authorization",
+    "x-api-key",
+    "api-key",
+    "apikey",
+    "api_key",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "token",
+    "password",
+    "passwd",
+    "secret",
+    "client_secret",
+    "credential",
+    "credentials",
+    "private_key",
+    "cookie",
+    "set-cookie",
+}
+
+
+def redact_response(
+    value,
+    credential: str | None = None,
+):
+    """Remove sensitive information from connection test responses."""
+
+    if isinstance(value, dict):
+        return {
+            key: (
+                "[REDACTED]"
+                if str(key).lower().replace("-", "_")
+                in SENSITIVE_FIELDS
+                else redact_response(item, credential)
+            )
+            for key, item in value.items()
+        }
+
+    if isinstance(value, list):
+        return [
+            redact_response(item, credential)
+            for item in value
+        ]
+
+    if isinstance(value, str):
+        if credential:
+            return value.replace(
+                credential,
+                "[REDACTED]",
+            )
+
+        return value
+
+    return value
+
+
 async def create_connection(
     data: ConnectionCreate,
     workspace_id: UUID,
@@ -173,7 +231,7 @@ async def test_connection(
             "config.test_url is required to test this connection"
         )
 
-    # Decrypt credentials only when required for testing.
+    # Decrypt credentials only when needed.
     credential = None
 
     if connection.auth_type != "none":
@@ -224,7 +282,7 @@ async def test_connection(
     try:
         async with httpx.AsyncClient(
             timeout=10.0,
-            follow_redirects=True,
+            follow_redirects=False,
         ) as client:
             response = await client.get(
                 test_url,
@@ -243,20 +301,26 @@ async def test_connection(
     except ValueError:
         response_payload = response.text
 
+    # Sanitize before returning to the frontend.
+    safe_response = redact_response(
+        response_payload,
+        credential,
+    )
+
     if 200 <= response.status_code < 300:
         return ConnectionTestResponse(
             success=True,
             status_code=response.status_code,
             message="Connection test successful",
-            response=response_payload,
+            response=safe_response,
         )
 
     return ConnectionTestResponse(
         success=False,
         status_code=response.status_code,
         message=(
-            f"Connection test failed with status code "
+            "Connection test failed with status code "
             f"{response.status_code}"
         ),
-        response=response_payload,
+        response=safe_response,
     )
