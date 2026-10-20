@@ -35,6 +35,11 @@ class Execution(Base):
         index=True,
     )
 
+    workflow_name: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,

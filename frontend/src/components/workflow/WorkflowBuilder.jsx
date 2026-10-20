@@ -8,12 +8,14 @@ import {
   addEdge,
 } from "@xyflow/react";
 
+import { canvasExecutionState } from "@/lib/executions";
 import * as scheduleApi from "@/services/schedules";
 import { publishWithSchedule, readPayloadDraft, clearPayloadDraft, retryScheduleActivation } from "./scheduleTrigger";
 import { workflowSaveSnapshot, workflowChangedDuringSave } from "./workflowSaveState";
 import WorkflowToolbar from "./WorkflowToolbar";
 import NodeLibrary from "./NodeLibrary";
 import WorkflowCanvas from "./WorkflowCanvas";
+import WorkflowExecutionPanel from "./WorkflowExecutionPanel";
 import NodeInspector from "./NodeInspector";
 import BranchConditionField from "./BranchConditionField";
 import WorkflowValidation from "./WorkflowValidation";
@@ -373,6 +375,11 @@ export default function WorkflowBuilder({
   // ── UI states ─────────────────────────────────────────────────────────────
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [getViewportCenter, setGetViewportCenter] = useState(null);
+  const [executionSnapshot, setExecutionSnapshot] = useState(null);
+  const [runRequest, setRunRequest] = useState(null);
+  const [executionFocus, setExecutionFocus] = useState(null);
+  const canvasNodes = useMemo(() => canvasExecutionState(nodes, executionSnapshot, version?.id).nodes, [nodes, executionSnapshot, version?.id]);
+  const focusExecutionNode = useCallback((nodeId) => setExecutionFocus({ nodeId, key: Date.now() }), []);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
@@ -1143,7 +1150,7 @@ export default function WorkflowBuilder({
 
   // ── Publish ───────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async () => {
-    if (isCanvasReadOnly || publishingRef.current) return;
+    if ((isCanvasReadOnly && workflow?.published_version_id) || publishingRef.current) return;
     if (savingRef.current) {
       setValidationResult({ isValid: false, errors: [{ code: "SAVE_IN_PROGRESS", message: "Wait for the current save to finish, then retry publishing." }] });
       setValidationOpen(true);
@@ -1202,7 +1209,7 @@ export default function WorkflowBuilder({
       publishingRef.current = false;
       setIsPublishing(false);
     }
-  }, [isCanvasReadOnly, saveState, handleSave, workflowId, versionNumber, onRefresh, nodes, edges, version]);
+  }, [isCanvasReadOnly, workflow?.published_version_id, saveState, handleSave, workflowId, versionNumber, onRefresh, nodes, edges, version]);
 
   // ── Edit Workflow (create draft from published) ───────────────────────────
   const handleEditWorkflow = useCallback(async () => {
@@ -1257,6 +1264,7 @@ export default function WorkflowBuilder({
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full w-full bg-[var(--canvas)] select-none overflow-hidden font-sans">
+      {!workflow?.published_version_id && workflow?.status === "inactive" && <div role="status" className="flex flex-wrap items-center gap-2 border-b border-amber-500/25 bg-amber-500/5 px-4 py-2.5 text-xs text-[var(--text-secondary)]"><span className="font-medium text-[var(--text-primary)]">No live version.</span> Choose a version, review it, and publish it to activate this workflow.</div>}
       {publicationWarning && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-[var(--text-primary)]"><span>{publicationWarning}</span><button type="button" disabled={isPublishing} onClick={async () => {
         if (publishingRef.current) return;
         publishingRef.current = true; setIsPublishing(true);
@@ -1276,6 +1284,7 @@ export default function WorkflowBuilder({
         onNavigate={navigateWithGuard}
         workflowDescription={workflow?.description || ""}
         workflowId={workflowId}
+        onRunRequested={(request) => { setExecutionSnapshot(null); setRunRequest(request); }}
         onWorkflowUpdated={onRefresh}
         onWorkflowStatusChange={(status) => onRefresh({ status })}
         onWorkflowDeleted={() => router.push("/workflows")}
@@ -1396,7 +1405,8 @@ export default function WorkflowBuilder({
           )}
 
           <WorkflowCanvas
-            nodes={nodes}
+            executionFocus={executionFocus}
+            nodes={canvasNodes}
             edges={edges}
             onNodesChange={handleNodeChanges}
             onEdgesChange={handleEdgesChange}
@@ -1411,6 +1421,13 @@ export default function WorkflowBuilder({
             onContextMenu={handleCanvasContextMenu}
             isReadOnly={isCanvasReadOnly || isPublishing}
           />
+
+          <WorkflowExecutionPanel key={runRequest?.requestedAt || "initial"} workflowId={workflowId} versionId={version?.id} runRequest={runRequest} onSnapshot={setExecutionSnapshot} onFocusNode={focusExecutionNode} nodes={nodes} canViewRunVersion={saveState === "saved"} onViewRunVersion={(runVersionId) => {
+            if (saveState !== "saved") return;
+            const target = versions.find(item => item.id === runVersionId);
+            if (target) onSelectVersion(target.version_number ?? target.version);
+            else setBuilderNotice("This run’s workflow version is no longer available.");
+          }}/>
 
           {contextMenu && (
             <div

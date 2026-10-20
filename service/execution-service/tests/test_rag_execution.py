@@ -11,7 +11,7 @@ from app.engine.handlers import rag_search
 from app.engine import runner
 from app.engine.context import ExecutionContext
 from app.engine.step_status import ExecutionStepStatus as Status
-from test_execution_components import runner_setup, RunnerSession, FakeAsyncContext
+from test_execution_components import runner_setup, RunnerSession, FakeAsyncContext, RUNNER_WORKSPACE_ID
 
 KB = str(uuid4())
 VALID = {"knowledge_base_id": KB, "query": "{{trigger.data.question}}", "top_k": 3}
@@ -55,10 +55,10 @@ def test_handler_rejects_invalid_configuration_before_rpc(monkeypatch, patch):
 def test_rag_success_resolves_and_persists_output(monkeypatch):
     state = runner_setup(monkeypatch, *graph())
     async def retrieve(configuration, workspace_id):
-        assert configuration["query"] == "question" and workspace_id == "tenant"
+        assert configuration["query"] == "question" and workspace_id == RUNNER_WORKSPACE_ID
         return OUTPUT
     monkeypatch.setattr(runner, "execute_rag_search", retrieve)
-    result = asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "tenant", {"question": "question"}))
+    result = asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID, {"question": "question"}))
     assert result["context"]["nodes"]["r"] == OUTPUT
     assert state["steps"][-1].output == OUTPUT
     assert all(step.status == Status.COMPLETED for step in state["steps"])
@@ -73,7 +73,7 @@ def test_full_lifecycle_failure_closes_active_step(monkeypatch, failure):
         def broken(self, value): raise ValueError("resolution failed")
         monkeypatch.setattr(runner.ExpressionResolver, "resolve", broken)
     with pytest.raises((RuntimeError, ValueError)):
-        asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "tenant", {}))
+        asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID, {}))
     assert state["steps"][0].status == Status.COMPLETED
     step = state["steps"][-1]
     assert step.status == Status.FAILED and step.completed_at and step.duration_ms is not None
@@ -87,7 +87,7 @@ def test_partial_outputs_survive_later_failure(monkeypatch):
     state = runner_setup(monkeypatch, nodes, edges)
     async def retrieve(**kw): return OUTPUT
     monkeypatch.setattr(runner, "execute_rag_search", retrieve)
-    with pytest.raises(ValueError): asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "tenant"))
+    with pytest.raises(ValueError): asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID))
     assert state["steps"][1].status == Status.COMPLETED
     assert state["steps"][-1].status == Status.FAILED
     assert state["execution"].context["nodes"]["r"] == OUTPUT
@@ -115,7 +115,7 @@ def test_graph_error_does_not_overwrite_completed_rag_step(monkeypatch):
     async def retrieve(**kwargs): return OUTPUT
     monkeypatch.setattr(runner, 'execute_rag_search', retrieve)
     with pytest.raises(ValueError, match='multiple outgoing'):
-        asyncio.run(runner.run_execution(state['execution'].id, 'w', 'v', 'tenant'))
+        asyncio.run(runner.run_execution(state['execution'].id, 'w', 'v', RUNNER_WORKSPACE_ID))
     assert state['steps'][-1].status == Status.COMPLETED
     assert state['execution'].context['nodes']['r'] == OUTPUT
 
@@ -137,7 +137,7 @@ def test_output_write_failure_rolls_back_and_fails_active_step(monkeypatch):
     async def retrieve(**kwargs): return OUTPUT
     monkeypatch.setattr(runner, 'execute_rag_search', retrieve)
     with pytest.raises(RuntimeError):
-        asyncio.run(runner.run_execution(state['execution'].id, 'w', 'v', 'tenant'))
+        asyncio.run(runner.run_execution(state['execution'].id, 'w', 'v', RUNNER_WORKSPACE_ID))
     assert state['rolled_back']
     assert state['steps'][-1].status == Status.FAILED
     assert state['execution'].context['nodes']['r'] == OUTPUT

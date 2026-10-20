@@ -4,8 +4,71 @@ from uuid import UUID
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.encryption import CredentialEncryption
 from app.models.connection import Connection
-from app.schemas.connection import ConnectionCreate, ConnectionUpdate, ConnectionTestResponse
+from app.schemas.connection import (
+    ConnectionCreate,
+    ConnectionUpdate,
+    ConnectionTestResponse,
+)
+
+
+SENSITIVE_FIELDS = {
+    "authorization",
+    "proxy-authorization",
+    "x-api-key",
+    "api-key",
+    "apikey",
+    "api_key",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "token",
+    "password",
+    "passwd",
+    "secret",
+    "client_secret",
+    "credential",
+    "credentials",
+    "private_key",
+    "cookie",
+    "set-cookie",
+}
+
+
+def redact_response(
+    value,
+    credential: str | None = None,
+):
+    """Remove sensitive information from connection test responses."""
+
+    if isinstance(value, dict):
+        return {
+            key: (
+                "[REDACTED]"
+                if str(key).lower().replace("-", "_")
+                in SENSITIVE_FIELDS
+                else redact_response(item, credential)
+            )
+            for key, item in value.items()
+        }
+
+    if isinstance(value, list):
+        return [
+            redact_response(item, credential)
+            for item in value
+        ]
+
+    if isinstance(value, str):
+        if credential:
+            return value.replace(
+                credential,
+                "[REDACTED]",
+            )
+
+        return value
+
+    return value
 
 
 async def create_connection(
@@ -13,12 +76,18 @@ async def create_connection(
     workspace_id: UUID,
     session: AsyncSession,
 ) -> Connection:
+    credential = None
+
+    if data.credential:
+        encryption = CredentialEncryption()
+        credential = encryption.encrypt(data.credential)
+
     connection = Connection(
         workspace_id=workspace_id,
         name=data.name,
         provider=data.provider,
         auth_type=data.auth_type,
-        credential=data.credential,
+        credential=credential,
         config=data.config,
     )
 
@@ -73,6 +142,15 @@ async def update_connection(
     if not update_data:
         return None
 
+    if "credential" in update_data:
+        credential = update_data["credential"]
+
+        if credential is not None:
+            encryption = CredentialEncryption()
+            update_data["credential"] = encryption.encrypt(
+                credential
+            )
+
     try:
         result = await session.execute(
             update(Connection)
@@ -93,6 +171,7 @@ async def update_connection(
         await session.commit()
 
         return connection
+
     except Exception:
         await session.rollback()
         raise
@@ -118,6 +197,7 @@ async def delete_connection(
         await session.commit()
 
         return True
+
     except Exception:
         await session.rollback()
         raise
@@ -151,6 +231,20 @@ async def test_connection(
             "config.test_url is required to test this connection"
         )
 
+    # Decrypt credentials only when needed.
+    credential = None
+
+    if connection.auth_type != "none":
+        if not connection.credential:
+            raise ValueError(
+                "Credential is required for authentication"
+            )
+
+        encryption = CredentialEncryption()
+        credential = encryption.decrypt(
+            connection.credential
+        )
+
     headers: dict[str, str] = {}
     params: dict[str, str] = {}
 
@@ -158,21 +252,9 @@ async def test_connection(
         pass
 
     elif connection.auth_type == "bearer":
-        if not connection.credential:
-            raise ValueError(
-                "Credential is required for bearer authentication"
-            )
-
-        headers["Authorization"] = (
-            f"Bearer {connection.credential}"
-        )
+        headers["Authorization"] = f"Bearer {credential}"
 
     elif connection.auth_type == "api_key_header":
-        if not connection.credential:
-            raise ValueError(
-                "Credential is required for api_key_header authentication"
-            )
-
         auth_header = config.get("auth_header")
 
         if not auth_header:
@@ -180,14 +262,9 @@ async def test_connection(
                 "config.auth_header is required for api_key_header"
             )
 
-        headers[auth_header] = connection.credential
+        headers[auth_header] = credential
 
     elif connection.auth_type == "api_key_query":
-        if not connection.credential:
-            raise ValueError(
-                "Credential is required for api_key_query authentication"
-            )
-
         auth_param = config.get("auth_param")
 
         if not auth_param:
@@ -195,7 +272,7 @@ async def test_connection(
                 "config.auth_param is required for api_key_query"
             )
 
-        params[auth_param] = connection.credential
+        params[auth_param] = credential
 
     else:
         raise ValueError(
@@ -205,7 +282,7 @@ async def test_connection(
     try:
         async with httpx.AsyncClient(
             timeout=10.0,
-            follow_redirects=True,
+            follow_redirects=False,
         ) as client:
             response = await client.get(
                 test_url,
@@ -224,20 +301,26 @@ async def test_connection(
     except ValueError:
         response_payload = response.text
 
+    # Sanitize before returning to the frontend.
+    safe_response = redact_response(
+        response_payload,
+        credential,
+    )
+
     if 200 <= response.status_code < 300:
         return ConnectionTestResponse(
             success=True,
             status_code=response.status_code,
             message="Connection test successful",
-            response=response_payload,
+            response=safe_response,
         )
 
     return ConnectionTestResponse(
         success=False,
         status_code=response.status_code,
         message=(
-            f"Connection test failed with status code "
+            "Connection test failed with status code "
             f"{response.status_code}"
         ),
-        response=response_payload,
+        response=safe_response,
     )

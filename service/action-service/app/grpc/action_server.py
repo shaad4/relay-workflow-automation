@@ -3,6 +3,7 @@ from uuid import UUID
 
 import grpc
 
+from app.core.encryption import CredentialEncryption
 from app.connectors.registry import connector_registry
 from app.db.database import AsyncSessionLocal
 from app.grpc.generated.action import action_pb2, action_pb2_grpc
@@ -35,6 +36,15 @@ class ActionInternalService(
                     error="Connection not found",
                 )
 
+            # Decrypt once for this action execution.
+            credential = None
+
+            if connection.credential:
+                encryption = CredentialEncryption()
+                credential = encryption.decrypt(
+                    connection.credential
+                )
+
             config = {}
 
             if request.config_json:
@@ -45,30 +55,35 @@ class ActionInternalService(
             if request.input_data_json:
                 input_data = json.loads(request.input_data_json)
 
+            # Gmail OAuth2
             if connection.auth_type == "oauth2":
-                if connection.credential:
-                    config["refresh_token"] = connection.credential
+                if credential:
+                    config["refresh_token"] = credential
 
+            # HTTP Connector
             if connection.provider == "http":
+
                 if connection.auth_type == "bearer":
-                    if not connection.credential:
+                    if not credential:
                         raise ValueError(
                             "Credential is required for bearer authentication"
                         )
 
                     headers = input_data.get("headers") or {}
                     headers["Authorization"] = (
-                        f"Bearer {connection.credential}"
+                        f"Bearer {credential}"
                     )
                     input_data["headers"] = headers
 
                 elif connection.auth_type == "api_key_header":
-                    if not connection.credential:
+                    if not credential:
                         raise ValueError(
                             "Credential is required for api_key_header authentication"
                         )
 
-                    auth_header = (connection.config or {}).get("auth_header")
+                    auth_header = (
+                        connection.config or {}
+                    ).get("auth_header")
 
                     if not auth_header:
                         raise ValueError(
@@ -76,16 +91,18 @@ class ActionInternalService(
                         )
 
                     headers = input_data.get("headers") or {}
-                    headers[auth_header] = connection.credential
+                    headers[auth_header] = credential
                     input_data["headers"] = headers
 
                 elif connection.auth_type == "api_key_query":
-                    if not connection.credential:
+                    if not credential:
                         raise ValueError(
                             "Credential is required for api_key_query authentication"
                         )
 
-                    auth_param = (connection.config or {}).get("auth_param")
+                    auth_param = (
+                        connection.config or {}
+                    ).get("auth_param")
 
                     if not auth_param:
                         raise ValueError(
@@ -93,21 +110,22 @@ class ActionInternalService(
                         )
 
                     params = input_data.get("params") or {}
-                    params[auth_param] = connection.credential
+                    params[auth_param] = credential
                     input_data["params"] = params
 
+            # Stripe Connector
             if connection.provider == "stripe":
                 if connection.auth_type != "api_key":
                     raise ValueError(
                         "Stripe connection requires api_key authentication"
                     )
 
-                if not connection.credential:
+                if not credential:
                     raise ValueError(
                         "Stripe API key is required"
                     )
 
-                config["api_key"] = connection.credential
+                config["api_key"] = credential
 
             connector = connector_registry.get(
                 connection.provider
@@ -124,20 +142,20 @@ class ActionInternalService(
                 result_json=json.dumps(result),
             )
 
-        except ValueError as exc:
-            return action_pb2.ExecuteActionResponse(
-                success=False,
-                error=str(exc),
-            )
-
         except json.JSONDecodeError:
             return action_pb2.ExecuteActionResponse(
                 success=False,
                 error="Invalid JSON payload",
             )
 
-        except Exception as exc:
+        except ValueError:
             return action_pb2.ExecuteActionResponse(
                 success=False,
-                error=f"Action execution failed: {exc}",
+                error="Invalid action configuration or credentials",
+            )
+
+        except Exception:
+            return action_pb2.ExecuteActionResponse(
+                success=False,
+                error="Action execution failed",
             )

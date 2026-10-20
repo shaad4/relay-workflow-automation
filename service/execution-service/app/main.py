@@ -21,6 +21,7 @@ from app.routes.approvals import (
 from app.routes.ai_provider_connections import (
     router as ai_provider_connections_router,
 )
+from app.routes.executions import router as executions_router
 
 
 @asynccontextmanager
@@ -89,7 +90,7 @@ async def sanitize_ai_connection_validation(
 
 app.include_router(approvals_router)
 app.include_router(ai_provider_connections_router)
-
+app.include_router(executions_router)
 
 @app.get("/health")
 async def health():

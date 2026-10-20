@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { statusLabel } from "@/lib/executions";
 import { Handle, Position } from "@xyflow/react";
 import { ragKnowledgeBaseId, validateNodeConfiguration } from "./configValidation";
 import { getNodeDefinition } from "./nodeDefinitions";
@@ -14,6 +15,9 @@ const categoryColors = {
 };
 
 function WorkflowNode({ data, selected }) {
+  const executionStatus = data?.executionStatus?.toLowerCase();
+  const processing = executionStatus === "running" && data?.executionActive;
+  const executionLabel = processing ? "Processing" : statusLabel(executionStatus);
   const typeId = data?.typeId || data?.node_type || "custom";
   const def = getNodeDefinition(typeId);
   const name = data?.name || data?.label || def.name;
@@ -47,14 +51,16 @@ function WorkflowNode({ data, selected }) {
   return (
     <div
       className={`workflow-node group relative w-[248px] overflow-visible rounded-xl border text-[var(--text-primary)] font-sans transition-all duration-150 ${selected ? "is-selected" : ""}`}
+      data-execution-status={executionStatus}
+      data-processing={processing ? "true" : undefined}
       style={{ "--node-accent": color }}
     >
       {!isTrigger && <Handle type="target" position={Position.Top} className={`${handleClass} !-top-1.5`} />}
 
       <div className="h-[3px] rounded-t-xl" style={{ background: `linear-gradient(90deg, ${color}, ${color}55)` }} />
       <div className="flex items-center gap-3 px-3.5 pt-3 pb-2.5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-[17px]" style={{ color, borderColor: `${color}35`, background: `${color}12` }}>
-          {def.icon}
+        <div className="workflow-node-type-icon relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-[17px]" style={{ color, borderColor: `${color}35`, background: `${color}12` }}>
+          {processing ? <svg className="workflow-processing-spinner" viewBox="0 0 32 32" fill="none" strokeWidth="3" aria-hidden="true"><circle cx="16" cy="16" r="12" stroke="currentColor" opacity=".18"/><path d="M16 4a12 12 0 0 1 12 12" stroke="currentColor" strokeLinecap="round"/></svg> : def.icon}
         </div>
         <div className="min-w-0 flex-1">
           <div className="workflow-node-title truncate text-[13px] font-semibold tracking-[-0.02em]">{name}</div>
@@ -74,7 +80,12 @@ function WorkflowNode({ data, selected }) {
       </div>
 
       <div className="workflow-node-footer flex items-center justify-between border-t px-3.5 py-2 text-[10px] text-[var(--text-tertiary)]">
-        <span className="inline-flex items-center gap-1.5">{["ai.rag_search", "ai.decision", "ai.generate", "logic.condition"].includes(typeId) ? (validateNodeConfiguration(typeId, config).length ? "Configuration required" : "Configured") : <><span className="h-1.5 w-1.5 rounded-full bg-[#35c98a] shadow-[0_0_8px_#35c98a80]" />Ready</>}</span>
+        <span className="inline-flex items-center gap-1.5" aria-live="polite">
+          {executionStatus ? <span key={executionStatus} className="workflow-node-run-state" data-status={executionStatus}>
+            {!processing && <span aria-hidden="true">{executionStatus === "completed" ? "✓" : ["failed", "dead_lettered"].includes(executionStatus) ? "×" : executionStatus === "waiting_for_approval" ? "Ⅱ" : "○"}</span>}
+            {executionLabel}
+          </span> : <>{["ai.rag_search", "ai.decision", "ai.generate", "logic.condition"].includes(typeId) ? (validateNodeConfiguration(typeId, config).length ? "Configuration required" : "Configured") : <><span className="h-1.5 w-1.5 rounded-full bg-[#35c98a] shadow-[0_0_8px_#35c98a80]" />Ready</>}</>}
+        </span>
         <span className="workflow-node-id font-mono">{data?.nodeId || data?.node_id || "step"}</span>
       </div>
 

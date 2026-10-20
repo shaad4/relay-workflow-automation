@@ -45,7 +45,7 @@ async def run_case(prompt="{{trigger.data.message}}", rag_context="", response=N
         {"source_node_id": "webhook", "target_node_id": "generate_1"},
         {"source_node_id": "generate_1", "target_node_id": "gmail"},
     ]
-    definition = SimpleNamespace(nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
+    definition = SimpleNamespace(workflow_name="Test workflow", nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
     async with AsyncSessionLocal() as session:
         session.add(Execution(
             id=execution_id, workspace_id=workspace_id, workflow_id=workflow_id,

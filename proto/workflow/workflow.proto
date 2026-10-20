@@ -38,6 +38,7 @@ message GetWorkflowDefinitionResponse {
   string status = 4;
   string nodes_json = 5;
   string edges_json = 6;
+  string workflow_name = 7;
 }
 
 message ValidateWorkflowVersionRequest {

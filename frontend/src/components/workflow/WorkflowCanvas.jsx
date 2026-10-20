@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback, useEffect } from "react";
+import { useMemo, useCallback, useEffect, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -40,6 +40,7 @@ export default function WorkflowCanvas({
   onNodeDragStop,
   onNodeDragStart,
   onContextMenu,
+  executionFocus,
   isReadOnly = false,
 }) {
   return (
@@ -58,6 +59,7 @@ export default function WorkflowCanvas({
         onNodeDragStop={onNodeDragStop}
         onNodeDragStart={onNodeDragStart}
         onContextMenu={onContextMenu}
+        executionFocus={executionFocus}
         isReadOnly={isReadOnly}
       />
     </ReactFlowProvider>
@@ -78,9 +80,18 @@ function WorkflowCanvasInner({
   onNodeDragStop,
   onNodeDragStart,
   onContextMenu,
+  executionFocus,
   isReadOnly,
 }) {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
+  const lastExecutionFocus = useRef(null);
+  useEffect(() => {
+    if (!executionFocus || lastExecutionFocus.current === executionFocus) return;
+    const node = nodes.find(item => String(item.data?.nodeId ?? item.data?.node_id ?? item.id) === String(executionFocus.nodeId));
+    if (!node) return;
+    lastExecutionFocus.current = executionFocus;
+    fitView({ nodes: [{ id: node.id }], padding: 0.6, maxZoom: 1, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240 });
+  }, [executionFocus, nodes, fitView]);
 
   useEffect(() => {
     if (onQuickAddReady) {
@@ -167,7 +178,7 @@ function WorkflowCanvasInner({
     <div
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="workflow-canvas relative flex-1 w-full h-full select-none overflow-hidden"
+      className="workflow-canvas relative flex-1 min-h-0 w-full select-none overflow-hidden"
     >
       <ReactFlow
         nodes={nodes}

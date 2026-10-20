@@ -4,7 +4,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -404,6 +404,9 @@ def test_kafka_consumer_lifecycle_and_message_handling(monkeypatch, capsys):
     assert "Failed to process" in capsys.readouterr().out
 
 
+RUNNER_WORKSPACE_ID = "00000000-0000-0000-0000-000000000001"
+
+
 class RunnerSession:
     def __init__(self, state): self.state = state; self.item = None
     async def __aenter__(self): return self
@@ -435,8 +438,10 @@ class FakeAsyncContext:
 
 def runner_setup(monkeypatch, nodes, edges, action_response=None, execution=None):
     state = {"steps": [], "execution": execution or SimpleNamespace(id=uuid4(), context={})}
+    state["execution"].workspace_id = UUID(RUNNER_WORKSPACE_ID)
+    state["execution"].workflow_name = None
     class Workflow:
-        async def get_workflow_definition(self, **_kwargs): return SimpleNamespace(nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
+        async def get_workflow_definition(self, **_kwargs): return SimpleNamespace(workflow_name="Test workflow", nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
         async def close(self): pass
     class Action:
         async def execute_action(self, **kwargs): state.setdefault("actions", []).append(kwargs); return action_response or SimpleNamespace(success=True, result_json='{"ok": true}', error="")
@@ -464,12 +469,13 @@ def test_runner_trigger_action_success_resume_and_http_mapping(monkeypatch):
         {"node_id": "a", "node_type": "action.http_request", "configuration": {"connection_id": "c", "url": "https://x", "headers": "X: y\ninvalid"}},
     ]
     state = runner_setup(monkeypatch, nodes, [{"source_node_id": "t", "target_node_id": "a"}], SimpleNamespace(success=True, result_json='{"body": {"id": 2}, "status_code": 200}', error=""))
-    result = asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "x", {"k": 1}))
+    result = asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID, {"k": 1}))
+    assert state["execution"].workflow_name == "Test workflow"
     assert len(state["steps"]) == 2
     assert result["context"]["nodes"]["a"]["id"] == 2
     assert state["actions"][0]["provider"] == "http"
     assert state["steps"][0].status == ExecutionStepStatus.COMPLETED
-    result2 = asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "x", context_data=result["context"], start_node_id="a"))
+    result2 = asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID, context_data=result["context"], start_node_id="a"))
     assert result2["context"] == result["context"]
 
 
@@ -478,10 +484,10 @@ def test_runner_missing_connection_unsupported_action_and_failed_action(monkeypa
     for config, kind, message in [({}, "action.http_request", "connection_id"), ({"connection_id": "c"}, "action.unknown", "Unsupported action")]:
         state = runner_setup(monkeypatch, [trigger, {"node_id": "a", "node_type": kind, "configuration": config}], [{"source_node_id": "t", "target_node_id": "a"}])
         with pytest.raises(ValueError, match=message):
-            asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "x"))
+            asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID))
     state = runner_setup(monkeypatch, [trigger, {"node_id": "a", "node_type": "action.email", "configuration": {"connection_id": "c"}}], [{"source_node_id": "t", "target_node_id": "a"}], SimpleNamespace(success=False, result_json="", error="mail failed"))
     with pytest.raises(ActionExecutionFailed, match="mail failed"):
-        asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "x"))
+        asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID))
     assert state["steps"][-1].status == ExecutionStepStatus.FAILED
     assert state["actions"][0]["provider"] == "gmail"
 
@@ -493,12 +499,12 @@ def test_runner_refund_invalid_result_and_missing_execution(monkeypatch):
     ]
     response = SimpleNamespace(success=True, result_json='[1, 2]', error="")
     state = runner_setup(monkeypatch, nodes, [{"source_node_id": "t", "target_node_id": "r"}], response)
-    result = asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "x"))
+    result = asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID))
     assert state["actions"][0]["provider"] == ""
     assert result["context"]["nodes"]["r"] == {}
 
     response.result_json = "not-json"
-    result = asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "x"))
+    result = asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID))
     assert result["context"]["nodes"]["r"] == {}
 
 
@@ -508,7 +514,7 @@ def test_runner_human_approval_and_validation_paths(monkeypatch):
     node = {"node_id": "h", "node_type": "human.approval", "configuration": {"approver_user_id": approver, "message": "Approve {{ trigger.data.item }}", "timeout_minutes": "5"}}
     execution = SimpleNamespace(id=uuid4(), context={})
     state = runner_setup(monkeypatch, [trigger, node], [{"source_node_id": "t", "target_node_id": "h"}], execution=execution)
-    workspace_id = str(uuid4())
+    workspace_id = str(execution.workspace_id)
     with pytest.raises(HumanApprovalRequired):
         asyncio.run(runner.run_execution(execution.id, "w", "v", workspace_id, {"item": "order"}))
     assert any(step.status == ExecutionStepStatus.WAITING_FOR_APPROVAL for step in state["steps"])
@@ -809,7 +815,7 @@ def test_student_report_email_resolves_expressions_and_forwards_format(monkeypat
         return {"content": body, "model": "mock", "input_tokens": 1, "output_tokens": 1}
     monkeypatch.setattr(runner, "execute_ai_generate", generate)
     state = runner_setup(monkeypatch, nodes, edges)
-    asyncio.run(runner.run_execution(state["execution"].id, "w", "v", "x", {
+    asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID, {
         "recipient_email": "student@example.test", "student_name": "Zoë",
     }))
     request = state["actions"][0]
@@ -822,3 +828,31 @@ def test_student_report_email_resolves_expressions_and_forwards_format(monkeypat
         assert "body_format" not in email_config
     else:
         assert email_config["body_format"] == body_format
+
+
+@pytest.mark.parametrize("failure", ["lookup", "workspace"])
+def test_runner_preflight_failure_preserves_error_and_closes_clients(monkeypatch, failure):
+    state = runner_setup(monkeypatch, [], [])
+    closed = []
+
+    class Workflow:
+        async def get_workflow_definition(self, **kwargs):
+            if failure == "lookup":
+                raise RuntimeError("workflow lookup failed")
+            return SimpleNamespace(workflow_name="Test workflow")
+
+        async def close(self):
+            closed.append("workflow")
+
+    class Action:
+        async def close(self):
+            closed.append("action")
+
+    monkeypatch.setattr(runner, "WorkflowClient", Workflow)
+    monkeypatch.setattr(runner, "ActionClient", Action)
+    error, message = (RuntimeError, "workflow lookup failed") if failure == "lookup" else (ValueError, "does not belong to workspace")
+    with pytest.raises(error, match=message):
+        asyncio.run(runner.run_execution(state["execution"].id, "w", "v", str(uuid4())))
+    assert closed == ["workflow", "action"]
+    assert state["steps"] == []
+    assert state["execution"].workflow_name is None

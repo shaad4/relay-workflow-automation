@@ -501,3 +501,25 @@ def test_proxy_request_preserves_redirect_response(gateway_client, monkeypatch):
     assert response.status_code == 302
     assert response.headers["location"] == "https://accounts.google.test"
     assert calls[0]["client_options"].get("follow_redirects") is False
+
+
+@pytest.mark.parametrize("method,path", [
+    ("POST", "/ai/connections/"), ("GET", "/ai/connections/"),
+    ("GET", "/ai/connections/test-id/"), ("PATCH", "/ai/connections/test-id/"),
+    ("DELETE", "/ai/connections/test-id/"), ("POST", "/ai/connections/test-id/test/"),
+    ("GET", "/ai/connections/test-id/models/"),
+])
+def test_ai_connection_proxy_preserves_request_and_response(gateway_client, monkeypatch, method, path):
+    calls = fake_upstream(monkeypatch, status_code=202, headers={"x-request-id": "upstream", "connection": "close"})
+    response = gateway_client.request(method, path + "?trace=1", content=b'{"name":"test"}', headers={"x-workspace-id": "workspace"})
+    assert response.status_code == 202
+    assert response.json() == {"ok": True}
+    assert response.headers["x-request-id"] == "upstream"
+    assert "connection" not in response.headers
+    sent = calls[-1]
+    assert sent["method"] == method
+    assert sent["url"] == "http://execution-service:8000" + path
+    assert sent["content"] == b'{"name":"test"}'
+    assert sent["params"]["trace"] == "1"
+    assert sent["headers"]["x-workspace-id"] == "workspace"
+    assert "host" not in sent["headers"]

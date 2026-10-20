@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { getWorkflowNodes, getWorkflowVersions, runWorkflow } from "@/services/workflows";
 import { hasManualTrigger, loadManualTrigger, validateManualInput, manualRunError } from "./manualTrigger";
 
-export default function RunWorkflowButton({ workflowId, workflowName, workflowStatus, publishedVersionId, versions, draftNodes, iconOnly = false }) {
+export default function RunWorkflowButton({ workflowId, workflowName, workflowStatus, publishedVersionId, versions, draftNodes, onRunRequested, iconOnly = false }) {
   const [triggerInfo, setTriggerInfo] = useState(null);
   const hasLocalDraft = !publishedVersionId && Array.isArray(draftNodes);
   useEffect(() => {
@@ -68,6 +68,7 @@ export default function RunWorkflowButton({ workflowId, workflowName, workflowSt
     try {
       const result = await runWorkflow(workflowId, validation.input);
       setRunResult(result);
+      if (onRunRequested) { onRunRequested({ ...result, requestedAt: Date.now() }); setRunOpen(false); }
     } catch (error) {
       setRunError(manualRunError(error));
     } finally { runPendingRef.current = false; setRunPending(false); }
