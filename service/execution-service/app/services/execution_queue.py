@@ -17,10 +17,37 @@ from app.engine.runner import run_execution
 from app.engine.status import ExecutionStatus
 from app.models.execution import Execution
 from app.repositories.execution_queue import ExecutionQueueRepository
+from app.kafka.lifecycle_producer import publish_lifecycle_event
+from app.schemas.lifecycle_events import WorkflowLifecycleEvent
 
 
 LEASE_SECONDS = 120
 HEARTBEAT_INTERVAL_SECONDS = 30
+
+
+async def publish_execution_lifecycle(
+    event_type: str,
+    execution_id: UUID,
+    workspace_id: UUID,
+    workflow_id: UUID,
+    workflow_version_id: UUID,
+) -> None:
+    """Publish lifecycle events without failing the workflow."""
+
+    try:
+        event = WorkflowLifecycleEvent(
+            event_type=event_type,
+            execution_id=execution_id,
+            workspace_id=workspace_id,
+            workflow_id=workflow_id,
+            workflow_version_id=workflow_version_id,
+        )
+
+        await publish_lifecycle_event(event)
+
+    except Exception:
+        # Lifecycle publishing is best-effort for the MVP.
+        pass
 
 
 async def create_pending_execution(event: dict) -> UUID:
@@ -371,6 +398,15 @@ async def execute_pending_execution(
     )
 
     try:
+        await publish_execution_lifecycle(
+            event_type="workflow.started",
+            execution_id=execution_id,
+            workspace_id=UUID(workspace_id),
+            workflow_id=UUID(workflow_id),
+            workflow_version_id=UUID(workflow_version_id),
+        )
+
+    
         try:
             result = await run_execution(
                 execution_id=execution_id,
@@ -419,12 +455,32 @@ async def execute_pending_execution(
             error=final_error,
         )
 
+        
         if not finalized:
             raise RuntimeError(
                 "Execution lease expired or ownership was lost"
             )
 
+        if final_status == ExecutionStatus.COMPLETED:
+            await publish_execution_lifecycle(
+                event_type="workflow.completed",
+                execution_id=execution_id,
+                workspace_id=UUID(workspace_id),
+                workflow_id=UUID(workflow_id),
+                workflow_version_id=UUID(workflow_version_id),
+            )
+
+        elif final_status == ExecutionStatus.FAILED:
+            await publish_execution_lifecycle(
+                event_type="workflow.failed",
+                execution_id=execution_id,
+                workspace_id=UUID(workspace_id),
+                workflow_id=UUID(workflow_id),
+                workflow_version_id=UUID(workflow_version_id),
+            )
+
         return True
+
 
     finally:
         heartbeat_task.cancel()
