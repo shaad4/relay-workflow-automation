@@ -74,20 +74,18 @@ class RagClient:
                 request,
                 timeout=20.0,
             )
-
+        
         except grpc.aio.AioRpcError as exc:
             status = exc.code()
 
-            if status == grpc.StatusCode.DEADLINE_EXCEEDED:
-                raise RuntimeError(
-                    "RAG retrieval timed out"
-                ) from exc
+            # Temporary errors: preserve gRPC status for retries.
+            if status in {
+                grpc.StatusCode.UNAVAILABLE,
+                grpc.StatusCode.DEADLINE_EXCEEDED,
+            }:
+                raise
 
-            if status == grpc.StatusCode.UNAVAILABLE:
-                raise RuntimeError(
-                    "RAG Service is unavailable"
-                ) from exc
-
+            # Permanent errors: do not retry.
             if status == grpc.StatusCode.NOT_FOUND:
                 raise ValueError(
                     "Knowledge base not found"

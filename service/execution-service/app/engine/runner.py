@@ -343,10 +343,18 @@ async def run_execution(
 
             # Execute RAG Search node
             if node_type == "ai.rag_search":
-                result = await execute_rag_search(
-                    configuration=resolved_configuration,
-                    workspace_id=workspace_id,
+
+                async def rag_search_once():
+                    return await execute_rag_search(
+                        configuration=resolved_configuration,
+                        workspace_id=workspace_id,
+                    )
+
+                result, attempts_used = await execute_with_retry(
+                    operation=rag_search_once,
+                    node_id=node_id,
                 )
+
 
                 # Store output for downstream nodes
                 context.set_node_output(
@@ -368,6 +376,7 @@ async def run_execution(
                     )
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
+                    execution_step.attempt = attempts_used
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(

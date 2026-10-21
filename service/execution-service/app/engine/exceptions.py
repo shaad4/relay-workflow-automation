@@ -21,3 +21,8 @@ class ActionExecutionFailed(Exception):
         super().__init__(
             f"Action node {node_id} failed: {error}"
         )
+
+class RetryExhaustedError(Exception):
+    def __init__(self, attempts_used: int):
+        self.attempts_used = attempts_used
+        super().__init__("Retry attempts exhausted")
