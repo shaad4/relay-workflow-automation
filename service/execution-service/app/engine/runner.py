@@ -23,6 +23,12 @@ from app.engine.handlers.ai_decision import execute_ai_decision
 from app.engine.handlers.condition import evaluate_condition
 from app.engine.handlers.ai_generate import execute_ai_generate
 
+from app.engine.retry import (
+    execute_with_retry,
+    RETRYABLE_STATUS_CODES,
+    SAFE_HTTP_METHODS,
+)
+
 from app.ai.exceptions import (
     AIDecisionValidationError,
     AIAuthenticationError,
@@ -50,6 +56,7 @@ async def _commit_session(session, add=None, refresh=None):
 async def mark_step_failed(
     execution_step_id,
     error_message: str,
+    attempts_used: int = 1,
 ):
     async with AsyncSessionLocal() as session:
         step = await session.get(
@@ -66,6 +73,7 @@ async def mark_step_failed(
         completed_at = datetime.now(timezone.utc)
 
         step.status = ExecutionStepStatus.FAILED
+        step.attempt = attempts_used
         step.completed_at = completed_at
         step.error = sanitize_payload({
             "message": error_message,
@@ -660,14 +668,68 @@ async def run_execution(
                 flush=True,
             )
 
-            response = await action_client.execute_action(
-                workspace_id=workspace_id,
-                connection_id=connection_id,
-                provider=provider,
-                action=action,
-                config_json=json.dumps({}),
-                input_data_json=json.dumps(resolved_configuration),
-            )
+            
+            async def execute_action_once():
+                response = await action_client.execute_action(
+                    workspace_id=workspace_id,
+                    connection_id=connection_id,
+                    provider=provider,
+                    action=action,
+                    config_json=json.dumps({}),
+                    input_data_json=json.dumps(resolved_configuration),
+                )
+
+                if node_type != "action.http_request":
+                    return response
+
+                if response.success:
+                    return response
+
+                try:
+                    payload = json.loads(
+                        response.result_json or "{}"
+                    )
+                    status_code = payload.get("status_code")
+                except (ValueError, TypeError, AttributeError):
+                    status_code = None
+
+                method = str(
+                    resolved_configuration.get("method", "GET")
+                ).upper()
+
+                retryable = (
+                    method in SAFE_HTTP_METHODS
+                    and (
+                        status_code in RETRYABLE_STATUS_CODES
+                        or response.error in {
+                            "HTTP_TIMEOUT",
+                            "HTTP_CONNECTION_ERROR",
+                        }
+                    )
+                )
+
+                if retryable:
+                    raise ActionExecutionFailed(
+                        node_id=node_id,
+                        error="Temporary HTTP request failure",
+                        retryable=True,
+                        status_code=status_code,
+                    )
+
+                return response
+
+            if node_type == "action.http_request":
+                response, attempts_used = await execute_with_retry(
+                    operation=execute_action_once,
+                    node_id=node_id,
+                    method=str(
+                        resolved_configuration.get("method", "GET")
+                    ),
+                )
+            else:
+                response = await execute_action_once()
+                attempts_used = 1
+
 
             print(
                 "Action result:",
@@ -726,6 +788,7 @@ async def run_execution(
                     execution_step.status = ExecutionStepStatus.COMPLETED
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
+                    execution_step.attempt = attempts_used
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
@@ -822,6 +885,7 @@ async def run_execution(
                 await mark_step_failed(
                     execution_step_id,
                     message,
+                    attempts_used=getattr(exc, "attempts_used", 1),
                 )
 
         finally:

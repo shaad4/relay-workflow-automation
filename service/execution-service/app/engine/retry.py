@@ -44,6 +44,7 @@ async def execute_with_retry(
             )
 
             if not should_retry:
+                exc.attempts_used = attempt
                 raise
 
             delay = min(
