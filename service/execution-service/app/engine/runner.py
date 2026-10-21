@@ -437,12 +437,20 @@ async def run_execution(
 
             # Execute AI Generate node
             if node_type == "ai.generate":
-                async with AsyncSessionLocal() as session:
-                    result = await execute_ai_generate(
-                        configuration=resolved_configuration,
-                        workspace_id=workspace_id,
-                        session=session,
-                    )
+
+                async def generate_once():
+                    async with AsyncSessionLocal() as session:
+                        return await execute_ai_generate(
+                            configuration=resolved_configuration,
+                            workspace_id=workspace_id,
+                            session=session,
+                        )
+
+                result, attempts_used = await execute_with_retry(
+                    operation=generate_once,
+                    node_id=node_id,
+                )
+
 
                 # Store generated output for downstream nodes
                 context.set_node_output(
@@ -470,6 +478,7 @@ async def run_execution(
 
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
+                    execution_step.attempt = attempts_used
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
