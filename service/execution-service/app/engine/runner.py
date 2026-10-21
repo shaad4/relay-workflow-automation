@@ -388,12 +388,19 @@ async def run_execution(
 
             # Execute AI Decision node
             if node_type == "ai.decision":
-                async with AsyncSessionLocal() as session:
-                    result = await execute_ai_decision(
-                        configuration=resolved_configuration,
-                        workspace_id=workspace_id,
-                        session=session,
-                    )
+                async def decision_once():
+                    async with AsyncSessionLocal() as session:
+                        return await execute_ai_decision(
+                            configuration=resolved_configuration,
+                            workspace_id=workspace_id,
+                            session=session,
+                        )
+
+                result, attempts_used = await execute_with_retry(
+                    operation=decision_once,
+                    node_id=node_id,
+                )
+
 
                 # Store validated AI output for downstream nodes
                 context.set_node_output(
@@ -416,6 +423,7 @@ async def run_execution(
 
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
+                    execution_step.attempt = attempts_used
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
