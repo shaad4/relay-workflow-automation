@@ -2,6 +2,7 @@ import json
 from uuid import UUID
 
 import grpc
+import httpx
 
 from app.core.encryption import CredentialEncryption
 from app.connectors.registry import connector_registry
@@ -36,7 +37,7 @@ class ActionInternalService(
                     error="Connection not found",
                 )
 
-            # Decrypt once for this action execution.
+            # Decrypt credentials once.
             credential = None
 
             if connection.credential:
@@ -55,12 +56,12 @@ class ActionInternalService(
             if request.input_data_json:
                 input_data = json.loads(request.input_data_json)
 
-            # Gmail OAuth2
+            # Gmail OAuth2 authentication.
             if connection.auth_type == "oauth2":
                 if credential:
                     config["refresh_token"] = credential
 
-            # HTTP Connector
+            # HTTP connector authentication.
             if connection.provider == "http":
 
                 if connection.auth_type == "bearer":
@@ -113,7 +114,7 @@ class ActionInternalService(
                     params[auth_param] = credential
                     input_data["params"] = params
 
-            # Stripe Connector
+            # Stripe connector authentication.
             if connection.provider == "stripe":
                 if connection.auth_type != "api_key":
                     raise ValueError(
@@ -127,6 +128,7 @@ class ActionInternalService(
 
                 config["api_key"] = credential
 
+            # Resolve and execute connector.
             connector = connector_registry.get(
                 connection.provider
             )
@@ -137,9 +139,37 @@ class ActionInternalService(
                 input_data=input_data,
             )
 
+            # Check HTTP-level success separately.
+            if connection.provider == "http":
+                if not result.get("success", False):
+                    status_code = result.get("status_code")
+
+                    return action_pb2.ExecuteActionResponse(
+                        success=False,
+                        result_json=json.dumps(result),
+                        error=(
+                            f"HTTP request failed with status "
+                            f"{status_code}"
+                        ),
+                    )
+
             return action_pb2.ExecuteActionResponse(
                 success=True,
                 result_json=json.dumps(result),
+            )
+
+        # HTTP request timeout.
+        except httpx.TimeoutException:
+            return action_pb2.ExecuteActionResponse(
+                success=False,
+                error="HTTP_TIMEOUT",
+            )
+
+        # HTTP connection failure.
+        except httpx.ConnectError:
+            return action_pb2.ExecuteActionResponse(
+                success=False,
+                error="HTTP_CONNECTION_ERROR",
             )
 
         except json.JSONDecodeError:
