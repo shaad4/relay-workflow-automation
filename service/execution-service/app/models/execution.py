@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,6 +33,22 @@ class Execution(Base):
         UUID(as_uuid=True),
         nullable=False,
         index=True,
+    )
+
+    # Original failed execution, if this is a replay.
+    replay_of_execution_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "executions.id",
+            name="fk_executions_replay_of_execution_id",
+        ),
+        nullable=True,
+    )
+
+    # Node where the replay should begin.
+    replay_start_node_id: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
     )
 
     workflow_name: Mapped[str | None] = mapped_column(
