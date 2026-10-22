@@ -1,3 +1,7 @@
+
+from uuid import UUID
+from urllib.parse import quote
+
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
@@ -27,8 +31,55 @@ EXCLUDED_HEADERS = {
 
 @router.get("/")
 async def list_dead_letter_events(request: Request):
-    url = f"{EXECUTION_SERVICE_URL}/dead-letter-events/"
+    return await proxy_dead_letter_request(
+        request=request,
+        path="",
+    )
 
+
+@router.get("/{event_id}/")
+async def get_dead_letter_event(
+    request: Request,
+    event_id: UUID,
+):
+    return await proxy_dead_letter_request(
+        request=request,
+        path=str(event_id),
+    )
+
+
+async def proxy_dead_letter_request(
+    request: Request,
+    path: str,
+):
+    # Encode the path safely.
+    path_segments = path.split("/") if path else []
+
+    if any(
+        segment in {".", ".."}
+        for segment in path_segments
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid dead-letter path",
+        )
+
+    encoded_path = "/".join(
+        quote(segment, safe="")
+        for segment in path_segments
+    )
+
+    base_url = (
+        f"{EXECUTION_SERVICE_URL}/dead-letter-events"
+    )
+
+    url = (
+        f"{base_url}/{encoded_path}/"
+        if encoded_path
+        else f"{base_url}/"
+    )
+
+    # Remove hop-by-hop request headers.
     connection_headers = {
         name.strip().lower()
         for name in request.headers.get(
@@ -49,8 +100,9 @@ async def list_dead_letter_events(request: Request):
             timeout=15.0,
             follow_redirects=False,
         ) as client:
-            response = await client.get(
-                url,
+            response = await client.request(
+                method=request.method,
+                url=url,
                 headers=headers,
                 params=request.query_params,
             )
@@ -67,6 +119,7 @@ async def list_dead_letter_events(request: Request):
             detail="Execution Service unavailable",
         ) from exc
 
+    # Remove hop-by-hop response headers.
     response_connection_headers = {
         name.strip().lower()
         for name in response.headers.get(
