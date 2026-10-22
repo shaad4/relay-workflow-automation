@@ -47,6 +47,16 @@ async def get_dead_letter_event(
         path=str(event_id),
     )
 
+@router.post("/{event_id}/resolve/")
+async def resolve_dead_letter_event(
+    request: Request,
+    event_id: UUID,
+):
+    return await proxy_dead_letter_request(
+        request=request,
+        path=f"{event_id}/resolve",
+    )
+
 
 async def proxy_dead_letter_request(
     request: Request,
