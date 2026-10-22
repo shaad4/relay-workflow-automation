@@ -42,3 +42,21 @@ class DeadLetterRepository:
         )
 
         return result.scalars().all(), total
+
+    
+    async def get_by_id(
+        self,
+        event_id: UUID,
+        workspace_id: UUID,
+    ) -> DeadLetterEvent | None:
+        """Get a DLQ event belonging to a workspace."""
+
+        result = await self.session.execute(
+            select(DeadLetterEvent).where(
+                DeadLetterEvent.id == event_id,
+                DeadLetterEvent.workspace_id == workspace_id,
+            )
+        )
+
+        return result.scalar_one_or_none()
+
