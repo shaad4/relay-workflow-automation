@@ -74,9 +74,13 @@ class DeadLetterService:
         workflows = await self.repository.get_execution_workflows(
             workspace_id, [event.execution_id],
         )
+        failed_node = await self.repository.get_failed_node(
+            workspace_id, event.execution_id, event.execution_step_id,
+        )
         return {
             "id": event.id,
             "execution_id": event.execution_id,
+            **failed_node,
             **workflows.get(event.execution_id, {}),
             "execution_step_id": event.execution_step_id,
             "event_type": event.event_type,

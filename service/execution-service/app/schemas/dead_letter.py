@@ -9,6 +9,8 @@ class DeadLetterEventResponse(BaseModel):
     execution_id: UUID
     workflow_id: UUID | None = None
     workflow_name: str | None = None
+    failed_node_type: str | None = None
+    failed_node_name: str | None = None
     execution_step_id: UUID | None
     event_type: str
     attempts: int

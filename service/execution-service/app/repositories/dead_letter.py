@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dead_letter_event import DeadLetterEvent
 from app.models.execution import Execution
+from app.models.execution_step import ExecutionStep
 from datetime import datetime, timezone
 from sqlalchemy import update
 
@@ -137,3 +138,15 @@ class DeadLetterRepository:
             row.id: {"workflow_id": row.workflow_id, "workflow_name": row.workflow_name}
             for row in result
         }
+
+    async def get_failed_node(self, workspace_id, execution_id, step_id):
+        if step_id is None:
+            return {}
+        result = await self.session.execute(
+            select(ExecutionStep.node_type, ExecutionStep.node_name)
+            .join(Execution, Execution.id == ExecutionStep.execution_id)
+            .where(Execution.workspace_id == workspace_id,
+                   Execution.id == execution_id, ExecutionStep.id == step_id)
+        )
+        step = result.one_or_none()
+        return {"failed_node_type": step.node_type, "failed_node_name": step.node_name} if step else {}
