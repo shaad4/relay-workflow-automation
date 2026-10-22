@@ -58,6 +58,17 @@ async def resolve_dead_letter_event(
     )
 
 
+@router.post("/{event_id}/replay/")
+async def replay_dead_letter_event(
+    request: Request,
+    event_id: UUID,
+):
+    return await proxy_dead_letter_request(
+        request=request,
+        path=f"{event_id}/replay",
+    )
+
+
 async def proxy_dead_letter_request(
     request: Request,
     path: str,
