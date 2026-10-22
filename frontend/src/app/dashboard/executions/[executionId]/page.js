@@ -4,12 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import ExecutionAttemptHistory from "@/components/dashboard/ExecutionAttemptHistory";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import { getExecutionDetails, getExecutionSteps } from "@/services/executions";
 import { executionError, formatDuration, formatTime, normalizeStatus, pollingDelay, statusLabel, workflowName } from "@/lib/executions";
 import { ExecutionIcon, ExecutionCopyId, ExecutionErrorState, ExecutionField, ExecutionSkeleton, ExecutionStatusBadge, ExecutionStepTimeline, RefreshExecutions, executionPanel } from "@/components/dashboard/ExecutionUI";
 
 function ExecutionDetail({ executionId }) {
+  const [showAttempts, setShowAttempts] = useState(false);
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState(null);
@@ -81,6 +83,7 @@ function ExecutionDetail({ executionId }) {
         <div><span className="execution-metric-label">Steps completed</span><strong>{completed}<span className="execution-metric-denominator"> / {steps.length}</span></strong><p>Of all recorded steps</p></div>
         <div><span className="execution-metric-label">Trigger</span><strong className="execution-trigger-value"><ExecutionIcon type={execution.trigger_type || "generic"}/>{statusLabel(execution.trigger_type)}</strong><p>How this run started</p></div>
       </section>
+      <section className={`${executionPanel} execution-related-attempts`}><button type="button" className="dlq-attempts-toggle" aria-expanded={showAttempts} aria-controls="execution-related-attempts" onClick={() => setShowAttempts(value => !value)}><span><ExecutionIcon type="history"/>Original run & replays</span><span aria-hidden="true">{showAttempts ? "−" : "+"}</span></button>{execution.replay_of_execution_id && <p className="mt-2 text-xs text-[var(--text-secondary)]">This is a replay of <Link className="execution-text-link" href={`/dashboard/executions/${encodeURIComponent(execution.replay_of_execution_id)}`}>{execution.replay_of_execution_id.slice(0, 8)}</Link>.</p>}{showAttempts && <div id="execution-related-attempts" className="mt-4"><ExecutionAttemptHistory executionId={executionId} currentId={executionId}/></div>}</section>
       <div className="execution-detail-grid">
         <div className="min-w-0 space-y-5">
           <section className={`${executionPanel} execution-timeline-panel`} aria-labelledby="execution-timeline">

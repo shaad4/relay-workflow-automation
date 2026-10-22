@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 class DeadLetterEventResponse(BaseModel):
     id: UUID
     execution_id: UUID
+    workflow_id: UUID | None = None
+    workflow_name: str | None = None
     execution_step_id: UUID | None
     event_type: str
     attempts: int

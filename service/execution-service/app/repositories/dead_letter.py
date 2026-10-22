@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dead_letter_event import DeadLetterEvent
+from app.models.execution import Execution
 from datetime import datetime, timezone
 from sqlalchemy import update
 
@@ -122,3 +123,17 @@ class DeadLetterRepository:
 
 
 
+    async def get_execution_workflows(self, workspace_id: UUID, execution_ids):
+        """Load workflow snapshots for this page in one workspace-scoped query."""
+        if not execution_ids:
+            return {}
+        result = await self.session.execute(
+            select(Execution.id, Execution.workflow_id, Execution.workflow_name).where(
+                Execution.workspace_id == workspace_id,
+                Execution.id.in_(execution_ids),
+            )
+        )
+        return {
+            row.id: {"workflow_id": row.workflow_id, "workflow_name": row.workflow_name}
+            for row in result
+        }

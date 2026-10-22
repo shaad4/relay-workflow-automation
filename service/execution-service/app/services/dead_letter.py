@@ -31,11 +31,15 @@ class DeadLetterService:
             status=status,
         )
 
+        workflows = await self.repository.get_execution_workflows(
+            workspace_id, [event.execution_id for event in events],
+        )
         return {
             "items": [
                 {
                     "id": event.id,
                     "execution_id": event.execution_id,
+                    **workflows.get(event.execution_id, {}),
                     "execution_step_id": event.execution_step_id,
                     "event_type": event.event_type,
                     "attempts": event.attempts,
@@ -67,9 +71,13 @@ class DeadLetterService:
         if event is None:
             return None
 
+        workflows = await self.repository.get_execution_workflows(
+            workspace_id, [event.execution_id],
+        )
         return {
             "id": event.id,
             "execution_id": event.execution_id,
+            **workflows.get(event.execution_id, {}),
             "execution_step_id": event.execution_step_id,
             "event_type": event.event_type,
             "attempts": event.attempts,

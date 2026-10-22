@@ -200,8 +200,8 @@ export default function DashboardSidebar({
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
               return (
+                <div key={item.href}>
                 <SidebarNavItem
-                  key={item.href}
                   href={item.href}
                   label={item.label}
                   icon={item.icon}
@@ -210,6 +210,15 @@ export default function DashboardSidebar({
                   badgeCount={item.href === "/approvals" ? pendingApprovalCount : undefined}
                   onClick={onMobileClose}
                 />
+                {item.label === "Executions" && isActive && !isCollapsed && (
+                  <div className="ml-5 mt-1.5 space-y-0.5 border-l border-[var(--border-default)] pl-3">
+                    {[["/dashboard/executions", "Execution History"], ["/dashboard/executions/dead-letter", "Dead-Letter Queue"]].map(([href, label]) => {
+                      const selected = href.endsWith("dead-letter") ? pathname.startsWith(href) : !pathname.startsWith("/dashboard/executions/dead-letter");
+                      return <Link key={href} href={href} onClick={onMobileClose} aria-current={selected ? "page" : undefined} className={`flex min-h-8 items-center rounded-md px-2 text-xs focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${selected ? "font-medium text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:bg-[var(--elevated)]"}`}>{label}</Link>;
+                    })}
+                  </div>
+                )}
+                </div>
               );
             })}
           </nav>

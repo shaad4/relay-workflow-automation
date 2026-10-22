@@ -30,3 +30,18 @@ export async function getExecutionDetails(executionId, { signal } = {}) {
 export async function getExecutionSteps(executionId, { signal } = {}) {
   return validateExecutionSteps(await request(`/executions/${encodeURIComponent(executionId)}/steps/`, signal));
 }
+
+export async function getExecutionGroups({ page = 1, pageSize = 10, status = "", signal } = {}) {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize), group_replays: "true" });
+  if (status) query.set("status", status.toLowerCase());
+  const data = validateExecutionList(await request(`/executions/?${query}`, signal));
+  if (data.items.some(item => typeof item.execution_group_id !== "string" || !Number.isInteger(item.attempt_count) || item.attempt_count < 1)) {
+    throw new Error("Unexpected execution group response");
+  }
+  return data;
+}
+
+export async function getExecutionAttempts(executionId, { page = 1, signal } = {}) {
+  const query = new URLSearchParams({ page: String(page), page_size: "10", group_id: executionId });
+  return validateExecutionList(await request(`/executions/?${query}`, signal));
+}

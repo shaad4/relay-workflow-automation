@@ -14,51 +14,31 @@ class ExecutionHistoryService:
         page: int = 1,
         page_size: int = 10,
         status: str | None = None,
-    ) -> dict:
-        executions, total = (
-            await self.repository.list_executions(
-                workspace_id=workspace_id,
-                page=page,
-                page_size=page_size,
-                status=status,
+        group_replays: bool = False,
+        group_id: UUID | None = None,
+    ) -> dict | None:
+        if group_id is not None:
+            result = await self.repository.list_execution_attempts(
+                workspace_id, group_id, page, page_size,
             )
-        )
-
-        items = []
-
-        for execution in executions:
-            duration_ms = None
-
-            if (
-                execution.started_at is not None
-                and execution.completed_at is not None
-            ):
-                duration_ms = max(
-                    0,
-                    int(
-                        (
-                            execution.completed_at
-                            - execution.started_at
-                        ).total_seconds() * 1000
-                    ),
-                )
-
-            items.append(
-                {
-                    "id": execution.id,
-                    "workflow_id": execution.workflow_id,
-                    "workflow_version_id": (
-                        execution.workflow_version_id
-                    ),
-                    "workflow_name": execution.workflow_name,
-                    "status": execution.status,
-                    "trigger_type": execution.trigger_type,
-                    "started_at": execution.started_at,
-                    "completed_at": execution.completed_at,
-                    "created_at": execution.created_at,
-                    "duration_ms": duration_ms,
-                }
+            if result is None:
+                return None
+            executions, total, root_id = result
+            items = [self.serialize_execution(execution) | {
+                "execution_group_id": root_id, "attempt_count": total,
+            } for execution in executions]
+        elif group_replays:
+            groups, total = await self.repository.list_execution_groups(
+                workspace_id, page, page_size, status,
             )
+            items = [self.serialize_execution(execution) | {
+                "execution_group_id": root_id, "attempt_count": count,
+            } for execution, root_id, count in groups]
+        else:
+            executions, total = await self.repository.list_executions(
+                workspace_id=workspace_id, page=page, page_size=page_size, status=status,
+            )
+            items = [self.serialize_execution(execution) for execution in executions]
 
         return {
             "items": items,
@@ -80,25 +60,18 @@ class ExecutionHistoryService:
         if execution is None:
             return None
 
+        return self.serialize_execution(execution) | {
+            "workspace_id": execution.workspace_id,
+            "error": sanitize_payload(execution.error),
+        }
+
+    @staticmethod
+    def serialize_execution(execution):
         duration_ms = None
-
-        if (
-            execution.started_at is not None
-            and execution.completed_at is not None
-        ):
-            duration_ms = max(
-                0,
-                int(
-                    (
-                        execution.completed_at
-                        - execution.started_at
-                    ).total_seconds() * 1000
-                ),
-            )
-
+        if execution.started_at is not None and execution.completed_at is not None:
+            duration_ms = max(0, int((execution.completed_at - execution.started_at).total_seconds() * 1000))
         return {
             "id": execution.id,
-            "workspace_id": execution.workspace_id,
             "workflow_id": execution.workflow_id,
             "workflow_version_id": execution.workflow_version_id,
             "workflow_name": execution.workflow_name,
@@ -108,8 +81,9 @@ class ExecutionHistoryService:
             "completed_at": execution.completed_at,
             "created_at": execution.created_at,
             "duration_ms": duration_ms,
-            "error": sanitize_payload(execution.error),
+            "replay_of_execution_id": execution.replay_of_execution_id,
         }
+
 
     async def list_execution_steps(
         self,

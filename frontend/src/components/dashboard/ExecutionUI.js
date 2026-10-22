@@ -6,6 +6,7 @@ import { useState } from "react";
 import { formatDuration, formatTime, normalizeStatus, statusLabel } from "@/lib/executions";
 
 export const executionButton = "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--elevated)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none";
+export const executionAction = "execution-action";
 export const executionPanel = "rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)]";
 
 export function ExecutionIcon({ type = "generic", className = "h-4 w-4" }) {
@@ -20,6 +21,10 @@ export function ExecutionIcon({ type = "generic", className = "h-4 w-4" }) {
   else if (/condition|decision/.test(type)) path = <><path d="m12 2 5 5-5 5-5-5 5-5Zm0 10v4M5 21v-5h14v5"/></>;
   else if (/approval/.test(type)) path = <><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></>;
   else if (/ai|generate/.test(type)) path = <><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/></>;
+  else if (type === "check") path = <path d="m5 12 4 4L19 6"/>;
+  else if (type === "close") path = <path d="m6 6 12 12M18 6 6 18"/>;
+  else if (type === "alert") path = <><path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5m0 3h.01"/></>;
+  else if (type === "replay") path = <><path d="M3 4v6h6M4 10a8 8 0 1 1 1 7"/><path d="m11 8 5 4-5 4Z"/></>;
   else if (type === "refresh") path = <><path d="M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 3M5 15a8 8 0 0 0 13 3"/></>;
   else if (type === "history") path = <><path d="M3 4v5h5M4 9a9 9 0 1 1 0 7M12 7v5l3 2"/></>;
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">{path}</svg>;
@@ -27,11 +32,10 @@ export function ExecutionIcon({ type = "generic", className = "h-4 w-4" }) {
 
 export function ExecutionStatusBadge({ status }) {
   const value = normalizeStatus(status);
-  return <span className="relay-execution-status inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium" data-status={value}>
-    <span key={value} className="relay-execution-status-change inline-flex items-center gap-1.5">
-      {value === "completed" ? <span aria-hidden="true">✓</span> : value === "failed" || value === "dead_lettered" ? <span aria-hidden="true">×</span> : <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full bg-current ${value === "running" ? "motion-safe:animate-pulse" : ""}`}/>}
-      {statusLabel(status)}
-    </span>
+  const icon = value === "completed" || value === "resolved" ? "check" : value === "replayed" ? "replay" : value === "pending" || value === "waiting_for_approval" ? "clock" : value === "failed" || value === "dead_lettered" ? "alert" : null;
+  return <span className="relay-execution-status" data-status={value}>
+    {icon ? <ExecutionIcon type={icon} className="h-3 w-3 shrink-0"/> : <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full bg-current ${value === "running" ? "motion-safe:animate-pulse" : ""}`}/>}
+    {statusLabel(status)}
   </span>;
 }
 
@@ -55,13 +59,13 @@ export function ExecutionField({ label, children, mono = false }) {
   return <div className="min-w-0"><dt className="text-[11px] text-[var(--text-secondary)]">{label}</dt><dd className={`mt-1.5 break-words text-xs leading-5 text-[var(--text-primary)] ${mono ? "font-mono [overflow-wrap:anywhere]" : ""}`}>{children ?? "—"}</dd></div>;
 }
 
-export function ExecutionCopyId({ id }) {
+export function ExecutionCopyId({ id, shortened = false }) {
   const [message, setMessage] = useState("");
   async function copy() {
     try { await navigator.clipboard.writeText(id); setMessage("Copied"); }
     catch { setMessage("Couldn’t copy. Select the ID to copy it manually."); }
   }
-  return <div><div className="flex items-start gap-2"><span className="min-w-0 select-all">{id}</span><button onClick={copy} className="shrink-0 rounded px-1 font-sans text-[var(--accent)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--accent)]" aria-label="Copy execution ID">Copy</button></div><span role="status" className="font-sans text-[11px] text-[var(--text-secondary)]">{message}</span></div>;
+  return <div><div className="flex items-start gap-2"><span className="min-w-0 select-all" title={shortened ? id : undefined}>{shortened ? `${id.slice(0, 8)}…` : id}</span><button onClick={copy} className="shrink-0 rounded px-1 font-sans text-[var(--accent)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--accent)]" aria-label="Copy execution ID">Copy</button></div><span role="status" className="font-sans text-[11px] text-[var(--text-secondary)]">{message}</span></div>;
 }
 
 export function ExecutionStepTimeline({ steps }) {
