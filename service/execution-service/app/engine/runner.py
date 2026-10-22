@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 
+from app.engine.error_classifier import classify_error, action_failure
 from app.db.database import AsyncSessionLocal
 from app.engine.context import ExecutionContext
 from app.engine.executor import SequentialExecutor
@@ -55,7 +56,7 @@ async def _commit_session(session, add=None, refresh=None):
 
 async def mark_step_failed(
     execution_step_id,
-    error_message: str,
+    error_message: str | dict,
     attempts_used: int = 1,
 ):
     async with AsyncSessionLocal() as session:
@@ -75,9 +76,7 @@ async def mark_step_failed(
         step.status = ExecutionStepStatus.FAILED
         step.attempt = attempts_used
         step.completed_at = completed_at
-        step.error = sanitize_payload({
-            "message": error_message,
-        })
+        step.error = sanitize_payload(error_message if isinstance(error_message, dict) else {"message": error_message})
 
         if step.started_at:
             step.duration_ms = int(
@@ -735,12 +734,7 @@ async def run_execution(
                 )
 
                 if retryable:
-                    raise ActionExecutionFailed(
-                        node_id=node_id,
-                        error="Temporary HTTP request failure",
-                        retryable=True,
-                        status_code=status_code,
-                    )
+                    raise action_failure(node_id, response, retryable=True)
 
                 return response
 
@@ -840,9 +834,10 @@ async def run_execution(
 
                     execution_step.status = ExecutionStepStatus.FAILED
                     execution_step.completed_at = completed_at
-                    execution_step.error = sanitize_payload({
-                        "message": "Action execution failed",
-                    })
+                    execution_step.attempt = attempts_used
+                    failure = action_failure(node_id, response, attempts_used=attempts_used)
+                    failure.failed_node_type = node_type
+                    execution_step.error = sanitize_payload(classify_error(failure, node_id, node_type))
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
@@ -854,10 +849,7 @@ async def run_execution(
 
                     await _commit_session(session)
 
-                    raise ActionExecutionFailed(
-                        node_id=node["node_id"],
-                        error=response.error or "Action execution failed",
-                    )
+                    raise failure
 
         return {
             "workflow_id": workflow_id,
@@ -881,30 +873,10 @@ async def run_execution(
         print("Exception Type:", type(exc).__name__, flush=True)
         print("==============================================\n", flush=True)
 
-         # Classify failures using safe messages.
-        if isinstance(exc, ActionExecutionFailed):
-            message = "Action execution failed"
-
-        elif isinstance(exc, AIDecisionValidationError):
-            message = "AI Decision returned an invalid response"
-
-        elif isinstance(exc, AIAuthenticationError):
-            message = "AI provider authentication failed"
-
-        elif isinstance(exc, AIRateLimitError):
-            message = "AI provider rate limit exceeded"
-
-        elif isinstance(exc, AITimeoutError):
-            message = "AI provider request timed out"
-
-        elif isinstance(exc, AIServiceUnavailableError):
-            message = "AI provider unavailable"
-
-        elif isinstance(exc, AIResponseError):
-            message = "AI provider returned an invalid response"
-
-        else:
-            message = "Node execution failed"
+        # Attach only node context; finalization uses the same safe classifier.
+        exc.node_id = node_id
+        exc.failed_node_type = node_type
+        message = classify_error(exc, node_id, node_type)
 
         try:
             if execution_step_id is not None:

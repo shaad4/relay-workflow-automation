@@ -1,4 +1,6 @@
 import json
+import errno
+import socket
 from uuid import UUID
 
 import grpc
@@ -146,7 +148,7 @@ class ActionInternalService(
 
                     return action_pb2.ExecuteActionResponse(
                         success=False,
-                        result_json=json.dumps(result),
+                        result_json=json.dumps({"status_code": status_code}),
                         error=(
                             f"HTTP request failed with status "
                             f"{status_code}"
@@ -159,17 +161,31 @@ class ActionInternalService(
             )
 
         # HTTP request timeout.
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as exc:
             return action_pb2.ExecuteActionResponse(
                 success=False,
                 error="HTTP_TIMEOUT",
+                result_json=json.dumps({"error_code": "HTTP_CONNECT_TIMEOUT" if isinstance(exc, httpx.ConnectTimeout) else "HTTP_READ_TIMEOUT" if isinstance(exc, httpx.ReadTimeout) else "HTTP_TIMEOUT"}),
             )
 
         # HTTP connection failure.
-        except httpx.ConnectError:
+        except httpx.ConnectError as exc:
+            category = "HTTP_CONNECTION_ERROR"
+            cause = exc
+            seen = set()
+            while cause is not None and id(cause) not in seen:
+                seen.add(id(cause))
+                if isinstance(cause, socket.gaierror):
+                    category = "HTTP_DNS_FAILURE"
+                    break
+                if isinstance(cause, OSError) and cause.errno == errno.ECONNREFUSED:
+                    category = "HTTP_CONNECTION_REFUSED"
+                    break
+                cause = cause.__cause__ or cause.__context__
             return action_pb2.ExecuteActionResponse(
                 success=False,
                 error="HTTP_CONNECTION_ERROR",
+                result_json=json.dumps({"error_code": category}),
             )
 
         except json.JSONDecodeError:

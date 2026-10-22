@@ -709,3 +709,26 @@ def test_gmail_rejects_unsupported_body_format_before_api_calls(monkeypatch, bod
         asyncio.run(gmail.GmailConnector().execute("send_email", {"refresh_token": "existing"}, {
             "to": "a@example.test", "subject": "Report", "body": "Report", "body_format": body_format,
         }))
+
+@pytest.mark.parametrize('failure,category', [('status', None), ('connect', 'HTTP_CONNECT_TIMEOUT'), ('read', 'HTTP_READ_TIMEOUT'), ('dns', 'HTTP_DNS_FAILURE'), ('refused', 'HTTP_CONNECTION_REFUSED')])
+def test_http_failure_returns_only_safe_metadata(monkeypatch, failure, category):
+    import httpx
+    import socket
+    import errno
+    monkeypatch.setattr(action_server, 'AsyncSessionLocal', FakeSession)
+    monkeypatch.setattr(action_server, 'get_connection', AsyncMockConnectionLookup(SimpleNamespace(provider='http', auth_type='none', credential=None)))
+    class Connector:
+        async def execute(self, **kwargs):
+            if failure == 'connect': raise httpx.ConnectTimeout('secret-token')
+            if failure == 'read': raise httpx.ReadTimeout('secret-token')
+            if failure in {'dns', 'refused'}:
+                cause = socket.gaierror('secret-token') if failure == 'dns' else ConnectionRefusedError(errno.ECONNREFUSED, 'secret-token')
+                raise httpx.ConnectError('secret-token') from cause
+            return {'success': False, 'status_code': 503, 'headers': {'cookie': 'secret-token'}, 'body': 'secret-token'}
+    monkeypatch.setattr(action_server.connector_registry, 'get', lambda _: Connector())
+    response = asyncio.run(action_server.ActionInternalService().ExecuteAction(make_request(), None))
+    assert not response.success
+    assert 'secret-token' not in response.result_json + response.error
+    assert json.loads(response.result_json) == ({'status_code': 503} if failure == 'status' else {'error_code': category})
+    if failure != 'status':
+        assert response.error in {'HTTP_TIMEOUT', 'HTTP_CONNECTION_ERROR'}

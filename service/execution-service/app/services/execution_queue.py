@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, update, func
 from sqlalchemy.exc import IntegrityError
 
+from app.engine.error_classifier import classify_error
 from app.grpc.workflow_client import WorkflowClient
 
 from app.db.database import AsyncSessionLocal
@@ -487,22 +488,17 @@ async def execute_pending_execution(
         except ActionExecutionFailed as exc:
             final_status = ExecutionStatus.FAILED
             final_context = None
-            final_error = {
-                "node_id": exc.node_id,
-                "message": "Action execution failed",
-            }
+            final_error = classify_error(exc)
 
         except asyncio.CancelledError:
             # Do not finalize a cancelled execution as completed
             # or failed. Recovery will handle the abandoned lease.
             raise
 
-        except Exception:
+        except Exception as exc:
             final_status = ExecutionStatus.FAILED
             final_context = None
-            final_error = {
-                "message": "Workflow execution failed",
-            }
+            final_error = classify_error(exc)
 
         finalized = await finalize_execution(
             execution_id=execution_id,

@@ -77,7 +77,9 @@ def test_full_lifecycle_failure_closes_active_step(monkeypatch, failure):
     assert state["steps"][0].status == Status.COMPLETED
     step = state["steps"][-1]
     assert step.status == Status.FAILED and step.completed_at and step.duration_ms is not None
-    assert step.error == {"message": "Node execution failed"}
+    assert step.error["code"] == {"timeout": "EXECUTION_FAILED", "resolution": "RAG_INVALID_CONFIGURATION", "missing": "RAG_INVALID_QUERY"}[failure]
+    assert step.error["node_id"] == "r" and step.error["node_type"] == "ai.rag_search"
+    assert "sensitive provider detail" not in str(step.error)
     assert "trigger" in state["execution"].context
 
 def test_partial_outputs_survive_later_failure(monkeypatch):
