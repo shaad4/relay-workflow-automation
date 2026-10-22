@@ -71,3 +71,29 @@ async def get_dead_letter_event(
         )
 
     return event
+
+
+
+@router.post("/{event_id}/resolve/")
+async def resolve_dead_letter_event(
+    event_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    workspace_id = UUID(identity["workspace_id"])
+
+    repository = DeadLetterRepository(session)
+    service = DeadLetterService(repository)
+
+    result = await service.resolve_event(
+        event_id=event_id,
+        workspace_id=workspace_id,
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Pending dead-letter event not found",
+        )
+
+    return result

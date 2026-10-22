@@ -4,6 +4,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dead_letter_event import DeadLetterEvent
+from datetime import datetime, timezone
+from sqlalchemy import update
 
 
 class DeadLetterRepository:
@@ -59,4 +61,30 @@ class DeadLetterRepository:
         )
 
         return result.scalar_one_or_none()
+
+    
+    async def resolve_event(
+        self,
+        event_id: UUID,
+        workspace_id: UUID,
+    ) -> DeadLetterEvent | None:
+        """Atomically resolve a pending DLQ event."""
+
+
+        result = await self.session.execute(
+            update(DeadLetterEvent)
+            .where(
+                DeadLetterEvent.id == event_id,
+                DeadLetterEvent.workspace_id == workspace_id,
+                DeadLetterEvent.status == "pending",
+            )
+            .values(
+                status="resolved",
+                resolved_at=datetime.now(timezone.utc),
+            )
+            .returning(DeadLetterEvent)
+        )
+
+        return result.scalar_one_or_none()
+
 

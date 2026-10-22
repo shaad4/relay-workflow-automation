@@ -71,3 +71,25 @@ class DeadLetterService:
             "resolved_at": event.resolved_at,
         }
 
+
+    async def resolve_event(
+        self,
+        event_id: UUID,
+        workspace_id: UUID,
+    ) -> dict | None:
+        event = await self.repository.resolve_event(
+            event_id=event_id,
+            workspace_id=workspace_id,
+        )
+
+        if event is None:
+            return None
+
+        await self.repository.session.commit()
+
+        return {
+            "id": event.id,
+            "status": event.status,
+            "resolved_at": event.resolved_at,
+        }
+
