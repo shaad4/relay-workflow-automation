@@ -97,3 +97,43 @@ async def resolve_dead_letter_event(
         )
 
     return result
+
+
+
+
+@router.post("/{event_id}/replay/", status_code=202)
+async def replay_dead_letter_event(
+    event_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    workspace_id = UUID(identity["workspace_id"])
+
+    repository = DeadLetterRepository(session)
+    service = DeadLetterService(repository)
+
+    try:
+        return await service.replay_event(
+            event_id=event_id,
+            workspace_id=workspace_id,
+        )
+
+    except ValueError as exc:
+        error = str(exc)
+
+        if error == "not_found":
+            raise HTTPException(
+                status_code=404,
+                detail="Dead-letter event not found",
+            ) from exc
+
+        if error == "already_handled":
+            raise HTTPException(
+                status_code=409,
+                detail="Dead-letter event already handled",
+            ) from exc
+
+        raise HTTPException(
+            status_code=422,
+            detail="Execution is not eligible for safe replay",
+        ) from exc

@@ -87,4 +87,38 @@ class DeadLetterRepository:
 
         return result.scalar_one_or_none()
 
+    
+    async def get_pending_for_replay(
+        self,
+        event_id: UUID,
+        workspace_id: UUID,
+    ) -> DeadLetterEvent | None:
+        """Lock a pending DLQ event for safe replay."""
+
+        result = await self.session.execute(
+            select(DeadLetterEvent)
+            .where(
+                DeadLetterEvent.id == event_id,
+                DeadLetterEvent.workspace_id == workspace_id,
+                DeadLetterEvent.status == "pending",
+            )
+            .with_for_update()
+        )
+
+        return result.scalar_one_or_none()
+
+    
+    async def mark_replayed(
+        self,
+        event: DeadLetterEvent,
+    ) -> None:
+        """Mark a locked DLQ event as replayed."""
+
+        event.status = "replayed"
+        event.resolved_at = datetime.now(timezone.utc)
+
+        await self.session.flush()
+
+
+
 
