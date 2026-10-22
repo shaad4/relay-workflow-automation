@@ -429,6 +429,13 @@ async def execute_pending_execution(
         )
         workspace_id = str(execution.workspace_id)
         trigger_data = execution.trigger_data
+        replay_start_node_id = execution.replay_start_node_id
+
+        replay_context = (
+            execution.context
+            if replay_start_node_id is not None
+            else None
+        )
 
     owner_task = asyncio.current_task()
 
@@ -462,6 +469,8 @@ async def execute_pending_execution(
                 workflow_version_id=workflow_version_id,
                 workspace_id=workspace_id,
                 trigger_data=trigger_data,
+                context_data=replay_context,
+                start_node_id=replay_start_node_id,
             )
 
             final_status = ExecutionStatus.COMPLETED
