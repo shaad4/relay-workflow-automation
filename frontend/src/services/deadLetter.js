@@ -13,5 +13,10 @@ export function getDeadLetterEvents({ status = "", limit = 10, offset = 0, signa
 export function getDeadLetterEvent(id, { signal } = {}) { return get(eventPath(id), signal); }
 // Mutations deliberately have no automatic timeout or retry: a lost response may
 // still have committed. Refresh the event before offering another submission.
-export function replayDeadLetterEvent(id) { return apiRequest(`${eventPath(id)}replay/`, { method: "POST" }); }
-export function resolveDeadLetterEvent(id) { return apiRequest(`${eventPath(id)}resolve/`, { method: "POST" }); }
+async function mutateEvent(id, action) {
+  const result = await apiRequest(`${eventPath(id)}${action}/`, { method: "POST" });
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("relay:dead-letter-updated"));
+  return result;
+}
+export function replayDeadLetterEvent(id) { return mutateEvent(id, "replay"); }
+export function resolveDeadLetterEvent(id) { return mutateEvent(id, "resolve"); }

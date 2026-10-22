@@ -1077,3 +1077,14 @@ body {
 .execution-replay-branches { position: relative; margin: 8px 0; }
 .execution-replay-connectors { position: absolute; left: 24px; top: 0; height: 100%; pointer-events: none; z-index: 1; }
 .execution-replay-branch { position: relative; height: 100%; grid-column: 1; grid-row: 1; }
+
+/* Quiet, neutral sidebar navigation. */
+.relay-sidebar .relay-sidebar-link { min-height: 38px; border: 0; font-weight: 400; transition: background-color 160ms ease, color 160ms ease; }
+.relay-sidebar .relay-sidebar-link[aria-current="page"] { background: color-mix(in srgb, var(--text-primary) 6%, transparent); color: var(--text-primary); font-weight: 500; }
+.relay-sidebar .relay-sidebar-link > div:first-child { color: var(--text-secondary); }
+.relay-sidebar .relay-sidebar-link[aria-current="page"] > div:first-child { color: var(--text-primary); }
+.relay-sidebar .relay-sidebar-link:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: -2px; }
+.relay-sidebar nav > div > div .relay-sidebar-link { gap: 8px; padding: 7px 8px; font-size: 11px; min-height: 34px; }
+.relay-sidebar nav > div > div .relay-sidebar-link svg { width: 14px; height: 14px; }
+.sidebar-attention-badge { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 20px; height: 19px; margin-left: auto; padding: 0 5px; border: 0; border-radius: 5px; background: color-mix(in srgb, var(--text-primary) 7%, transparent); color: var(--text-secondary); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; }
+@media (prefers-reduced-motion: reduce) { .relay-sidebar .relay-sidebar-link { transition: none; } }

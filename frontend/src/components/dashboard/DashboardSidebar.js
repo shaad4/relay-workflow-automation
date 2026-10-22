@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -9,79 +9,21 @@ import SidebarNavItem from "./SidebarNavItem";
 import ProfileMenu from "./ProfileMenu";
 import { getApprovals } from "@/services/approvals";
 
-let cachedPendingApprovalCount = null;
+import { getDeadLetterEvents } from "@/services/deadLetter";
 
-// SVG Line Icons (1.5px stroke)
-function DashboardIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <rect width="7" height="7" x="3" y="3" rx="1" />
-      <rect width="7" height="7" x="14" y="3" rx="1" />
-      <rect width="7" height="7" x="14" y="14" rx="1" />
-      <rect width="7" height="7" x="3" y="14" rx="1" />
-    </svg>
-  );
+// A consistent rounded outline icon set for navigation.
+function NavIcon({ children, ...props }) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{children}</svg>;
 }
-
-function WorkflowsIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <circle cx="6" cy="6" r="3" />
-      <circle cx="18" cy="18" r="3" />
-      <path d="M18 6a3 3 0 0 0-3 3v6a3 3 0 0 1-3 3H9" />
-    </svg>
-  );
-}
-
-function ExecutionsIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <circle cx="12" cy="12" r="10" />
-      <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function ApprovalsIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <path d="M9 11l3 3L22 4" />
-      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-    </svg>
-  );
-}
-
-function ConnectionsIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <path d="M12 2v8" />
-      <path d="m16 6-4 4-4-4" />
-      <rect width="16" height="8" x="4" y="14" rx="2" />
-      <path d="M6 18h.01" />
-      <path d="M10 18h.01" />
-    </svg>
-  );
-}
-
-function KnowledgeBasesIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <ellipse cx="12" cy="5" rx="9" ry="3" />
-      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-      <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
-    </svg>
-  );
-}
-
-function PanelToggleIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <rect width="18" height="18" x="3" y="3" rx="2" />
-      <path d="M9 3v18" />
-      <path d="m14 9 3 3-3 3" />
-    </svg>
-  );
-}
+function DashboardIcon(props) { return <NavIcon {...props}><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="11" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="18" width="7" height="3" rx="1"/></NavIcon>; }
+function WorkflowsIcon(props) { return <NavIcon {...props}><rect x="3" y="8" width="6" height="7" rx="2"/><rect x="15" y="3" width="6" height="6" rx="2"/><rect x="15" y="15" width="6" height="6" rx="2"/><path d="M9 11.5h3V6h3m-3 5.5V18h3"/></NavIcon>; }
+function ExecutionsIcon(props) { return <NavIcon {...props}><path d="M3 12h4l3-8 4 16 3-8h4"/></NavIcon>; }
+function ApprovalsIcon(props) { return <NavIcon {...props}><rect x="5" y="5" width="14" height="16" rx="2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-5"/></NavIcon>; }
+function ConnectionsIcon(props) { return <NavIcon {...props}><path d="m8 12 4 4m-7-1 4 4m-2-2-4 4m14-14 4-4M14 5l5 5M8 8l8 8-3 3a5.7 5.7 0 0 1-8-8Zm3-3 2-2m3 7 2-2"/></NavIcon>; }
+function KnowledgeBasesIcon(props) { return <NavIcon {...props}><path d="M12 5v16M3 3h5a4 4 0 0 1 4 2 4 4 0 0 1 4-2h5v16h-5a4 4 0 0 0-4 2 4 4 0 0 0-4-2H3Z"/></NavIcon>; }
+function HistoryIcon(props) { return <NavIcon {...props}><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6m3-3v5l3 2"/></NavIcon>; }
+function DeadLetterIcon(props) { return <NavIcon {...props}><path d="M4 4h16v16H4zM4 14h5l2 3h2l2-3h5m-8-7v3m0 2h.01"/></NavIcon>; }
+function PanelToggleIcon(props) { return <NavIcon {...props}><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18m7-12-3 3 3 3"/></NavIcon>; }
 
 export default function DashboardSidebar({
   isCollapsed,
@@ -91,32 +33,39 @@ export default function DashboardSidebar({
 }) {
   const pathname = usePathname();
   const { user } = useAuth();
-  const [pendingApprovalCount, setPendingApprovalCount] = useState(cachedPendingApprovalCount ?? 0);
-
-  const refreshApprovalCount = useCallback(async () => {
-    try {
-      const response = await getApprovals();
-      const approvals = Array.isArray(response) ? response : response?.approvals || [];
-      const nextCount = approvals.filter((approval) => String(approval.status || "pending").toLowerCase() === "pending").length;
-      cachedPendingApprovalCount = nextCount;
-      setPendingApprovalCount((currentCount) => currentCount === nextCount ? currentCount : nextCount);
-    } catch {
-      // Keep the last known count when the sidebar count request fails.
-    }
-  }, []);
-
+  const [counts, setCounts] = useState({ approvals: 0, dlq: 0 });
   useEffect(() => {
-    refreshApprovalCount();
-    const interval = window.setInterval(refreshApprovalCount, 30000);
-    const onApprovalsUpdated = () => refreshApprovalCount();
-    window.addEventListener("focus", onApprovalsUpdated);
-    window.addEventListener("relay:approvals-updated", onApprovalsUpdated);
+    if (!user) return;
+    let disposed = false;
+    let running = false;
+    async function refreshCounts() {
+      if (running || document.visibilityState === "hidden") return;
+      running = true;
+      const results = await Promise.allSettled([getApprovals(), getDeadLetterEvents({ status: "pending", limit: 1 })]);
+      if (!disposed) setCounts(previous => {
+        const next = { ...previous };
+        if (results[0].status === "fulfilled") {
+          const response = results[0].value;
+          const approvals = Array.isArray(response) ? response : response?.approvals || [];
+          next.approvals = approvals.filter(item => String(item.status || "pending").toLowerCase() === "pending").length;
+        }
+        if (results[1].status === "fulfilled" && Number.isFinite(results[1].value.total)) next.dlq = results[1].value.total;
+        return next;
+      });
+      running = false;
+    }
+    refreshCounts();
+    const interval = window.setInterval(refreshCounts, 30000);
+    const events = ["focus", "relay:approvals-updated", "relay:dead-letter-updated"];
+    events.forEach(event => window.addEventListener(event, refreshCounts));
+    document.addEventListener("visibilitychange", refreshCounts);
     return () => {
+      disposed = true;
       window.clearInterval(interval);
-      window.removeEventListener("focus", onApprovalsUpdated);
-      window.removeEventListener("relay:approvals-updated", onApprovalsUpdated);
+      events.forEach(event => window.removeEventListener(event, refreshCounts));
+      document.removeEventListener("visibilitychange", refreshCounts);
     };
-  }, [refreshApprovalCount]);
+  }, [user, pathname]);
 
   const userName = user?.name || user?.email?.split("@")[0] || "Shaad";
   const userInitial = userName.charAt(0).toUpperCase();
@@ -136,7 +85,7 @@ export default function DashboardSidebar({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-[var(--surface)] border-r border-[var(--border-subtle)] transition-all duration-150 ease-out select-none overflow-visible">
+    <div className="flex flex-col h-full relay-sidebar bg-[var(--surface)] border-r border-[var(--border-subtle)] transition-all duration-150 ease-out select-none overflow-visible">
       {/* Brand Header */}
       <div className={`h-14 flex items-center ${isCollapsed ? "justify-center px-2" : "justify-between px-4"} border-b border-[var(--border-subtle)] shrink-0`}>
         {!isCollapsed ? (
@@ -167,7 +116,7 @@ export default function DashboardSidebar({
               type="button"
               onClick={onToggleCollapse}
               aria-label="Collapse sidebar"
-              className="hidden md:flex p-1.5 rounded-[6px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 cursor-pointer"
+              className="hidden md:flex p-1.5 rounded-[6px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--text-secondary)]/40 cursor-pointer"
             >
               <PanelToggleIcon className="w-4 h-4 stroke-[1.5]" />
             </button>
@@ -178,7 +127,7 @@ export default function DashboardSidebar({
             type="button"
             onClick={onToggleCollapse}
             aria-label="Expand sidebar"
-            className="w-8 h-8 rounded-[6px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 cursor-pointer"
+            className="w-8 h-8 rounded-[6px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--text-secondary)]/40 cursor-pointer"
           >
             <PanelToggleIcon className="w-4 h-4 stroke-[1.5] rotate-180" />
           </button>
@@ -190,7 +139,7 @@ export default function DashboardSidebar({
         {/* Main Group */}
         <div>
           {!isCollapsed && (
-            <div className="px-3 mb-2 text-[10px] font-mono tracking-wider text-[var(--text-tertiary)] uppercase">
+            <div className="px-3 mb-2 text-[10px] font-medium tracking-wider text-[var(--text-tertiary)] uppercase">
               Main
             </div>
           )}
@@ -205,16 +154,20 @@ export default function DashboardSidebar({
                   href={item.href}
                   label={item.label}
                   icon={item.icon}
-                  active={isActive}
+                  active={isActive && (item.label !== "Executions" || isCollapsed)}
                   collapsed={isCollapsed}
-                  badgeCount={item.href === "/approvals" ? pendingApprovalCount : undefined}
+                  badgeCount={item.href === "/approvals" ? counts.approvals : item.label === "Executions" && isCollapsed ? counts.dlq : undefined}
+                  badgeLabel={item.label === "Approvals" ? "pending approvals" : "failures needing attention"}
                   onClick={onMobileClose}
                 />
-                {item.label === "Executions" && isActive && !isCollapsed && (
-                  <div className="ml-5 mt-1.5 space-y-0.5 border-l border-[var(--border-default)] pl-3">
-                    {[["/dashboard/executions", "Execution History"], ["/dashboard/executions/dead-letter", "Dead-Letter Queue"]].map(([href, label]) => {
-                      const selected = href.endsWith("dead-letter") ? pathname.startsWith(href) : !pathname.startsWith("/dashboard/executions/dead-letter");
-                      return <Link key={href} href={href} onClick={onMobileClose} aria-current={selected ? "page" : undefined} className={`flex min-h-8 items-center rounded-md px-2 text-xs focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${selected ? "font-medium text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:bg-[var(--elevated)]"}`}>{label}</Link>;
+                {item.label === "Executions" && !isCollapsed && (
+                  <div className="ml-5 mt-1 space-y-0.5 border-l border-[var(--border-subtle)] pl-2">
+                    {[
+                      { href: "/dashboard/executions", label: "Execution History", icon: HistoryIcon },
+                      { href: "/dashboard/executions/dead-letter", label: "Dead-Letter Queue", icon: DeadLetterIcon, count: counts.dlq },
+                    ].map(({ href, label, icon: Icon, count }) => {
+                      const selected = href.endsWith("dead-letter") ? pathname.startsWith(href) : isActive && !pathname.startsWith("/dashboard/executions/dead-letter");
+                      return <SidebarNavItem key={href} href={href} label={label} icon={Icon} active={selected} badgeCount={count} badgeLabel="failures needing attention" onClick={onMobileClose}/>;
                     })}
                   </div>
                 )}
@@ -227,7 +180,7 @@ export default function DashboardSidebar({
         {/* Resources Group */}
         <div>
           {!isCollapsed && (
-            <div className="px-3 mb-2 text-[10px] font-mono tracking-wider text-[var(--text-tertiary)] uppercase">
+            <div className="px-3 mb-2 text-[10px] font-medium tracking-wider text-[var(--text-tertiary)] uppercase">
               Resources
             </div>
           )}
@@ -239,7 +192,7 @@ export default function DashboardSidebar({
                 <div key={item.href}>
                   <SidebarNavItem href={item.href} label={item.label} icon={item.icon} active={isActive} collapsed={isCollapsed} onClick={onMobileClose} />
                   {isConnections && isActive && !isCollapsed && (
-                    <div className="ml-5 mt-1.5 space-y-0.5 border-l border-[var(--border-default)] pl-3">
+                    <div className="ml-5 mt-1 space-y-0.5 border-l border-[var(--border-subtle)] pl-2">
                       <Link href="/connections" onClick={onMobileClose} aria-current={pathname === "/connections" ? "page" : undefined} className={`group flex h-7 items-center gap-2 rounded-md px-2 text-[12px] transition-colors ${pathname === "/connections" ? "font-medium text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:bg-[var(--elevated)]/70 hover:text-[var(--text-primary)]"}`}><span aria-hidden="true" className={`h-1 w-1 rounded-full ${pathname === "/connections" ? "bg-[var(--text-primary)]" : "bg-transparent"}`}/>Connections</Link>
                       <Link href="/connections/webhooks" onClick={onMobileClose} aria-current={pathname === "/connections/webhooks" ? "page" : undefined} className={`group flex h-7 items-center gap-2 rounded-md px-2 text-[12px] transition-colors ${pathname === "/connections/webhooks" ? "font-medium text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:bg-[var(--elevated)]/70 hover:text-[var(--text-primary)]"}`}><span aria-hidden="true" className={`h-1 w-1 rounded-full ${pathname === "/connections/webhooks" ? "bg-[var(--text-primary)]" : "bg-transparent"}`}/>Webhooks</Link>
                     </div>
@@ -261,7 +214,7 @@ export default function DashboardSidebar({
           aria-label="User profile menu"
           className={`w-full flex items-center ${
             isCollapsed ? "justify-center p-1.5" : "gap-3 p-1.5 text-left"
-          } rounded-[6px] hover:bg-[var(--elevated)] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/40`}
+          } rounded-[6px] hover:bg-[var(--elevated)] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[var(--text-secondary)]/40`}
         >
           {/* User Avatar */}
           <div className="w-8 h-8 rounded-[6px] bg-[var(--elevated)] border border-[var(--border-default)] flex items-center justify-center font-bold text-[13px] text-[var(--text-primary)] shrink-0">
