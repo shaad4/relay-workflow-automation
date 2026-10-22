@@ -221,3 +221,27 @@ class ExecutionRepository:
         except SQLAlchemyError as exc:
             await self.session.rollback()
             raise RuntimeError("Failed to retrieve execution attempts") from exc
+
+    async def get_execution_lineage(self, workspace_id, execution_id):
+        """Identify the original run and the selected attempt's position."""
+        try:
+            tree = self.replay_tree(workspace_id)
+            root_id = select(tree.c.root_id).where(
+                tree.c.execution_id == execution_id,
+            ).scalar_subquery()
+            ranked = select(
+                Execution.id.label("id"),
+                tree.c.root_id.label("execution_group_id"),
+                func.count().over().label("attempt_count"),
+                func.row_number().over(
+                    order_by=(Execution.created_at.asc(), Execution.id.asc()),
+                ).label("attempt_number"),
+            ).join(tree, Execution.id == tree.c.execution_id).where(
+                tree.c.root_id == root_id, Execution.workspace_id == workspace_id,
+            ).subquery()
+            result = await self.session.execute(select(ranked).where(ranked.c.id == execution_id))
+            row = result.mappings().one_or_none()
+            return {key: row[key] for key in ("execution_group_id", "attempt_count", "attempt_number")} if row else {}
+        except SQLAlchemyError as exc:
+            await self.session.rollback()
+            raise RuntimeError("Failed to retrieve execution lineage") from exc

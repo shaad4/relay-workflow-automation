@@ -31,6 +31,7 @@ class ExecutionListResponse(BaseModel):
 
 
 class ExecutionDetailResponse(ExecutionListItem):
+    attempt_number: int | None = Field(default=None, ge=1)
     workspace_id: UUID
     error: dict | None = None
 

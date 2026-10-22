@@ -60,7 +60,8 @@ class ExecutionHistoryService:
         if execution is None:
             return None
 
-        return self.serialize_execution(execution) | {
+        lineage = await self.repository.get_execution_lineage(workspace_id, execution_id)
+        return self.serialize_execution(execution) | lineage | {
             "workspace_id": execution.workspace_id,
             "error": sanitize_payload(execution.error),
         }

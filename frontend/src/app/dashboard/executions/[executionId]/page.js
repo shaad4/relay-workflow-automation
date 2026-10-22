@@ -4,14 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
-import ExecutionAttemptHistory from "@/components/dashboard/ExecutionAttemptHistory";
+import ExecutionLineageGraph from "@/components/dashboard/ExecutionLineageGraph";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import { getExecutionDetails, getExecutionSteps } from "@/services/executions";
 import { executionError, formatDuration, formatTime, normalizeStatus, pollingDelay, statusLabel, workflowName } from "@/lib/executions";
 import { ExecutionIcon, ExecutionCopyId, ExecutionErrorState, ExecutionField, ExecutionSkeleton, ExecutionStatusBadge, ExecutionStepTimeline, RefreshExecutions, executionPanel } from "@/components/dashboard/ExecutionUI";
 
 function ExecutionDetail({ executionId }) {
-  const [showAttempts, setShowAttempts] = useState(false);
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState(null);
@@ -73,17 +72,17 @@ function ExecutionDetail({ executionId }) {
   const updateLabel = error ? "Updates interrupted" : state === "waiting_for_approval" ? "Updates every 30 seconds" : active ? "Live updates every 4 seconds" : "Auto-refresh off";
   return <DashboardShell pageTitle="Execution details"><div className="execution-workspace">
     <nav className="execution-breadcrumb" aria-label="Breadcrumb"><Link href="/dashboard/executions">Executions</Link><span aria-hidden="true">/</span><span className="font-mono">{executionId.slice(0, 8)}</span></nav>
-    <header className="execution-page-header"><div className="execution-heading-group"><span className="execution-page-icon"><ExecutionIcon type="history" className="h-6 w-6"/></span><div className="min-w-0"><p className="execution-eyebrow">Workflow run</p><h1>{execution ? workflowName(execution) : "Workflow execution"}</h1><p className="execution-header-description">{execution ? `Triggered by ${statusLabel(execution.trigger_type).toLowerCase()} · ${formatTime(execution.started_at)}` : "Inspect the progress and outcome of this run."}</p></div></div><RefreshExecutions busy={busy} onRefresh={refresh}/></header>
+    <header className="execution-page-header"><div className="execution-heading-group"><span className="execution-page-icon"><ExecutionIcon type="history" className="h-6 w-6"/></span><div className="min-w-0"><p className="execution-eyebrow">{execution ? execution.replay_of_execution_id ? `Replay${execution.attempt_number ? ` ${execution.attempt_number - 1}` : ""}` : "Original execution" : "Workflow run"}</p><h1>{execution ? workflowName(execution) : "Workflow execution"}</h1><p className="execution-header-description">{execution ? `${execution.replay_of_execution_id ? "Replayed from a failed step" : `Triggered by ${statusLabel(execution.trigger_type).toLowerCase()}`} · ${formatTime(execution.started_at)}` : "Inspect the progress and outcome of this run."}</p></div></div><RefreshExecutions busy={busy} onRefresh={refresh}/></header>
     {error && <ExecutionErrorState message={executionError(error)} notFound={notFound} onRetry={refresh} busy={busy}/>}
     {!data && busy && <ExecutionSkeleton detail/>}
     {execution && !notFound && <>
       <section className="execution-metrics" aria-label="Run summary">
-        <div><span className="execution-metric-label">Run status</span><ExecutionStatusBadge status={execution.status}/><p>{state === "completed" ? "Workflow completed successfully" : state === "failed" ? "Review the failed step below" : state === "waiting_for_approval" ? "Waiting for a human decision" : active ? "Execution in progress" : "Latest recorded status"}</p></div>
+        <div><span className="execution-metric-label">This attempt</span><ExecutionStatusBadge status={execution.status}/><p>{state === "completed" ? "Workflow completed successfully" : state === "failed" ? "Review the failed step below" : state === "waiting_for_approval" ? "Waiting for a human decision" : active ? "Execution in progress" : "Latest recorded status"}</p></div>
         <div><span className="execution-metric-label">Total duration</span><strong className="font-mono">{formatDuration(execution.duration_ms)}</strong><p>Elapsed execution time</p></div>
         <div><span className="execution-metric-label">Steps completed</span><strong>{completed}<span className="execution-metric-denominator"> / {steps.length}</span></strong><p>Of all recorded steps</p></div>
-        <div><span className="execution-metric-label">Trigger</span><strong className="execution-trigger-value"><ExecutionIcon type={execution.trigger_type || "generic"}/>{statusLabel(execution.trigger_type)}</strong><p>How this run started</p></div>
+        <div><span className="execution-metric-label">Started by</span><strong className="execution-trigger-value"><ExecutionIcon type={execution.replay_of_execution_id ? "replay" : execution.trigger_type || "generic"}/>{execution.replay_of_execution_id ? "Replay" : statusLabel(execution.trigger_type)}</strong><p>{execution.replay_of_execution_id ? "Resumed from the failed step" : "How this run started"}</p></div>
       </section>
-      <section className={`${executionPanel} execution-related-attempts`}><button type="button" className="dlq-attempts-toggle" aria-expanded={showAttempts} aria-controls="execution-related-attempts" onClick={() => setShowAttempts(value => !value)}><span><ExecutionIcon type="history"/>Original run & replays</span><span aria-hidden="true">{showAttempts ? "−" : "+"}</span></button>{execution.replay_of_execution_id && <p className="mt-2 text-xs text-[var(--text-secondary)]">This is a replay of <Link className="execution-text-link" href={`/dashboard/executions/${encodeURIComponent(execution.replay_of_execution_id)}`}>{execution.replay_of_execution_id.slice(0, 8)}</Link>.</p>}{showAttempts && <div id="execution-related-attempts" className="mt-4"><ExecutionAttemptHistory executionId={executionId} currentId={executionId}/></div>}</section>
+
       <div className="execution-detail-grid">
         <div className="min-w-0 space-y-5">
           <section className={`${executionPanel} execution-timeline-panel`} aria-labelledby="execution-timeline">
@@ -97,6 +96,7 @@ function ExecutionDetail({ executionId }) {
         </div>
         <aside className={`${executionPanel} execution-run-details`} aria-labelledby="run-details"><div className="execution-panel-heading"><h2 id="run-details">Run details</h2><ExecutionIcon type="generic"/></div><dl className="execution-metadata"><ExecutionField label="Execution ID" mono><ExecutionCopyId id={execution.id}/></ExecutionField><ExecutionField label="Workflow">{workflowName(execution)}</ExecutionField><ExecutionField label="Started">{formatTime(execution.started_at)}</ExecutionField><ExecutionField label="Completed">{formatTime(execution.completed_at)}</ExecutionField><ExecutionField label="Workflow ID" mono>{execution.workflow_id}</ExecutionField><ExecutionField label="Version ID" mono>{execution.workflow_version_id}</ExecutionField></dl><div className="execution-metadata-footer"><ExecutionIcon type="clock"/><span>Times shown in your local timezone</span></div></aside>
       </div>
+      <ExecutionLineageGraph key={executionId} execution={execution} revision={updatedAt?.getTime()}/>
       <p className="execution-last-updated">Last refreshed {formatTime(updatedAt)}</p>
     </>}
   </div></DashboardShell>;
