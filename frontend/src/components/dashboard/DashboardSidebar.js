@@ -1,15 +1,43 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import SidebarNavItem from "./SidebarNavItem";
 import ProfileMenu from "./ProfileMenu";
+import { getExecutionGroups } from "@/services/executions";
 import { getApprovals } from "@/services/approvals";
 
 import { getDeadLetterEvents } from "@/services/deadLetter";
+
+// Retain snapshots across sidebar remounts; isolate counts by account/workspace.
+const emptyCounts = { approvals: 0, dlq: 0, executions: 0 };
+const countCache = new Map();
+const countRequests = new Map();
+const countListeners = new Set();
+function subscribeCounts(listener) { countListeners.add(listener); return () => countListeners.delete(listener); }
+async function loadCounts(key) {
+  if (countRequests.has(key)) return countRequests.get(key);
+  const request = (async () => {
+    const results = await Promise.allSettled([getApprovals(), getDeadLetterEvents({ status: "pending", limit: 1 }), getExecutionGroups({ pageSize: 1 })]);
+    const previous = countCache.get(key)?.counts || emptyCounts;
+    const next = { ...previous };
+    if (results[0].status === "fulfilled") {
+      const response = results[0].value;
+      const approvals = Array.isArray(response) ? response : response?.approvals || [];
+      next.approvals = approvals.filter(item => String(item.status || "pending").toLowerCase() === "pending").length;
+    }
+    if (results[1].status === "fulfilled" && Number.isFinite(results[1].value.total)) next.dlq = results[1].value.total;
+    if (results[2].status === "fulfilled") next.executions = results[2].value.total;
+    const unchanged = Object.keys(next).every(field => next[field] === previous[field]);
+    countCache.set(key, { counts: unchanged ? previous : next, updated: Date.now() });
+    countListeners.forEach(listener => listener());
+  })().finally(() => countRequests.delete(key));
+  countRequests.set(key, request);
+  return request;
+}
 
 // A consistent rounded outline icon set for navigation.
 function NavIcon({ children, ...props }) {
@@ -33,39 +61,24 @@ export default function DashboardSidebar({
 }) {
   const pathname = usePathname();
   const { user } = useAuth();
-  const [counts, setCounts] = useState({ approvals: 0, dlq: 0 });
+  const countKey = user ? JSON.stringify([user.id || user.email, user.workspace_id || user.workspace?.id || null]) : null;
+  const counts = useSyncExternalStore(subscribeCounts, () => countCache.get(countKey)?.counts || emptyCounts, () => emptyCounts);
   useEffect(() => {
-    if (!user) return;
-    let disposed = false;
-    let running = false;
-    async function refreshCounts() {
-      if (running || document.visibilityState === "hidden") return;
-      running = true;
-      const results = await Promise.allSettled([getApprovals(), getDeadLetterEvents({ status: "pending", limit: 1 })]);
-      if (!disposed) setCounts(previous => {
-        const next = { ...previous };
-        if (results[0].status === "fulfilled") {
-          const response = results[0].value;
-          const approvals = Array.isArray(response) ? response : response?.approvals || [];
-          next.approvals = approvals.filter(item => String(item.status || "pending").toLowerCase() === "pending").length;
-        }
-        if (results[1].status === "fulfilled" && Number.isFinite(results[1].value.total)) next.dlq = results[1].value.total;
-        return next;
-      });
-      running = false;
+    if (!countKey) return;
+    function refreshCounts() {
+      if (document.visibilityState !== "hidden") loadCounts(countKey);
     }
-    refreshCounts();
+    if (!countCache.has(countKey) || Date.now() - countCache.get(countKey).updated >= 30000) refreshCounts();
     const interval = window.setInterval(refreshCounts, 30000);
     const events = ["focus", "relay:approvals-updated", "relay:dead-letter-updated"];
     events.forEach(event => window.addEventListener(event, refreshCounts));
     document.addEventListener("visibilitychange", refreshCounts);
     return () => {
-      disposed = true;
       window.clearInterval(interval);
       events.forEach(event => window.removeEventListener(event, refreshCounts));
       document.removeEventListener("visibilitychange", refreshCounts);
     };
-  }, [user, pathname]);
+  }, [countKey]);
 
   const userName = user?.name || user?.email?.split("@")[0] || "Shaad";
   const userInitial = userName.charAt(0).toUpperCase();
@@ -163,11 +176,11 @@ export default function DashboardSidebar({
                 {item.label === "Executions" && !isCollapsed && (
                   <div className="ml-5 mt-1 space-y-0.5 border-l border-[var(--border-subtle)] pl-2">
                     {[
-                      { href: "/dashboard/executions", label: "Execution History", icon: HistoryIcon },
+                      { href: "/dashboard/executions", label: "Execution History", icon: HistoryIcon, count: counts.executions },
                       { href: "/dashboard/executions/dead-letter", label: "Dead-Letter Queue", icon: DeadLetterIcon, count: counts.dlq },
                     ].map(({ href, label, icon: Icon, count }) => {
                       const selected = href.endsWith("dead-letter") ? pathname.startsWith(href) : isActive && !pathname.startsWith("/dashboard/executions/dead-letter");
-                      return <SidebarNavItem key={href} href={href} label={label} icon={Icon} active={selected} badgeCount={count} badgeLabel="failures needing attention" onClick={onMobileClose}/>;
+                      return <SidebarNavItem key={href} href={href} label={label} icon={Icon} active={selected} badgeCount={count} badgeLabel={label === "Execution History" ? "workflow runs" : "failures needing attention"} onClick={onMobileClose}/>;
                     })}
                   </div>
                 )}
