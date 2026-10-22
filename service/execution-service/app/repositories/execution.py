@@ -5,6 +5,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.dead_letter_event import DeadLetterEvent
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
 
@@ -245,3 +246,14 @@ class ExecutionRepository:
         except SQLAlchemyError as exc:
             await self.session.rollback()
             raise RuntimeError("Failed to retrieve execution lineage") from exc
+
+    async def get_recovery_events(self, workspace_id, execution_ids):
+        if not execution_ids:
+            return {}
+        result = await self.session.execute(
+            select(DeadLetterEvent.execution_id, DeadLetterEvent.id, DeadLetterEvent.status).where(
+                DeadLetterEvent.workspace_id == workspace_id,
+                DeadLetterEvent.execution_id.in_(execution_ids),
+            )
+        )
+        return {row.execution_id: {"dead_letter_event_id": row.id, "recovery_status": row.status} for row in result}

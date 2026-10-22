@@ -1088,3 +1088,20 @@ body {
 .relay-sidebar nav > div > div .relay-sidebar-link svg { width: 14px; height: 14px; }
 .sidebar-attention-badge { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 20px; height: 19px; margin-left: auto; padding: 0 5px; border: 0; border-radius: 5px; background: color-mix(in srgb, var(--text-primary) 7%, transparent); color: var(--text-secondary); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; }
 @media (prefers-reduced-motion: reduce) { .relay-sidebar .relay-sidebar-link { transition: none; } }
+
+.execution-recovery-action { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; line-height: 1.5; }
+.execution-recovery-state { color: var(--text-secondary); font-size: 10px; }
+.execution-recovery-action button { color: var(--text-primary); border-bottom: 1px solid var(--border-default); cursor: pointer; padding: 2px 0; font-size: 11px; }
+.execution-recovery-action button:hover { border-color: var(--text-secondary); }
+.execution-recovery-action button:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 3px; }
+.execution-error-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.execution-error-heading .execution-recovery-action { margin: 0; }
+.execution-replay-entry { position: relative; }
+.execution-replay-entry:has(.execution-recovery-action) .execution-replay-row { padding-right: 182px; }
+.execution-replay-entry .execution-recovery-action { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); margin: 0; flex-direction: column; align-items: flex-end; gap: 2px; }
+@media (max-width: 900px) {
+  .execution-replay-entry:has(.execution-recovery-action) .execution-replay-row { padding-right: 24px; }
+  .execution-replay-entry:has(.execution-recovery-action) .execution-replay-duration { visibility: hidden; }
+  .execution-replay-entry .execution-recovery-action { top: auto; bottom: 12px; transform: none; }
+  .execution-replay-entry .execution-recovery-state { display: none; }
+}

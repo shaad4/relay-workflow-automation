@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import DeadLetterDrawer from "@/components/dashboard/DeadLetterDrawer";
+import ExecutionRecoveryAction from "@/components/dashboard/ExecutionRecoveryAction";
 import ExecutionLineageGraph from "@/components/dashboard/ExecutionLineageGraph";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import { getExecutionDetails, getExecutionSteps } from "@/services/executions";
@@ -11,6 +13,8 @@ import { executionError, formatDuration, formatTime, normalizeStatus, pollingDel
 import { ExecutionIcon, ExecutionCopyId, ExecutionErrorState, ExecutionField, ExecutionSkeleton, ExecutionStatusBadge, ExecutionStepTimeline, RefreshExecutions, executionPanel } from "@/components/dashboard/ExecutionUI";
 
 function ExecutionDetail({ executionId }) {
+  const [recoveryId, setRecoveryId] = useState(null);
+  const recoveryFocus = useRef(null);
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState(null);
@@ -71,13 +75,13 @@ function ExecutionDetail({ executionId }) {
   const state = normalizeStatus(execution?.status);
   const updateLabel = error ? "Updates interrupted" : state === "waiting_for_approval" ? "Updates every 30 seconds" : active ? "Live updates every 4 seconds" : "Auto-refresh off";
   return <DashboardShell pageTitle="Execution details"><div className="execution-workspace">
-    <nav className="execution-breadcrumb" aria-label="Breadcrumb"><Link href="/dashboard/executions">Executions</Link><span aria-hidden="true">/</span><span className="font-mono">{executionId.slice(0, 8)}</span></nav>
+    <nav ref={recoveryFocus} tabIndex={-1} className="execution-breadcrumb" aria-label="Breadcrumb"><Link href="/dashboard/executions">Executions</Link><span aria-hidden="true">/</span><span className="font-mono">{executionId.slice(0, 8)}</span></nav>
     <header className="execution-page-header"><div className="execution-heading-group"><span className="execution-page-icon"><ExecutionIcon type="history" className="h-6 w-6"/></span><div className="min-w-0"><p className="execution-eyebrow">{execution ? execution.replay_of_execution_id ? `Replay${execution.attempt_number ? ` ${execution.attempt_number - 1}` : ""}` : "Original execution" : "Workflow run"}</p><h1>{execution ? workflowName(execution) : "Workflow execution"}</h1><p className="execution-header-description">{execution ? `${execution.replay_of_execution_id ? "Replayed from a failed step" : `Triggered by ${statusLabel(execution.trigger_type).toLowerCase()}`} · ${formatTime(execution.started_at)}` : "Inspect the progress and outcome of this run."}</p></div></div><RefreshExecutions busy={busy} onRefresh={refresh}/></header>
     {error && <ExecutionErrorState message={executionError(error)} notFound={notFound} onRetry={refresh} busy={busy}/>}
     {!data && busy && <ExecutionSkeleton detail/>}
     {execution && !notFound && <>
       <section className="execution-metrics" aria-label="Run summary">
-        <div><span className="execution-metric-label">This attempt</span><ExecutionStatusBadge status={execution.status}/><p>{state === "completed" ? "Workflow completed successfully" : state === "failed" ? "Review the failed step below" : state === "waiting_for_approval" ? "Waiting for a human decision" : active ? "Execution in progress" : "Latest recorded status"}</p></div>
+        <div><span className="execution-metric-label">This attempt</span><ExecutionStatusBadge status={execution.status}/><ExecutionRecoveryAction execution={execution} onOpen={setRecoveryId}/><p>{state === "completed" ? "Workflow completed successfully" : state === "failed" ? "Review the failed step below" : state === "waiting_for_approval" ? "Waiting for a human decision" : active ? "Execution in progress" : "Latest recorded status"}</p></div>
         <div><span className="execution-metric-label">Total duration</span><strong className="font-mono">{formatDuration(execution.duration_ms)}</strong><p>Elapsed execution time</p></div>
         <div><span className="execution-metric-label">Steps completed</span><strong>{completed}<span className="execution-metric-denominator"> / {steps.length}</span></strong><p>Of all recorded steps</p></div>
         <div><span className="execution-metric-label">Started by</span><strong className="execution-trigger-value"><ExecutionIcon type={execution.replay_of_execution_id ? "replay" : execution.trigger_type || "generic"}/>{execution.replay_of_execution_id ? "Replay" : statusLabel(execution.trigger_type)}</strong><p>{execution.replay_of_execution_id ? "Resumed from the failed step" : "How this run started"}</p></div>
@@ -92,13 +96,14 @@ function ExecutionDetail({ executionId }) {
             {steps.length > 0 ? <ExecutionStepTimeline steps={steps}/> : <div className="px-5 py-12 text-center"><h3 className="text-sm font-medium">No steps recorded yet</h3><p className="mt-2 text-xs text-[var(--text-secondary)]">{active ? "Steps will appear here as this execution progresses." : "No step history is available for this execution."}</p></div>}
             <div className="execution-timeline-footer"><span className={`execution-update-dot ${active && !error ? "is-live" : ""}`} aria-hidden="true"/><span role="status">{updateLabel}</span><span className="ml-auto">Expand a step to inspect</span></div>
           </section>
-          {execution.error && <section className="rounded-lg border border-red-500/25 bg-red-500/5 p-5" aria-labelledby="execution-error"><h2 id="execution-error" className="text-sm font-semibold">Execution error</h2><p className="mt-1 text-xs text-[var(--text-secondary)]">Error information reported for this run.</p><pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md border border-red-500/15 bg-[var(--canvas)] p-4 font-mono text-xs leading-6">{JSON.stringify(execution.error, null, 2)}</pre></section>}
+          {execution.error && <section className="rounded-lg border border-red-500/25 bg-red-500/5 p-5" aria-labelledby="execution-error"><div className="execution-error-heading"><h2 id="execution-error" className="text-sm font-semibold">Execution error</h2><ExecutionRecoveryAction execution={execution} onOpen={setRecoveryId}/></div><p className="mt-1 text-xs text-[var(--text-secondary)]">Error information reported for this run.</p><pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md border border-red-500/15 bg-[var(--canvas)] p-4 font-mono text-xs leading-6">{JSON.stringify(execution.error, null, 2)}</pre></section>}
         </div>
         <aside className={`${executionPanel} execution-run-details`} aria-labelledby="run-details"><div className="execution-panel-heading"><h2 id="run-details">Run details</h2><ExecutionIcon type="generic"/></div><dl className="execution-metadata"><ExecutionField label="Execution ID" mono><ExecutionCopyId id={execution.id}/></ExecutionField><ExecutionField label="Workflow">{workflowName(execution)}</ExecutionField><ExecutionField label="Started">{formatTime(execution.started_at)}</ExecutionField><ExecutionField label="Completed">{formatTime(execution.completed_at)}</ExecutionField><ExecutionField label="Workflow ID" mono>{execution.workflow_id}</ExecutionField><ExecutionField label="Version ID" mono>{execution.workflow_version_id}</ExecutionField></dl><div className="execution-metadata-footer"><ExecutionIcon type="clock"/><span>Times shown in your local timezone</span></div></aside>
       </div>
-      <ExecutionLineageGraph key={executionId} execution={execution} revision={updatedAt?.getTime()}/>
+      <ExecutionLineageGraph key={executionId} execution={execution} revision={updatedAt?.getTime()} onOpenRecovery={setRecoveryId}/>
       <p className="execution-last-updated">Last refreshed {formatTime(updatedAt)}</p>
     </>}
+    {recoveryId && <DeadLetterDrawer key={recoveryId} id={recoveryId} onClose={() => setRecoveryId(null)} onChanged={refresh} fallbackFocusRef={recoveryFocus}/> }
   </div></DashboardShell>;
 
 }

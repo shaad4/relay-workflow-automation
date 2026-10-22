@@ -40,6 +40,8 @@ class ExecutionHistoryService:
             )
             items = [self.serialize_execution(execution) for execution in executions]
 
+        recovery = await self.repository.get_recovery_events(workspace_id, [item["id"] for item in items])
+        items = [item | recovery.get(item["id"], {}) for item in items]
         return {
             "items": items,
             "total": total,
@@ -61,7 +63,8 @@ class ExecutionHistoryService:
             return None
 
         lineage = await self.repository.get_execution_lineage(workspace_id, execution_id)
-        return self.serialize_execution(execution) | lineage | {
+        recovery = await self.repository.get_recovery_events(workspace_id, [execution_id])
+        return self.serialize_execution(execution) | lineage | recovery.get(execution_id, {}) | {
             "workspace_id": execution.workspace_id,
             "error": sanitize_payload(execution.error),
         }

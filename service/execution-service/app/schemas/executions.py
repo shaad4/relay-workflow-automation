@@ -18,6 +18,8 @@ class ExecutionListItem(BaseModel):
     completed_at: datetime | None
     created_at: datetime
     duration_ms: int | None = Field(default=None, ge=0)
+    dead_letter_event_id: UUID | None = None
+    recovery_status: str | None = None
     replay_of_execution_id: UUID | None = None
     execution_group_id: UUID | None = None
     attempt_count: int = Field(default=1, ge=1)

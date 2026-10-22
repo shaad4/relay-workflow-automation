@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ExecutionRecoveryAction from "./ExecutionRecoveryAction";
 import Pagination from "@/components/Pagination";
 import { getExecutionAttempts } from "@/services/executions";
 import { executionError, formatDuration, formatTime } from "@/lib/executions";
@@ -9,7 +10,7 @@ import { ExecutionIcon, ExecutionStatusBadge, executionButton, executionPanel } 
 
 const branchColors = ["#d99a16", "#3b82f6", "#a78bfa", "#10b981", "#f472b6", "#f97316"];
 
-export default function ExecutionLineageGraph({ execution, revision }) {
+export default function ExecutionLineageGraph({ execution, revision, onOpenRecovery }) {
   const [page, setPage] = useState(Math.max(1, Math.ceil((execution.attempt_number || 1) / 10)));
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState(null);
@@ -50,7 +51,7 @@ export default function ExecutionLineageGraph({ execution, revision }) {
           const original = attempt.id === rootId || !attempt.replay_of_execution_id;
           const number = (result.page - 1) * result.page_size + index;
           const current = attempt.id === execution.id;
-          return <li key={attempt.id}>
+          return <li key={attempt.id} className="execution-replay-entry">
             <Link href={`/dashboard/executions/${encodeURIComponent(attempt.id)}`} aria-current={current ? "page" : undefined} className={`execution-replay-row ${current ? "is-current" : ""}`}>
               <span className="execution-replay-branch" aria-hidden="true"><span className={`execution-replay-dot ${original ? "is-original" : ""}`} style={{ left: `${branchX(index) - 5}px`, "--branch-color": branchColor(index) }}/></span>
               <span className="execution-replay-name"><strong>{original ? "Original" : `Replay ${number}`}</strong><code>{attempt.id.slice(0, 8)}</code>{current && <span className="execution-lineage-viewing">Viewing</span>}{attempt.replay_of_execution_id && <span className="execution-replay-source">from {attempt.replay_of_execution_id.slice(0, 8)}</span>}</span>
@@ -59,6 +60,7 @@ export default function ExecutionLineageGraph({ execution, revision }) {
               <span className="execution-replay-duration">{formatDuration(attempt.duration_ms)}</span>
               <span className="execution-replay-open" aria-hidden="true">↗</span>
             </Link>
+            {onOpenRecovery && <ExecutionRecoveryAction execution={attempt} onOpen={onOpenRecovery} compact/>}
           </li>;
         })}
       </ol>
