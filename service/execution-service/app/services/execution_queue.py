@@ -20,6 +20,10 @@ from app.repositories.execution_queue import ExecutionQueueRepository
 from app.kafka.lifecycle_producer import publish_lifecycle_event
 from app.schemas.lifecycle_events import WorkflowLifecycleEvent
 
+from app.models.dead_letter_event import DeadLetterEvent
+from app.models.execution_step import ExecutionStep
+from app.engine.step_status import ExecutionStepStatus
+
 
 LEASE_SECONDS = 120
 HEARTBEAT_INTERVAL_SECONDS = 30
@@ -327,12 +331,56 @@ async def finalize_execution(
                 result.scalar_one_or_none() is not None
             )
 
+            
             if not finalized:
                 await session.rollback()
                 return False
 
+            # Record terminal workflow failures in the DLQ.
+            if status == ExecutionStatus.FAILED:
+
+                execution_result = await session.execute(
+                    select(Execution).where(
+                        Execution.id == execution_id
+                    )
+                )
+                execution = execution_result.scalar_one()
+
+                # Find the most recent failed execution step.
+                step_result = await session.execute(
+                    select(ExecutionStep)
+                    .where(
+                        ExecutionStep.execution_id == execution_id,
+                        ExecutionStep.status == ExecutionStepStatus.FAILED,
+                    )
+                    .order_by(ExecutionStep.sequence.desc())
+                    .limit(1)
+                )
+
+                failed_step = step_result.scalar_one_or_none()
+
+                dead_letter = DeadLetterEvent(
+                    workspace_id=execution.workspace_id,
+                    execution_id=execution_id,
+                    execution_step_id=(
+                        failed_step.id if failed_step else None
+                    ),
+                    event_type="workflow.failed",
+                    payload=None,
+                    error=error or {
+                        "message": "Workflow execution failed"
+                    },
+                    attempts=(
+                        failed_step.attempt if failed_step else 1
+                    ),
+                    status="pending",
+                )
+
+                session.add(dead_letter)
+
             await session.commit()
             return True
+
 
         except Exception:
             await session.rollback()
