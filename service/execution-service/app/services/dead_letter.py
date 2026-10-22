@@ -42,3 +42,32 @@ class DeadLetterService:
             "limit": limit,
             "offset": offset,
         }
+
+    
+    async def get_event(
+        self,
+        event_id: UUID,
+        workspace_id: UUID,
+    ) -> dict | None:
+        """Return one dead-letter event."""
+
+        event = await self.repository.get_by_id(
+            event_id=event_id,
+            workspace_id=workspace_id,
+        )
+
+        if event is None:
+            return None
+
+        return {
+            "id": event.id,
+            "execution_id": event.execution_id,
+            "execution_step_id": event.execution_step_id,
+            "event_type": event.event_type,
+            "attempts": event.attempts,
+            "status": event.status,
+            "error": event.error,
+            "created_at": event.created_at,
+            "resolved_at": event.resolved_at,
+        }
+

@@ -1,13 +1,13 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
 from app.repositories.dead_letter import DeadLetterRepository
 from app.services.dead_letter import DeadLetterService
-from app.schemas.dead_letter import DeadLetterListResponse
+from app.schemas.dead_letter import DeadLetterListResponse, DeadLetterEventResponse
 
 router = APIRouter(
     prefix="/dead-letter-events",
@@ -42,3 +42,32 @@ async def list_dead_letter_events(
         offset=offset,
         status=status,
     )
+
+
+
+@router.get(
+    "/{event_id}/",
+    response_model=DeadLetterEventResponse,
+)
+async def get_dead_letter_event(
+    event_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+    workspace_id = UUID(identity["workspace_id"])
+
+    repository = DeadLetterRepository(session)
+    service = DeadLetterService(repository)
+
+    event = await service.get_event(
+        event_id=event_id,
+        workspace_id=workspace_id,
+    )
+
+    if event is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dead-letter event not found",
+        )
+
+    return event
