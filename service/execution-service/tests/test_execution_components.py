@@ -1,3 +1,4 @@
+from unittest.mock import AsyncMock
 import asyncio
 import json
 import sys
@@ -671,7 +672,11 @@ def test_approval_route_resume_outcomes_and_missing_records(monkeypatch):
 
 
 def test_application_health_and_lifespan(monkeypatch):
-    assert asyncio.run(health()) == {"status": "ok", "service": "execution-service"}
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(
+        consumer_task=SimpleNamespace(done=lambda: False),
+        dispatcher_task=SimpleNamespace(done=lambda: False),
+    )))
+    assert asyncio.run(health(request)) == {"status": "ok", "service": "execution-service"}
     assert execution_app.title == "Relay Execution Service"
     calls = []
     async def start(): calls.append("start")
@@ -690,6 +695,9 @@ def test_application_health_and_lifespan(monkeypatch):
         return SimpleNamespace(stop=stop_grpc)
     monkeypatch.setattr("app.main.start_grpc_server", start_grpc)
     monkeypatch.setattr("app.main.start_consumer", start)
+    monkeypatch.setattr("app.main.start_lifecycle_producer", AsyncMock())
+    monkeypatch.setattr("app.main.stop_lifecycle_producer", AsyncMock())
+    monkeypatch.setattr("app.main.ExecutionDispatcher", lambda: SimpleNamespace(run=consume, shutdown=AsyncMock()))
     monkeypatch.setattr("app.main.consume_workflow_triggered", consume)
     monkeypatch.setattr("app.main.stop_consumer", stop)
 

@@ -144,7 +144,11 @@ def test_provider_failures_stop_gmail_without_persisting_secrets(provider_error,
     assert expected in str(error)
     assert API_KEY not in str(error)
     assert steps["generate_1"].status == ExecutionStepStatus.FAILED
-    assert steps["generate_1"].error["message"] == expected
+    assert steps["generate_1"].error["message"] == {
+        "AI provider request timed out": "The AI provider request timed out.",
+        "AI provider authentication failed": "AI provider authentication failed.",
+        "AI provider unavailable": "The AI provider is temporarily unavailable.",
+    }[expected]
     assert "gmail" not in steps and not calls
     assert "generate_1" not in context.get("nodes", {})
     assert API_KEY not in json.dumps(context) + json.dumps(steps["generate_1"].error)
@@ -160,7 +164,7 @@ def test_invalid_response_is_not_available_downstream(invalid_response):
     result, error, steps, calls, _, _, context, *_ = asyncio.run(run_case(response=invalid_response))
     assert result is None and isinstance(error, AIResponseError)
     assert steps["generate_1"].status == ExecutionStepStatus.FAILED
-    assert steps["generate_1"].error["message"] == "AI provider returned an invalid response"
+    assert steps["generate_1"].error["message"] == "The AI provider returned an invalid response."
     assert steps["generate_1"].output is None
     assert "gmail" not in steps and not calls
     assert "generate_1" not in context.get("nodes", {})

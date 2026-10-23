@@ -90,3 +90,8 @@ pnpm-debug.log*
 # =========================
 benchmarks/results/
 
+
+# Backend test reports
+coverage.xml
+coverage.json
+test-results.xml

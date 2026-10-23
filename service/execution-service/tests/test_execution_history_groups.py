@@ -16,6 +16,7 @@ from sqlalchemy.pool import StaticPool
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/relay_test")
 
+from app.models.dead_letter_event import DeadLetterEvent
 from app.models.execution import Execution
 from app.repositories.execution import ExecutionRepository
 from app.services.execution_history import ExecutionHistoryService
@@ -42,6 +43,7 @@ class SessionAdapter:
 def history():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Execution.__table__.create(engine)
+    DeadLetterEvent.__table__.create(engine)
     with Session(engine) as session:
         workspace, other_workspace, workflow, version = uuid4(), uuid4(), uuid4(), uuid4()
         start = datetime(2026, 10, 22, tzinfo=timezone.utc)

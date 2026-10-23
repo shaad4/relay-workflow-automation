@@ -99,12 +99,14 @@ def test_failed_execution_is_persisted(session):
     execution_id = uuid4()
     session.execute.return_value.scalar_one_or_none.return_value = execution_id
     error = {"node_id": "payment-node", "message": "Action execution failed"}
+    session.execute.return_value.scalar_one.return_value = SimpleNamespace(workspace_id=uuid4())
+    session.execute.return_value.scalar_one_or_none.side_effect = [execution_id, None]
 
     assert asyncio.run(execution_queue.finalize_execution(
         execution_id, "worker-1", ExecutionStatus.FAILED, error=error,
     )) is True
-    session.execute.assert_awaited_once()
-    params = session.execute.call_args.args[0].compile().params
+    assert session.execute.await_count == 3
+    params = session.execute.await_args_list[0].args[0].compile().params
     assert params["status"] == ExecutionStatus.FAILED
     assert params["error"] == error
     assert isinstance(params["completed_at"], datetime)
