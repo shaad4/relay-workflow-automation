@@ -1,0 +1,22 @@
+{
+  "run_id": "baseline-c5-n20-0b022f8462",
+  "workflow_id": "e4720aae-5e85-41b1-a090-958c33272c42",
+  "concurrency_label": "5",
+  "requested": 20,
+  "accepted": 20,
+  "rejected": 0,
+  "observed": 20,
+  "completed": 20,
+  "failed": 0,
+  "duration_seconds": 45.946,
+  "successful_workflows_per_minute": 26.12,
+  "terminal_workflows_per_minute": 26.12,
+  "average_latency_seconds": 26.782,
+  "p95_latency_seconds": 42.961,
+  "average_queue_delay_seconds": 16.547,
+  "p95_queue_delay_seconds": 32.748,
+  "average_execution_duration_seconds": 10.099,
+  "failure_rate_pct": 0.0,
+  "start_time_utc": "2026-10-23T06:29:09.397133+00:00",
+  "end_time_utc": "2026-10-23T06:29:55.342687+00:00"
+}

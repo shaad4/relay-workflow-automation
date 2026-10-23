@@ -29,6 +29,7 @@ class ExecutionDispatcher:
         self.active_tasks: set[asyncio.Task] = set()
         self.active_ids: set[UUID] = set()
 
+        self.wakeup_event = asyncio.Event()
         self.running = False
 
     async def _execute(self, execution_id: UUID):
@@ -39,11 +40,18 @@ class ExecutionDispatcher:
             self.active_ids.discard(execution_id)
             self.semaphore.release()
 
+    def _on_task_done(self, task: asyncio.Task):
+        self.active_tasks.discard(task)
+
+        if not task.cancelled():
+            # Retrieve exceptions to avoid unhandled task warnings.
+            task.exception()
+
+        # A slot is now available.
+        self.wakeup_event.set()
+
     async def dispatch_pending(self):
-        """
-        Find pending executions and dispatch them
-        without exceeding the concurrency limit.
-        """
+        """Dispatch pending executions up to the concurrency limit."""
 
         available_slots = (
             EXECUTION_MAX_CONCURRENCY
@@ -73,9 +81,8 @@ class ExecutionDispatcher:
                 )
 
                 self.active_tasks.add(task)
-
                 task.add_done_callback(
-                    self.active_tasks.discard
+                    self._on_task_done
                 )
 
             except BaseException:
@@ -84,17 +91,26 @@ class ExecutionDispatcher:
                 raise
 
     async def run(self):
-        """Continuously dispatch pending executions."""
+        """Dispatch work periodically or when an execution finishes."""
 
         self.running = True
 
         try:
             while self.running:
+                self.wakeup_event.clear()
+
                 await self.dispatch_pending()
 
-                await asyncio.sleep(
-                    DISPATCH_INTERVAL_SECONDS
-                )
+                if not self.running:
+                    break
+
+                try:
+                    await asyncio.wait_for(
+                        self.wakeup_event.wait(),
+                        timeout=DISPATCH_INTERVAL_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    pass
 
         except asyncio.CancelledError:
             raise
@@ -106,6 +122,7 @@ class ExecutionDispatcher:
         """Stop dispatching and wait for active executions."""
 
         self.running = False
+        self.wakeup_event.set()
 
         if self.active_tasks:
             await asyncio.gather(
