@@ -3,6 +3,8 @@ from anthropic import AsyncAnthropic
 
 from app.ai.base import AIProvider, AIResponse
 
+from app.ai.config import AI_REQUEST_TIMEOUT_SECONDS
+
 
 class AnthropicProvider(AIProvider):
 
@@ -32,7 +34,7 @@ class AnthropicProvider(AIProvider):
 
         client = AsyncAnthropic(
             api_key=api_key,
-            timeout=30.0,
+            timeout=AI_REQUEST_TIMEOUT_SECONDS,
             max_retries=0,
         )
 
