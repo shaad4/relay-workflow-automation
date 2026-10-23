@@ -3,7 +3,7 @@ import asyncio
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, case
 from sqlalchemy.exc import IntegrityError
 
 from app.engine.error_classifier import classify_error
@@ -13,6 +13,7 @@ from app.db.database import AsyncSessionLocal
 from app.engine.exceptions import (
     HumanApprovalRequired,
     ActionExecutionFailed,
+    ExecutionCancellationRequested,
 )
 from app.engine.runner import run_execution
 from app.engine.status import ExecutionStatus
@@ -278,6 +279,7 @@ async def execution_heartbeat(
         raise
 
 
+
 async def finalize_execution(
     execution_id: UUID,
     worker_id: str,
@@ -285,16 +287,26 @@ async def finalize_execution(
     *,
     context_data: dict | None = None,
     error: dict | None = None,
-) -> bool:
+) -> str | None:
     """
-    Persist final execution state only when the worker
-    still owns a valid lease.
+    Finalize only when this worker owns a valid lease.
+
+    Returns the actual persisted status, or None
+    if ownership was lost.
     """
 
     async with AsyncSessionLocal() as session:
         try:
+            actual_status = case(
+                (
+                    Execution.cancel_requested_at.is_not(None),
+                    ExecutionStatus.CANCELLED,
+                ),
+                else_=status,
+            )
+
             values = {
-                "status": status,
+                "status": actual_status,
                 "claimed_by": None,
                 "heartbeat_at": None,
                 "lease_expires_at": None,
@@ -303,16 +315,20 @@ async def finalize_execution(
             if context_data is not None:
                 values["context"] = context_data
 
-            if error is not None:
-                values["error"] = error
+            values["error"] = case(
+                (
+                    Execution.cancel_requested_at.is_not(None),
+                    None,
+                ),
+                else_=error,
+            )
 
             if status in {
                 ExecutionStatus.COMPLETED,
                 ExecutionStatus.FAILED,
+                ExecutionStatus.CANCELLED,
             }:
-                values["completed_at"] = datetime.now(
-                    timezone.utc
-                )
+                values["completed_at"] = func.now()
 
             statement = (
                 update(Execution)
@@ -323,31 +339,22 @@ async def finalize_execution(
                     Execution.lease_expires_at > func.now(),
                 )
                 .values(**values)
-                .returning(Execution.id)
+                .returning(
+                    Execution.status,
+                    Execution.workspace_id,
+                )
             )
 
             result = await session.execute(statement)
+            row = result.one_or_none()
 
-            finalized = (
-                result.scalar_one_or_none() is not None
-            )
-
-            
-            if not finalized:
+            if row is None:
                 await session.rollback()
-                return False
+                return None
 
-            # Record terminal workflow failures in the DLQ.
-            if status == ExecutionStatus.FAILED:
+            persisted_status = row.status
 
-                execution_result = await session.execute(
-                    select(Execution).where(
-                        Execution.id == execution_id
-                    )
-                )
-                execution = execution_result.scalar_one()
-
-                # Find the most recent failed execution step.
+            if persisted_status == ExecutionStatus.FAILED:
                 step_result = await session.execute(
                     select(ExecutionStep)
                     .where(
@@ -361,7 +368,7 @@ async def finalize_execution(
                 failed_step = step_result.scalar_one_or_none()
 
                 dead_letter = DeadLetterEvent(
-                    workspace_id=execution.workspace_id,
+                    workspace_id=row.workspace_id,
                     execution_id=execution_id,
                     execution_step_id=(
                         failed_step.id if failed_step else None
@@ -380,12 +387,12 @@ async def finalize_execution(
                 session.add(dead_letter)
 
             await session.commit()
-            return True
-
+            return persisted_status
 
         except Exception:
             await session.rollback()
             raise
+
 
 
 async def execute_pending_execution(
@@ -478,6 +485,12 @@ async def execute_pending_execution(
             final_context = result["context"]
             final_error = None
 
+        except ExecutionCancellationRequested:
+            final_status = ExecutionStatus.CANCELLED
+            final_context = None
+            final_error = None
+
+
         except HumanApprovalRequired:
             final_status = (
                 ExecutionStatus.WAITING_FOR_APPROVAL
@@ -500,7 +513,7 @@ async def execute_pending_execution(
             final_context = None
             final_error = classify_error(exc)
 
-        finalized = await finalize_execution(
+        persisted_status = await finalize_execution(
             execution_id=execution_id,
             worker_id=worker_id,
             status=final_status,
@@ -509,12 +522,12 @@ async def execute_pending_execution(
         )
 
         
-        if not finalized:
+        if persisted_status is None:
             raise RuntimeError(
                 "Execution lease expired or ownership was lost"
             )
 
-        if final_status == ExecutionStatus.COMPLETED:
+        if persisted_status == ExecutionStatus.COMPLETED:
             await publish_execution_lifecycle(
                 event_type="workflow.completed",
                 execution_id=execution_id,
@@ -523,7 +536,7 @@ async def execute_pending_execution(
                 workflow_version_id=UUID(workflow_version_id),
             )
 
-        elif final_status == ExecutionStatus.FAILED:
+        elif persisted_status == ExecutionStatus.FAILED:
             await publish_execution_lifecycle(
                 event_type="workflow.failed",
                 execution_id=execution_id,

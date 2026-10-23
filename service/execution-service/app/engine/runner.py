@@ -8,7 +8,7 @@ from app.engine.error_classifier import classify_error, action_failure
 from app.db.database import AsyncSessionLocal
 from app.engine.context import ExecutionContext
 from app.engine.executor import SequentialExecutor
-from app.engine.exceptions import HumanApprovalRequired, ActionExecutionFailed
+from app.engine.exceptions import HumanApprovalRequired, ActionExecutionFailed, ExecutionCancellationRequested
 from app.engine.graph import ExecutionGraph
 from app.engine.resolver import ExpressionResolver
 from app.engine.step_status import ExecutionStepStatus
@@ -23,6 +23,7 @@ from app.engine.handlers.rag_search import execute_rag_search
 from app.engine.handlers.ai_decision import execute_ai_decision
 from app.engine.handlers.condition import evaluate_condition
 from app.engine.handlers.ai_generate import execute_ai_generate
+from app.engine.status import ExecutionStatus
 
 from app.engine.retry import (
     execute_with_retry,
@@ -86,6 +87,21 @@ async def mark_step_failed(
 
         await _commit_session(session)
 
+async def check_execution_cancellation(execution_id):
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Execution.cancel_requested_at).where(
+                Execution.id == execution_id,
+                Execution.status == ExecutionStatus.RUNNING,
+            )
+        )
+
+        cancel_requested_at = result.scalar_one_or_none()
+
+        if cancel_requested_at is not None:
+            raise ExecutionCancellationRequested(
+                "Execution cancellation requested"
+            )
 
 async def run_execution(
     execution_id,
@@ -192,6 +208,9 @@ async def run_execution(
 
 
         while current_node is not None:
+
+            await check_execution_cancellation(execution_id)
+
             execution_step_id = None
             node = current_node
             node_id = node["node_id"]
@@ -829,6 +848,9 @@ async def run_execution(
             "action_nodes": action_nodes,
             "context": context.to_dict(),
         }
+
+    except ExecutionCancellationRequested:
+        raise
 
     except HumanApprovalRequired:
         # The approval transaction already saved context and the waiting step.

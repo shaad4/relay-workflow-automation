@@ -26,3 +26,8 @@ class RetryExhaustedError(Exception):
     def __init__(self, attempts_used: int):
         self.attempts_used = attempts_used
         super().__init__("Retry attempts exhausted")
+
+
+
+class ExecutionCancellationRequested(Exception):
+    """Workflow cancellation was requested by the user."""
