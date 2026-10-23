@@ -84,3 +84,9 @@ pnpm-debug.log*
 # =========================
 *.tmp
 *.temp
+
+# =========================
+# Benchmark Results
+# =========================
+benchmarks/results/
+

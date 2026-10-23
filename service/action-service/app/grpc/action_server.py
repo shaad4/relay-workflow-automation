@@ -1,5 +1,8 @@
-import json
+
+import asyncio
 import errno
+import json
+import os
 import socket
 from uuid import UUID
 
@@ -13,9 +16,23 @@ from app.grpc.generated.action import action_pb2, action_pb2_grpc
 from app.services.connection_service import get_connection
 
 
+MAX_CONCURRENT_HTTP_REQUESTS = int(
+    os.getenv("MAX_CONCURRENT_HTTP_REQUESTS", "10")
+)
+
+
 class ActionInternalService(
     action_pb2_grpc.ActionInternalServiceServicer
 ):
+    def __init__(self):
+        if MAX_CONCURRENT_HTTP_REQUESTS < 1:
+            raise ValueError(
+                "MAX_CONCURRENT_HTTP_REQUESTS must be positive"
+            )
+
+        self.http_semaphore = asyncio.Semaphore(
+            MAX_CONCURRENT_HTTP_REQUESTS
+        )
 
     async def ExecuteAction(
         self,
@@ -73,9 +90,11 @@ class ActionInternalService(
                         )
 
                     headers = input_data.get("headers") or {}
+
                     headers["Authorization"] = (
                         f"Bearer {credential}"
                     )
+
                     input_data["headers"] = headers
 
                 elif connection.auth_type == "api_key_header":
@@ -130,16 +149,26 @@ class ActionInternalService(
 
                 config["api_key"] = credential
 
-            # Resolve and execute connector.
+            # Resolve connector.
             connector = connector_registry.get(
                 connection.provider
             )
 
-            result = await connector.execute(
-                action=request.action,
-                config=config,
-                input_data=input_data,
-            )
+            # Limit only concurrent HTTP connector calls.
+            if connection.provider == "http":
+                async with self.http_semaphore:
+                    result = await connector.execute(
+                        action=request.action,
+                        config=config,
+                        input_data=input_data,
+                    )
+
+            else:
+                result = await connector.execute(
+                    action=request.action,
+                    config=config,
+                    input_data=input_data,
+                )
 
             # Check HTTP-level success separately.
             if connection.provider == "http":
@@ -148,7 +177,9 @@ class ActionInternalService(
 
                     return action_pb2.ExecuteActionResponse(
                         success=False,
-                        result_json=json.dumps({"status_code": status_code}),
+                        result_json=json.dumps(
+                            {"status_code": status_code}
+                        ),
                         error=(
                             f"HTTP request failed with status "
                             f"{status_code}"
@@ -162,10 +193,21 @@ class ActionInternalService(
 
         # HTTP request timeout.
         except httpx.TimeoutException as exc:
+            if isinstance(exc, httpx.ConnectTimeout):
+                error_code = "HTTP_CONNECT_TIMEOUT"
+
+            elif isinstance(exc, httpx.ReadTimeout):
+                error_code = "HTTP_READ_TIMEOUT"
+
+            else:
+                error_code = "HTTP_TIMEOUT"
+
             return action_pb2.ExecuteActionResponse(
                 success=False,
                 error="HTTP_TIMEOUT",
-                result_json=json.dumps({"error_code": "HTTP_CONNECT_TIMEOUT" if isinstance(exc, httpx.ConnectTimeout) else "HTTP_READ_TIMEOUT" if isinstance(exc, httpx.ReadTimeout) else "HTTP_TIMEOUT"}),
+                result_json=json.dumps(
+                    {"error_code": error_code}
+                ),
             )
 
         # HTTP connection failure.
@@ -173,19 +215,29 @@ class ActionInternalService(
             category = "HTTP_CONNECTION_ERROR"
             cause = exc
             seen = set()
+
             while cause is not None and id(cause) not in seen:
                 seen.add(id(cause))
+
                 if isinstance(cause, socket.gaierror):
                     category = "HTTP_DNS_FAILURE"
                     break
-                if isinstance(cause, OSError) and cause.errno == errno.ECONNREFUSED:
+
+                if (
+                    isinstance(cause, OSError)
+                    and cause.errno == errno.ECONNREFUSED
+                ):
                     category = "HTTP_CONNECTION_REFUSED"
                     break
+
                 cause = cause.__cause__ or cause.__context__
+
             return action_pb2.ExecuteActionResponse(
                 success=False,
                 error="HTTP_CONNECTION_ERROR",
-                result_json=json.dumps({"error_code": category}),
+                result_json=json.dumps(
+                    {"error_code": category}
+                ),
             )
 
         except json.JSONDecodeError:
