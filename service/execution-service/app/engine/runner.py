@@ -189,17 +189,7 @@ async def run_execution(
         visited: set[str] = set()
         execution_order: list[dict] = []
 
-        print(
-            "Action node definitions:",
-            json.dumps(action_nodes, indent=2),
-            flush=True,
-        )
 
-        print(
-            "Starting execution from:",
-            current_node["node_id"],
-            flush=True,
-        )
 
         while current_node is not None:
             execution_step_id = None
@@ -286,12 +276,6 @@ async def run_execution(
                 await _commit_session(session)
 
 
-            print(
-                "Processing node:",
-                node["node_id"],
-                node_type,
-                flush=True,
-            )
 
             if node_type.startswith("trigger."):
                 # Trigger nodes do not execute an action.
@@ -581,10 +565,6 @@ async def run_execution(
 
             # Human Approval does not use Action Service or a connection.
             if node_type == "human.approval":
-                print(
-                    f"Human approval reached: {node['node_id']}",
-                    flush=True,
-                )
 
                 approver_user_id = configuration.get("approver_user_id")
                 message = resolver.resolve(
@@ -648,17 +628,9 @@ async def run_execution(
                         add=approval,
                     )
 
-                    print(
-                        f"Created human approval: {approval.id}",
-                        flush=True,
-                    )
 
                 raise HumanApprovalRequired(node["node_id"])
 
-            print(
-                f"Executing action node: {node['node_id']}",
-                flush=True,
-            )
 
             connection_id = resolved_configuration.get("connection_id")
 
@@ -682,16 +654,6 @@ async def run_execution(
                     f"Unsupported action node type: {node_type}"
                 )
 
-            print(
-                "Action request:",
-                {
-                    "workspace_id": workspace_id,
-                    "connection_id": connection_id,
-                    "provider": provider,
-                    "action": action,
-                },
-                flush=True,
-            )
 
             action_config = {}
             
@@ -772,15 +734,6 @@ async def run_execution(
                 attempts_used = 1
 
 
-            print(
-                "Action result:",
-                {
-                    "success": response.success,
-                    "result": response.result_json,
-                    "error": response.error,
-                },
-                flush=True,
-            )
 
             if response.success:
                 try:
@@ -812,10 +765,6 @@ async def run_execution(
                     result,
                 )
 
-                print(
-                    f"Stored output for node: {node['node_id']}",
-                    flush=True,
-                )
 
                 # Mark action step as completed
                 completed_at = datetime.now(timezone.utc)
@@ -885,14 +834,6 @@ async def run_execution(
         # The approval transaction already saved context and the waiting step.
         raise
     except Exception as exc:
-        print(
-            "\n========== WORKFLOW EXECUTION ERROR ==========",
-            flush=True,
-        )
-        print("Node ID:", node_id, flush=True)
-        print("Node Type:", node_type, flush=True)
-        print("Exception Type:", type(exc).__name__, flush=True)
-        print("==============================================\n", flush=True)
 
         # Attach only node context; finalization uses the same safe classifier.
         exc.node_id = node_id
