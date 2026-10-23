@@ -74,6 +74,11 @@ class Execution(Base):
         nullable=True,
     )
 
+    # When a user requested execution cancellation.
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     status: Mapped[str] = mapped_column(
         String(20),

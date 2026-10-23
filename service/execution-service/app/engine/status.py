@@ -7,3 +7,4 @@ class ExecutionStatus(StrEnum):
     WAITING_FOR_APPROVAL = "waiting_for_approval"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
