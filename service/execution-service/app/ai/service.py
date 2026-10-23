@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from anthropic import (
     AuthenticationError as AnthropicAuthenticationError,
@@ -28,6 +29,19 @@ from app.ai.providers.openai import OpenAIProvider
 from app.ai.providers.gemini import GeminiProvider
 from app.ai.providers.anthropic import AnthropicProvider
 
+MAX_CONCURRENT_AI_REQUESTS = int(
+    os.getenv("MAX_CONCURRENT_AI_REQUESTS", "10")
+)
+
+if MAX_CONCURRENT_AI_REQUESTS < 1:
+    raise ValueError(
+        "MAX_CONCURRENT_AI_REQUESTS must be positive"
+    )
+
+ai_semaphore = asyncio.Semaphore(
+    MAX_CONCURRENT_AI_REQUESTS
+)
+
 
 class AIService:
 
@@ -56,12 +70,13 @@ class AIService:
             raise ValueError("Unsupported AI provider")
 
         try:
-            return await selected_provider.generate(
-                api_key=api_key,
-                model=model,
-                instructions=instructions,
-                prompt=prompt,
-            )
+            async with ai_semaphore:
+                return await selected_provider.generate(
+                    api_key=api_key,
+                    model=model,
+                    instructions=instructions,
+                    prompt=prompt,
+                )
 
         except (
             OpenAIAuthenticationError,
