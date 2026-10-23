@@ -4,6 +4,8 @@ from google.genai import types
 
 from app.ai.base import AIProvider, AIResponse
 
+from app.ai.config import AI_REQUEST_TIMEOUT_SECONDS
+
 
 class GeminiProvider(AIProvider):
 
@@ -28,7 +30,7 @@ class GeminiProvider(AIProvider):
         client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(
-                timeout=30000,
+                timeout=AI_REQUEST_TIMEOUT_SECONDS * 1000,
             ),
         )
 

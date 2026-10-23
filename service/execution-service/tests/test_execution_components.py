@@ -1,3 +1,4 @@
+from unittest.mock import AsyncMock
 import asyncio
 import json
 import sys
@@ -375,33 +376,50 @@ def test_grpc_client_request_and_close_methods(monkeypatch):
     asyncio.run(au.close())
 
 
-def test_kafka_consumer_lifecycle_and_message_handling(monkeypatch, capsys):
+@pytest.mark.parametrize("persistence_fails", [False, True])
+def test_kafka_consumer_lifecycle_and_message_handling(monkeypatch, persistence_fails):
     seen = []
     class Consumer:
         def __init__(self, *args, **kwargs): seen.append((args, kwargs))
         async def start(self): seen.append("start")
         async def stop(self): seen.append("stop")
+        async def commit(self, offsets): seen.append(("commit", offsets))
         def __aiter__(self): return self
         async def __anext__(self):
             if not hasattr(self, "sent"):
                 self.sent = True
-                return SimpleNamespace(value=json.dumps({"workflow_id": "w"}).encode())
-            if not hasattr(self, "bad"):
-                self.bad = True
-                return SimpleNamespace(value=b"not-json")
+                return SimpleNamespace(
+                    value=json.dumps({"workflow_id": "w"}).encode(),
+                    topic="workflow.triggered", partition=0, offset=7,
+                )
             raise StopAsyncIteration
     monkeypatch.setattr(kafka_consumer, "AIOKafkaConsumer", Consumer)
-    async def create(event): seen.append(event); return SimpleNamespace(id="exec")
-    monkeypatch.setattr(kafka_consumer, "create_execution", create)
-    kafka_consumer.consumer = None
+    async def create(event):
+        seen.append(event)
+        if persistence_fails:
+            raise RuntimeError("persistence failed")
+        seen.append("persisted")
+        return "exec"
+    monkeypatch.setattr(kafka_consumer, "create_pending_execution", create)
+    monkeypatch.setattr(kafka_consumer, "consumer", None)
     with pytest.raises(RuntimeError, match="not started"):
         asyncio.run(kafka_consumer.consume_workflow_triggered())
     asyncio.run(kafka_consumer.start_consumer())
-    asyncio.run(kafka_consumer.consume_workflow_triggered())
-    asyncio.run(kafka_consumer.stop_consumer())
-    assert "start" in seen and "stop" in seen and kafka_consumer.consumer is None
-    assert any(isinstance(item, dict) for item in seen)
-    assert "Failed to process" in capsys.readouterr().out
+    try:
+        assert seen[0][1]["enable_auto_commit"] is False
+        if persistence_fails:
+            with pytest.raises(RuntimeError, match="persistence failed"):
+                asyncio.run(kafka_consumer.consume_workflow_triggered())
+            assert seen[1:] == ["start", {"workflow_id": "w"}]
+        else:
+            asyncio.run(kafka_consumer.consume_workflow_triggered())
+            assert seen[1:] == [
+                "start", {"workflow_id": "w"}, "persisted",
+                ("commit", {kafka_consumer.TopicPartition("workflow.triggered", 0): 8}),
+            ]
+    finally:
+        asyncio.run(kafka_consumer.stop_consumer())
+    assert seen[-1] == "stop" and kafka_consumer.consumer is None
 
 
 RUNNER_WORKSPACE_ID = "00000000-0000-0000-0000-000000000001"
@@ -654,7 +672,11 @@ def test_approval_route_resume_outcomes_and_missing_records(monkeypatch):
 
 
 def test_application_health_and_lifespan(monkeypatch):
-    assert asyncio.run(health()) == {"status": "ok", "service": "execution-service"}
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(
+        consumer_task=SimpleNamespace(done=lambda: False),
+        dispatcher_task=SimpleNamespace(done=lambda: False),
+    )))
+    assert asyncio.run(health(request)) == {"status": "ok", "service": "execution-service"}
     assert execution_app.title == "Relay Execution Service"
     calls = []
     async def start(): calls.append("start")
@@ -673,6 +695,9 @@ def test_application_health_and_lifespan(monkeypatch):
         return SimpleNamespace(stop=stop_grpc)
     monkeypatch.setattr("app.main.start_grpc_server", start_grpc)
     monkeypatch.setattr("app.main.start_consumer", start)
+    monkeypatch.setattr("app.main.start_lifecycle_producer", AsyncMock())
+    monkeypatch.setattr("app.main.stop_lifecycle_producer", AsyncMock())
+    monkeypatch.setattr("app.main.ExecutionDispatcher", lambda: SimpleNamespace(run=consume, shutdown=AsyncMock()))
     monkeypatch.setattr("app.main.consume_workflow_triggered", consume)
     monkeypatch.setattr("app.main.stop_consumer", stop)
 

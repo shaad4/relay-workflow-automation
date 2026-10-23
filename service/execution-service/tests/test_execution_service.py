@@ -1,267 +1,117 @@
 import asyncio
 import sys
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import uuid4
+from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.services import execution_service
-from app.engine.exceptions import ActionExecutionFailed, HumanApprovalRequired
+from app.engine.status import ExecutionStatus
+from app.services import execution_queue
 
 
-class FakeSession:
-    def __init__(self):
-        self.added = []
-        self.commits = 0
-        self.rollbacks = 0
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *_args):
-        return False
-
-    def add(self, value):
-        self.added.append(value)
-
-    async def commit(self):
-        self.commits += 1
-
-    async def refresh(self, _value):
-        _value.id = _value.id or uuid4()
-        return None
-
-    async def rollback(self):
-        self.rollbacks += 1
+@pytest.fixture
+def session(monkeypatch):
+    session = MagicMock()
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    session.commit = AsyncMock()
+    session.rollback = AsyncMock()
+    session.flush = AsyncMock()
+    session.execute = AsyncMock(return_value=MagicMock())
+    monkeypatch.setattr(execution_queue, "AsyncSessionLocal", lambda: session)
+    return session
 
 
-def event():
-    return {
-        "workspace_id": str(uuid4()),
-        "workflow_id": str(uuid4()),
-        "workflow_version_id": str(uuid4()),
-        "event_type": "workflow.triggered",
-        "payload": {"email": "test@example.com"},
+@pytest.mark.parametrize("duplicate", [False, True], ids=["pending", "duplicate"])
+def test_create_pending_execution(monkeypatch, session, duplicate):
+    event = {
+        key: str(uuid4())
+        for key in ("event_id", "workspace_id", "workflow_id", "workflow_version_id")
     }
+    event.update(trigger_type="manual", payload={"email": "test@example.com"})
+    client = SimpleNamespace(
+        validate_workflow_version=AsyncMock(return_value=SimpleNamespace(
+            valid=True, status="published", workflow_status="active",
+        )),
+        close=AsyncMock(),
+    )
+    monkeypatch.setattr(execution_queue, "WorkflowClient", lambda: client)
+    execution_id = uuid4()
+
+    async def flush():
+        session.add.call_args_list[0].args[0].id = execution_id
+
+    session.flush.side_effect = flush
+    existing_id = uuid4()
+    if duplicate:
+        session.commit.side_effect = IntegrityError("insert", {}, Exception("duplicate"))
+        session.execute.return_value.scalar_one_or_none.return_value = SimpleNamespace(id=existing_id)
+
+    expected_id = existing_id if duplicate else execution_id
+    assert asyncio.run(execution_queue.create_pending_execution(event)) == expected_id
+    execution, key = [call.args[0] for call in session.add.call_args_list]
+    assert execution.status == ExecutionStatus.PENDING
+    assert execution.workspace_id == UUID(event["workspace_id"])
+    assert execution.workflow_id == UUID(event["workflow_id"])
+    assert execution.workflow_version_id == UUID(event["workflow_version_id"])
+    assert execution.trigger_type == "manual"
+    assert execution.trigger_data == event["payload"]
+    assert key.key == f"workflow.triggered:{event['event_id']}"
+    assert key.execution_id == execution_id
+    session.commit.assert_awaited_once()
+    if duplicate:
+        session.rollback.assert_awaited_once()
+        session.execute.assert_awaited_once()
+    else:
+        session.rollback.assert_not_awaited()
 
 
-def test_unpublished_event_is_rejected_before_execution_record(monkeypatch):
-    target = event()
-    session = FakeSession()
-    calls = []
+@pytest.mark.parametrize("claimed", [True, False], ids=["pending", "already-claimed"])
+def test_claim_pending_execution(session, claimed):
+    execution_id = uuid4()
+    session.execute.return_value.scalar_one_or_none.return_value = execution_id if claimed else None
 
-    class WorkflowClient:
-        async def validate_workflow_version(self, **kwargs):
-            calls.append(kwargs)
-            return SimpleNamespace(valid=True, status="draft", workflow_status="active")
-
-        async def close(self):
-            calls.append("closed")
-
-    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
-    monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
-    runner_calls = []
-    monkeypatch.setattr(execution_service, "run_execution", lambda **kwargs: runner_calls.append(kwargs))
-
-    with pytest.raises(ValueError, match="Workflow version is not published"):
-        asyncio.run(execution_service.create_execution(target))
-
-    assert calls[0] == {
-        "workflow_id": target["workflow_id"],
-        "version_id": target["workflow_version_id"],
-        "workspace_id": target["workspace_id"],
-    }
-    assert calls[-1] == "closed"
-    assert session.added == []
-    assert session.commits == 0
-    assert runner_calls == []
+    assert asyncio.run(execution_queue.claim_pending_execution(execution_id, "worker-1")) is claimed
+    session.execute.assert_awaited_once()
+    statement = session.execute.call_args.args[0]
+    sql = str(statement)
+    assert "UPDATE executions SET" in sql
+    assert "executions.status =" in sql.split("WHERE")[1]
+    params = statement.compile().params
+    assert ExecutionStatus.PENDING in params.values()
+    assert params["status"] == ExecutionStatus.RUNNING
+    assert params["claimed_by"] == "worker-1"
+    if claimed:
+        session.commit.assert_awaited_once()
+        session.rollback.assert_not_awaited()
+    else:
+        session.commit.assert_not_awaited()
+        session.rollback.assert_awaited_once()
 
 
-def test_published_event_creates_record_and_runs_pinned_version(monkeypatch):
-    target = event()
-    session = FakeSession()
-    calls = []
-    runner_calls = []
+def test_failed_execution_is_persisted(session):
+    execution_id = uuid4()
+    session.execute.return_value.scalar_one_or_none.return_value = execution_id
+    error = {"node_id": "payment-node", "message": "Action execution failed"}
+    session.execute.return_value.scalar_one.return_value = SimpleNamespace(workspace_id=uuid4())
+    session.execute.return_value.scalar_one_or_none.side_effect = [execution_id, None]
 
-    class WorkflowClient:
-        async def validate_workflow_version(self, **kwargs):
-            calls.append(kwargs)
-            return SimpleNamespace(valid=True, status="published", workflow_status="active")
-
-        async def close(self):
-            calls.append("closed")
-
-    async def run(**kwargs):
-        runner_calls.append(kwargs)
-        return {"context": {"nodes": {}}}
-
-    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
-    monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
-    monkeypatch.setattr(execution_service, "run_execution", run)
-
-    execution = asyncio.run(execution_service.create_execution(target))
-
-    assert session.commits == 3
-    assert session.added == [execution]
-    assert execution.workflow_version_id.hex == target["workflow_version_id"].replace("-", "")
-    assert execution.trigger_data == target["payload"]
-    assert runner_calls == [{
-        "execution_id": execution.id,
-        "workflow_id": target["workflow_id"],
-        "workflow_version_id": target["workflow_version_id"],
-        "workspace_id": target["workspace_id"],
-        "trigger_data": target["payload"],
-    }]
-
-
-def test_inactive_workflow_event_is_rejected_before_execution_record(monkeypatch):
-    target = event()
-    session = FakeSession()
-
-    class WorkflowClient:
-        async def validate_workflow_version(self, **_kwargs):
-            return SimpleNamespace(valid=True, status="published", workflow_status="inactive")
-
-        async def close(self):
-            return None
-
-    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
-    monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
-    with pytest.raises(ValueError, match="Workflow is inactive"):
-        asyncio.run(execution_service.create_execution(target))
-    assert session.added == []
-    assert session.commits == 0
-
-
-def test_missing_workflow_version_is_rejected_and_client_is_closed(monkeypatch):
-    target = event()
-    calls = []
-
-    class WorkflowClient:
-        async def validate_workflow_version(self, **_kwargs):
-            return SimpleNamespace(valid=False, status="published", workflow_status="active")
-
-        async def close(self):
-            calls.append("closed")
-
-    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
-    with pytest.raises(ValueError, match="Workflow or workflow version not found"):
-        asyncio.run(execution_service.create_execution(target))
-    assert calls == ["closed"]
-
-
-def test_execution_waits_for_human_approval(monkeypatch):
-    target = event()
-    session = FakeSession()
-
-    class WorkflowClient:
-        async def validate_workflow_version(self, **_kwargs):
-            return SimpleNamespace(valid=True, status="PUBLISHED", workflow_status="ACTIVE")
-
-        async def close(self):
-            return None
-
-    async def run(**_kwargs):
-        raise HumanApprovalRequired("approval-node")
-
-    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
-    monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
-    monkeypatch.setattr(execution_service, "run_execution", run)
-
-    execution = asyncio.run(execution_service.create_execution(target))
-
-    assert execution.status == execution_service.ExecutionStatus.WAITING_FOR_APPROVAL
-    assert execution.completed_at is None
-    assert session.commits == 3
-    assert session.rollbacks == 1
-
-
-def test_action_failure_is_recorded_on_execution(monkeypatch):
-    target = event()
-    session = FakeSession()
-
-    class WorkflowClient:
-        async def validate_workflow_version(self, **_kwargs):
-            return SimpleNamespace(valid=True, status="published", workflow_status="active")
-
-        async def close(self):
-            return None
-
-    async def run(**_kwargs):
-        raise ActionExecutionFailed("payment-node", "gateway unavailable")
-
-    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
-    monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
-    monkeypatch.setattr(execution_service, "run_execution", run)
-
-    execution = asyncio.run(execution_service.create_execution(target))
-
-    assert execution.status == execution_service.ExecutionStatus.FAILED
-    assert execution.completed_at is not None
-    assert execution.error == {"node_id": "payment-node", "message": "gateway unavailable"}
-    assert session.commits == 3
-    assert session.rollbacks == 1
-
-
-def test_unexpected_database_error_rolls_back_and_propagates(monkeypatch):
-    target = event()
-    session = FakeSession()
-
-    class WorkflowClient:
-        async def validate_workflow_version(self, **_kwargs):
-            return SimpleNamespace(valid=True, status="published", workflow_status="active")
-
-        async def close(self):
-            return None
-
-    async def fail_commit():
-        raise RuntimeError("database unavailable")
-
-    session.commit = fail_commit
-    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
-    monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
-
-    with pytest.raises(RuntimeError, match="database unavailable"):
-        asyncio.run(execution_service.create_execution(target))
-
-    assert session.rollbacks == 1
-
-
-def test_generic_runner_failure_marks_execution_failed(monkeypatch):
-    session = FakeSession()
-    class WorkflowClient:
-        async def validate_workflow_version(self, **kwargs):
-            return SimpleNamespace(valid=True, status="published", workflow_status="active")
-        async def close(self): pass
-    async def fail(**kwargs): raise RuntimeError("private provider detail")
-    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
-    monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
-    monkeypatch.setattr(execution_service, "run_execution", fail)
-    execution = asyncio.run(execution_service.create_execution(event()))
-    assert execution.status == execution_service.ExecutionStatus.FAILED
-    assert execution.completed_at is not None
-    assert execution.error == {"message": "Workflow execution failed"}
-    assert session.rollbacks == 1
-
-
-def test_final_write_failure_preserves_returned_context(monkeypatch):
-    class Session(FakeSession):
-        async def commit(self):
-            self.commits += 1
-            if self.commits == 3: raise RuntimeError("write failed")
-    session = Session()
-    class WorkflowClient:
-        async def validate_workflow_version(self, **kwargs):
-            return SimpleNamespace(valid=True, status="published", workflow_status="active")
-        async def close(self): pass
-    output = {"nodes": {"rag": {"chunks": [], "context": "policy"}}}
-    async def run(**kwargs): return {"context": output}
-    monkeypatch.setattr(execution_service, "WorkflowClient", WorkflowClient)
-    monkeypatch.setattr(execution_service, "AsyncSessionLocal", lambda: session)
-    monkeypatch.setattr(execution_service, "run_execution", run)
-    execution = asyncio.run(execution_service.create_execution(event()))
-    assert execution.status == execution_service.ExecutionStatus.FAILED
-    assert execution.context == output and execution.completed_at is not None
+    assert asyncio.run(execution_queue.finalize_execution(
+        execution_id, "worker-1", ExecutionStatus.FAILED, error=error,
+    )) is True
+    assert session.execute.await_count == 3
+    params = session.execute.await_args_list[0].args[0].compile().params
+    assert params["status"] == ExecutionStatus.FAILED
+    assert params["error"] == error
+    assert isinstance(params["completed_at"], datetime)
+    assert params["claimed_by"] is None
+    assert params["heartbeat_at"] is None
+    assert params["lease_expires_at"] is None
+    session.commit.assert_awaited_once()
+    session.rollback.assert_not_awaited()

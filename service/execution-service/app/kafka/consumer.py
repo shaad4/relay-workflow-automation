@@ -1,9 +1,12 @@
+import asyncio
 import json
 import os
 
-from aiokafka import AIOKafkaConsumer
+from aiokafka import AIOKafkaConsumer, TopicPartition
 
-from app.services.execution_service import create_execution
+from app.services.execution_queue import (
+    create_pending_execution,
+)
 
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv(
@@ -25,7 +28,7 @@ async def start_consumer():
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
         group_id=KAFKA_GROUP_ID,
         auto_offset_reset="earliest",
-        enable_auto_commit=True,
+        enable_auto_commit=False,
     )
 
     await consumer.start()
@@ -40,28 +43,47 @@ async def stop_consumer():
 
 
 async def consume_workflow_triggered():
+    """
+    Persist Kafka events before acknowledging them.
+
+    Workflow execution is handled separately by
+    the PostgreSQL-backed ExecutionDispatcher.
+    """
 
     if consumer is None:
-        raise RuntimeError("Kafka consumer is not started")
-
+        raise RuntimeError(
+            "Kafka consumer is not started"
+        )
 
     async for message in consumer:
-
         try:
             event = json.loads(
                 message.value.decode("utf-8")
             )
 
-            execution = await create_execution(event)
+            if not isinstance(event, dict):
+                raise ValueError(
+                    "Kafka event must be a JSON object"
+                )
 
-            print(
-                "Execution created:",
-                execution.id,
-                flush=True,
+            # Persist execution + idempotency key atomically.
+            await create_pending_execution(event)
+
+            # Commit the next offset only after DB commit.
+            partition = TopicPartition(
+                message.topic,
+                message.partition,
             )
 
-        except Exception as exc:
-            print(
-                "Failed to process workflow.triggered event:",
-                repr(exc),
-            )
+            await consumer.commit({
+                partition: message.offset + 1,
+            })
+
+        except asyncio.CancelledError:
+            raise
+
+        except Exception:
+            # Do not acknowledge an event that failed
+            # durable persistence or validation.
+            # Stop consuming to prevent advancing past it.
+            raise

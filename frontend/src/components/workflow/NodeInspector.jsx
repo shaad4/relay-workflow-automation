@@ -301,6 +301,8 @@ function ManualConfig({ config, onChange, isReadOnly }) {
 const connectionRowsOf = (data) => Array.isArray(data) ? data : data?.connections || data?.results || data?.data || [];
 
 function HttpRequestConfig({ config, onChange, variableContext }) {
+  const isReadOnly = useContext(InspectorReadOnly);
+  const timeoutError = validateNodeConfiguration("action.http_request", config).find((error) => error.field === "timeout");
   const [connections, setConnections] = useState([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [connectionsError, setConnectionsError] = useState(false);
@@ -405,6 +407,27 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
           prefix={selectedConnection ? "/" : ""}
         />
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">{selectedConnection ? "The saved connection supplies the base URL and authentication." : "Select a saved connection to reuse its base URL and authentication."}</p>
+      </div>
+      <div>
+        <FieldLabel>Timeout (seconds)</FieldLabel>
+        <InspectorInput
+          type="number"
+          aria-label="Timeout (seconds)"
+          min={1}
+          max={120}
+          step={1}
+          required
+          value={config.timeout === undefined ? 10 : config.timeout ?? ""}
+          onChange={(event) => {
+            if (isReadOnly) return;
+            onChange("timeout", event.target.value === "" ? "" : event.target.valueAsNumber);
+          }}
+          aria-invalid={!!timeoutError}
+          aria-describedby={`http-timeout-help${timeoutError ? " http-timeout-error" : ""}`}
+          className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors"
+        />
+        <p id="http-timeout-help" className="mt-1 text-[10px] text-[var(--text-tertiary)]">Maximum time to wait for the HTTP response. Default: 10 seconds.</p>
+        {timeoutError && <p id="http-timeout-error" role="alert" className="mt-1 text-[10px] text-red-500">{timeoutError.message}</p>}
       </div>
       <div>
         <VariableFieldLabel picker={pickerFor("headers")}>Additional headers</VariableFieldLabel>
@@ -913,6 +936,7 @@ export default function NodeInspector({
       if (selectedNode.data?.typeId === "human.approval" && !selectedConfig.approver_user_id && user?.id) {
         selectedConfig.approver_user_id = user.id;
       }
+      if (selectedNode.data?.typeId === "action.http_request" && selectedConfig.timeout === undefined) selectedConfig.timeout = 10;
       formDataRef.current = selectedConfig;
       setFormData(selectedConfig);
       setHasLocalChanges(false);

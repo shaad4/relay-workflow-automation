@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 
+from app.engine.error_classifier import classify_error, action_failure
 from app.db.database import AsyncSessionLocal
 from app.engine.context import ExecutionContext
 from app.engine.executor import SequentialExecutor
@@ -22,6 +23,12 @@ from app.engine.handlers.rag_search import execute_rag_search
 from app.engine.handlers.ai_decision import execute_ai_decision
 from app.engine.handlers.condition import evaluate_condition
 from app.engine.handlers.ai_generate import execute_ai_generate
+
+from app.engine.retry import (
+    execute_with_retry,
+    RETRYABLE_STATUS_CODES,
+    SAFE_HTTP_METHODS,
+)
 
 from app.ai.exceptions import (
     AIDecisionValidationError,
@@ -49,7 +56,8 @@ async def _commit_session(session, add=None, refresh=None):
 
 async def mark_step_failed(
     execution_step_id,
-    error_message: str,
+    error_message: str | dict,
+    attempts_used: int = 1,
 ):
     async with AsyncSessionLocal() as session:
         step = await session.get(
@@ -66,10 +74,9 @@ async def mark_step_failed(
         completed_at = datetime.now(timezone.utc)
 
         step.status = ExecutionStepStatus.FAILED
+        step.attempt = attempts_used
         step.completed_at = completed_at
-        step.error = sanitize_payload({
-            "message": error_message,
-        })
+        step.error = sanitize_payload(error_message if isinstance(error_message, dict) else {"message": error_message})
 
         if step.started_at:
             step.duration_ms = int(
@@ -335,10 +342,18 @@ async def run_execution(
 
             # Execute RAG Search node
             if node_type == "ai.rag_search":
-                result = await execute_rag_search(
-                    configuration=resolved_configuration,
-                    workspace_id=workspace_id,
+
+                async def rag_search_once():
+                    return await execute_rag_search(
+                        configuration=resolved_configuration,
+                        workspace_id=workspace_id,
+                    )
+
+                result, attempts_used = await execute_with_retry(
+                    operation=rag_search_once,
+                    node_id=node_id,
                 )
+
 
                 # Store output for downstream nodes
                 context.set_node_output(
@@ -360,6 +375,7 @@ async def run_execution(
                     )
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
+                    execution_step.attempt = attempts_used
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
@@ -380,12 +396,19 @@ async def run_execution(
 
             # Execute AI Decision node
             if node_type == "ai.decision":
-                async with AsyncSessionLocal() as session:
-                    result = await execute_ai_decision(
-                        configuration=resolved_configuration,
-                        workspace_id=workspace_id,
-                        session=session,
-                    )
+                async def decision_once():
+                    async with AsyncSessionLocal() as session:
+                        return await execute_ai_decision(
+                            configuration=resolved_configuration,
+                            workspace_id=workspace_id,
+                            session=session,
+                        )
+
+                result, attempts_used = await execute_with_retry(
+                    operation=decision_once,
+                    node_id=node_id,
+                )
+
 
                 # Store validated AI output for downstream nodes
                 context.set_node_output(
@@ -408,6 +431,7 @@ async def run_execution(
 
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
+                    execution_step.attempt = attempts_used
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
@@ -429,12 +453,20 @@ async def run_execution(
 
             # Execute AI Generate node
             if node_type == "ai.generate":
-                async with AsyncSessionLocal() as session:
-                    result = await execute_ai_generate(
-                        configuration=resolved_configuration,
-                        workspace_id=workspace_id,
-                        session=session,
-                    )
+
+                async def generate_once():
+                    async with AsyncSessionLocal() as session:
+                        return await execute_ai_generate(
+                            configuration=resolved_configuration,
+                            workspace_id=workspace_id,
+                            session=session,
+                        )
+
+                result, attempts_used = await execute_with_retry(
+                    operation=generate_once,
+                    node_id=node_id,
+                )
+
 
                 # Store generated output for downstream nodes
                 context.set_node_output(
@@ -462,6 +494,7 @@ async def run_execution(
 
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
+                    execution_step.attempt = attempts_used
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
@@ -660,14 +693,79 @@ async def run_execution(
                 flush=True,
             )
 
-            response = await action_client.execute_action(
-                workspace_id=workspace_id,
-                connection_id=connection_id,
-                provider=provider,
-                action=action,
-                config_json=json.dumps({}),
-                input_data_json=json.dumps(resolved_configuration),
-            )
+            action_config = {}
+
+            if node_type == "action.http_request":
+                timeout = resolved_configuration.get("timeout", 10)
+
+                if (
+                    isinstance(timeout, bool)
+                    or not isinstance(timeout, (int, float))
+                    or not 1 <= timeout <= 120
+                ):
+                    raise ValueError(
+                        "HTTP timeout must be between 1 and 120 seconds"
+                    )
+
+                action_config["timeout"] = timeout
+
+            
+            async def execute_action_once():
+                response = await action_client.execute_action(
+                    workspace_id=workspace_id,
+                    connection_id=connection_id,
+                    provider=provider,
+                    action=action,
+                    config_json=json.dumps(action_config),
+                    input_data_json=json.dumps(resolved_configuration),
+                )
+
+                if node_type != "action.http_request":
+                    return response
+
+                if response.success:
+                    return response
+
+                try:
+                    payload = json.loads(
+                        response.result_json or "{}"
+                    )
+                    status_code = payload.get("status_code")
+                except (ValueError, TypeError, AttributeError):
+                    status_code = None
+
+                method = str(
+                    resolved_configuration.get("method", "GET")
+                ).upper()
+
+                retryable = (
+                    method in SAFE_HTTP_METHODS
+                    and (
+                        status_code in RETRYABLE_STATUS_CODES
+                        or response.error in {
+                            "HTTP_TIMEOUT",
+                            "HTTP_CONNECTION_ERROR",
+                        }
+                    )
+                )
+
+                if retryable:
+                    raise action_failure(node_id, response, retryable=True)
+
+                return response
+
+            if node_type == "action.http_request":
+                response, attempts_used = await execute_with_retry(
+                    operation=execute_action_once,
+                    node_id=node_id,
+                    method=str(
+                        resolved_configuration.get("method", "GET")
+                    ),
+                )
+            else:
+                response = await execute_action_once()
+                attempts_used = 1
+
 
             print(
                 "Action result:",
@@ -726,6 +824,7 @@ async def run_execution(
                     execution_step.status = ExecutionStepStatus.COMPLETED
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
+                    execution_step.attempt = attempts_used
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
@@ -751,9 +850,10 @@ async def run_execution(
 
                     execution_step.status = ExecutionStepStatus.FAILED
                     execution_step.completed_at = completed_at
-                    execution_step.error = sanitize_payload({
-                        "message": "Action execution failed",
-                    })
+                    execution_step.attempt = attempts_used
+                    failure = action_failure(node_id, response, attempts_used=attempts_used)
+                    failure.failed_node_type = node_type
+                    execution_step.error = sanitize_payload(classify_error(failure, node_id, node_type))
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
@@ -765,10 +865,7 @@ async def run_execution(
 
                     await _commit_session(session)
 
-                    raise ActionExecutionFailed(
-                        node_id=node["node_id"],
-                        error=response.error or "Action execution failed",
-                    )
+                    raise failure
 
         return {
             "workflow_id": workflow_id,
@@ -792,36 +889,17 @@ async def run_execution(
         print("Exception Type:", type(exc).__name__, flush=True)
         print("==============================================\n", flush=True)
 
-         # Classify failures using safe messages.
-        if isinstance(exc, ActionExecutionFailed):
-            message = "Action execution failed"
-
-        elif isinstance(exc, AIDecisionValidationError):
-            message = "AI Decision returned an invalid response"
-
-        elif isinstance(exc, AIAuthenticationError):
-            message = "AI provider authentication failed"
-
-        elif isinstance(exc, AIRateLimitError):
-            message = "AI provider rate limit exceeded"
-
-        elif isinstance(exc, AITimeoutError):
-            message = "AI provider request timed out"
-
-        elif isinstance(exc, AIServiceUnavailableError):
-            message = "AI provider unavailable"
-
-        elif isinstance(exc, AIResponseError):
-            message = "AI provider returned an invalid response"
-
-        else:
-            message = "Node execution failed"
+        # Attach only node context; finalization uses the same safe classifier.
+        exc.node_id = node_id
+        exc.failed_node_type = node_type
+        message = classify_error(exc, node_id, node_type)
 
         try:
             if execution_step_id is not None:
                 await mark_step_failed(
                     execution_step_id,
                     message,
+                    attempts_used=getattr(exc, "attempts_used", 1),
                 )
 
         finally:

@@ -40,6 +40,15 @@ jobs:
       AUTH_SERVICE_URL: http://localhost:8000
       OPENAI_API_KEY: ci-synthetic-key-no-network-calls
     services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
       postgres:
         image: pgvector/pgvector:pg16
         env:
@@ -68,7 +77,7 @@ jobs:
       - name: Install service and test dependencies
         run: |
           python -m pip install -r requirements.txt
-          python -m pip install pytest==9.1.1 pytest-cov==7.1.0 httpx==0.28.1
+          python -m pip install -r ../../requirements-test.txt
 
       - name: Create execution test schema
         if: matrix.service == 'service/execution-service'
@@ -77,26 +86,20 @@ jobs:
       - name: Run tests with coverage
         run: |
           set +e
-          python -m coverage run --source=app --omit='*/grpc/generated/*' -m pytest tests
+          python -m pytest tests --cov=app --cov-branch --cov-report=term-missing --cov-report=xml:coverage.xml --cov-report=json:coverage.json --cov-report=html:htmlcov --cov-fail-under=80 --junitxml=test-results.xml
           test_status=$?
-          if [ "${{ matrix.service }}" = "service/rag-service" ]; then
-            python -m coverage report --show-missing
-          else
-            python -m coverage report --show-missing --fail-under=80
-          fi
-          coverage_status=$?
-          python -m coverage xml -o coverage.xml
-          xml_status=$?
-          if [ "$test_status" -ne 0 ] || [ "$coverage_status" -ne 0 ] || [ "$xml_status" -ne 0 ]; then
-            exit 1
-          fi
+          exit "$test_status"
 
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ strategy.job-index }}
-          path: ${{ matrix.service }}/coverage.xml
+          path: |
+            ${{ matrix.service }}/coverage.xml
+            ${{ matrix.service }}/coverage.json
+            ${{ matrix.service }}/htmlcov
+            ${{ matrix.service }}/test-results.xml
           if-no-files-found: ignore
 
   frontend-tests:

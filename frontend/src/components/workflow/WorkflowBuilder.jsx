@@ -848,7 +848,7 @@ export default function WorkflowBuilder({
   // ── SAVE: diff-based sync to backend ─────────────────────────────────────
   const handleSave = useCallback(async ({ forPublish = false } = {}) => {
     if (isCanvasReadOnly || savingRef.current || (publishingRef.current && !forPublish)) return false;
-    const checkedIds = new Set(nodes.filter((node) => ["ai.rag_search", "ai.decision"].includes(node.data?.typeId)).map((node) => node.data?.nodeId ?? node.id));
+    const checkedIds = new Set(nodes.filter((node) => ["ai.rag_search", "ai.decision", "action.http_request"].includes(node.data?.typeId)).map((node) => node.data?.nodeId ?? node.id));
     const ragErrors = validateWorkflowConfiguration(nodes, edges, { includeStructure: false }).filter((error) => checkedIds.has(error.nodeId));
     if (ragErrors.length) {
       setValidationResult({ isValid: false, errors: ragErrors });

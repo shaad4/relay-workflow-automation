@@ -30,6 +30,8 @@ async def list_executions(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
     status: str | None = Query(default=None),
+    group_replays: bool = Query(default=False),
+    group_id: UUID | None = Query(default=None),
     identity: dict = Depends(get_current_identity),
     session: AsyncSession = Depends(get_db),
 ):
@@ -39,12 +41,20 @@ async def list_executions(
         repository = ExecutionRepository(session)
         service = ExecutionHistoryService(repository)
 
-        return await service.list_executions(
+        if group_id is not None and (group_replays or status is not None):
+            raise HTTPException(status_code=422, detail="Attempt history cannot be combined with group or status filters")
+
+        result = await service.list_executions(
             workspace_id=workspace_id,
             page=page,
             page_size=page_size,
             status=status,
+            group_replays=group_replays,
+            group_id=group_id,
         )
+        if result is None:
+            raise HTTPException(status_code=404, detail="Execution not found")
+        return result
 
     except RuntimeError as exc:
         raise HTTPException(

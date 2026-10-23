@@ -65,6 +65,9 @@ export function validateNodeConfiguration(typeId, config = {}) {
         errors.push({ field: "method", message: "Choose a supported HTTP method." });
       }
       requireField("url", "Request path");
+      if (config.timeout !== undefined && (!Number.isInteger(config.timeout) || config.timeout < 1 || config.timeout > 120)) {
+        errors.push({ field: "timeout", message: "Timeout must be between 1 and 120 seconds." });
+      }
       break;
     case "action.email":
       if (config.body_format !== undefined && !["plain", "html"].includes(config.body_format)) {

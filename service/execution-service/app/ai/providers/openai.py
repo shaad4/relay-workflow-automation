@@ -2,6 +2,7 @@ from openai import AsyncOpenAI
 
 from app.ai.base import AIProvider, AIResponse
 
+from app.ai.config import AI_REQUEST_TIMEOUT_SECONDS
 
 class OpenAIProvider(AIProvider):
 
@@ -25,7 +26,7 @@ class OpenAIProvider(AIProvider):
 
         client = AsyncOpenAI(
             api_key=api_key,
-            timeout=90.0,
+            timeout=AI_REQUEST_TIMEOUT_SECONDS,
             max_retries=0,
         )
 
