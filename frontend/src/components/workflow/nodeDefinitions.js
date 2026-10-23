@@ -56,6 +56,7 @@ export const NODE_CATEGORIES = [
         defaultConfig: {
           method: "POST",
           url: "",
+          timeout: 10,
           headers: "",
           body: "",
         },

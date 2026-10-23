@@ -693,6 +693,22 @@ async def run_execution(
                 flush=True,
             )
 
+            action_config = {}
+
+            if node_type == "action.http_request":
+                timeout = resolved_configuration.get("timeout", 10)
+
+                if (
+                    isinstance(timeout, bool)
+                    or not isinstance(timeout, (int, float))
+                    or not 1 <= timeout <= 120
+                ):
+                    raise ValueError(
+                        "HTTP timeout must be between 1 and 120 seconds"
+                    )
+
+                action_config["timeout"] = timeout
+
             
             async def execute_action_once():
                 response = await action_client.execute_action(
@@ -700,7 +716,7 @@ async def run_execution(
                     connection_id=connection_id,
                     provider=provider,
                     action=action,
-                    config_json=json.dumps({}),
+                    config_json=json.dumps(action_config),
                     input_data_json=json.dumps(resolved_configuration),
                 )
 
