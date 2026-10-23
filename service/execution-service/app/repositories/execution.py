@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import aliased
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.dead_letter_event import DeadLetterEvent
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
-
+from app.engine.status import ExecutionStatus
 
 class ExecutionRepository:
     def __init__(self, session: AsyncSession):
@@ -97,6 +97,86 @@ class ExecutionRepository:
             raise RuntimeError(
                 "Failed to retrieve execution details"
             ) from exc
+
+    
+    async def request_cancellation(
+        self,
+        execution_id: UUID,
+        workspace_id: UUID,
+    ) -> str | None:
+        """
+        Atomically cancel a pending execution or request
+        cancellation of a running execution.
+        """
+
+        # Cancel pending executions immediately.
+        pending_statement = (
+            update(Execution)
+            .where(
+                Execution.id == execution_id,
+                Execution.workspace_id == workspace_id,
+                Execution.status == ExecutionStatus.PENDING,
+            )
+            .values(
+                status=ExecutionStatus.CANCELLED,
+                cancel_requested_at=func.now(),
+                completed_at=func.now(),
+                claimed_by=None,
+                heartbeat_at=None,
+                lease_expires_at=None,
+            )
+            .returning(Execution.id)
+        )
+
+        result = await self.session.execute(
+            pending_statement
+        )
+
+        if result.scalar_one_or_none() is not None:
+            return "cancelled"
+
+        # Request cancellation of a running execution.
+        running_statement = (
+            update(Execution)
+            .where(
+                Execution.id == execution_id,
+                Execution.workspace_id == workspace_id,
+                Execution.status == ExecutionStatus.RUNNING,
+                Execution.cancel_requested_at.is_(None),
+            )
+            .values(
+                cancel_requested_at=func.now(),
+            )
+            .returning(Execution.id)
+        )
+
+        result = await self.session.execute(
+            running_statement
+        )
+
+        if result.scalar_one_or_none() is not None:
+            return "cancellation_requested"
+
+        # Determine the current state.
+        execution = await self.get_execution_by_id(
+            execution_id=execution_id,
+            workspace_id=workspace_id,
+        )
+
+        if execution is None:
+            return None
+
+        if execution.status == ExecutionStatus.CANCELLED:
+            return "already_cancelled"
+
+        if (
+            execution.status == ExecutionStatus.RUNNING
+            and execution.cancel_requested_at is not None
+        ):
+            return "cancellation_requested"
+
+        return "not_cancellable"
+
 
 
     async def list_execution_steps(
