@@ -694,6 +694,11 @@ async def run_execution(
             )
 
             action_config = {}
+            
+            if node_type == "action.refund":
+                resolved_configuration["idempotency_key"] = (
+                    f"relay:refund:{execution_id}:{node_id}"
+                )
 
             if node_type == "action.http_request":
                 timeout = resolved_configuration.get("timeout", 10)

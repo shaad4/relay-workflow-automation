@@ -32,6 +32,15 @@ class StripeConnector(Connector):
         payment_id = input_data.get("payment_id")
         amount = input_data.get("amount")
 
+        idempotency_key = input_data.get("idempotency_key")
+
+        if (
+            not isinstance(idempotency_key, str)
+            or not idempotency_key.strip()
+            or len(idempotency_key) > 255
+        ):
+            raise ValueError("Valid refund idempotency key is required")
+
         if not api_key:
             raise ValueError("Stripe API key is required")
 
@@ -74,6 +83,7 @@ class StripeConnector(Connector):
                 payment_intent=payment_id,
                 amount=amount_smallest_unit,
                 api_key=api_key,
+                idempotency_key=idempotency_key,
             )
 
         except stripe.StripeError as exc:
