@@ -545,6 +545,84 @@ async def execute_pending_execution(
 
 
 
+async def cleanup_expired_executions(
+    limit: int = 100,
+) -> int:
+    """
+    Mark expired running executions and their unfinished
+    steps as failed.
+
+    Does not restart workflows or replay external actions.
+    """
+
+    if not 1 <= limit <= 100:
+        raise ValueError(
+            "Limit must be between 1 and 100"
+        )
+
+    cleaned_count = 0
+
+    async with AsyncSessionLocal() as session:
+        repository = ExecutionQueueRepository(session)
+
+        expired = await repository.list_expired_executions(
+            limit=limit,
+        )
+
+        for execution in expired:
+            try:
+                execution_id = execution.id
+                workspace_id = execution.workspace_id
+
+                claimed = await repository.mark_expired_as_failed(
+                    execution_id=execution_id,
+                    workspace_id=workspace_id,
+                )
+
+                if not claimed:
+                    await session.rollback()
+                    continue
+
+                # Mark only unfinished steps as interrupted.
+                statement = (
+                    update(ExecutionStep)
+                    .where(
+                        ExecutionStep.execution_id == execution_id,
+                        ExecutionStep.status.in_([
+                            ExecutionStepStatus.PENDING,
+                            ExecutionStepStatus.RUNNING,
+                        ]),
+                    )
+                    .values(
+                        status=ExecutionStepStatus.FAILED,
+                        completed_at=func.now(),
+                        error={
+                            "error_code": "WORKER_INTERRUPTED",
+                            "message": (
+                                "Step interrupted because "
+                                "the worker lease expired"
+                            ),
+                            "requires_review": True,
+                        },
+                    )
+                )
+
+                await session.execute(statement)
+
+                # Commit execution and step updates together.
+                await session.commit()
+
+                cleaned_count += 1
+
+            except Exception:
+                await session.rollback()
+                raise
+
+    return cleaned_count
+
+
+
+
 async def inspect_recoverable_executions(
     limit: int = 100,
 ) -> dict:

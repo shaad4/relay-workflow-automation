@@ -185,6 +185,51 @@ class ExecutionQueueRepository:
 
         return list(result.scalars().all())
 
+    
+    async def mark_expired_as_failed(
+        self,
+        execution_id: UUID,
+        workspace_id: UUID,
+    ) -> bool:
+        """
+        Atomically mark an expired running execution as failed.
+
+        Does not restart or replay the workflow.
+        """
+
+        statement = (
+            update(Execution)
+            .where(
+                Execution.id == execution_id,
+                Execution.workspace_id == workspace_id,
+                Execution.status == ExecutionStatus.RUNNING,
+                Execution.lease_expires_at.is_not(None),
+                Execution.lease_expires_at <= func.now(),
+            )
+            .values(
+                status=ExecutionStatus.FAILED,
+                claimed_by=None,
+                heartbeat_at=None,
+                lease_expires_at=None,
+                completed_at=func.now(),
+                error={
+                    "error_code": "WORKER_INTERRUPTED",
+                    "message": (
+                        "Execution stopped because the "
+                        "worker lease expired"
+                    ),
+                    "retryable": False,
+                    "requires_review": True,
+                },
+            )
+            .returning(Execution.id)
+        )
+
+        result = await self.session.execute(statement)
+
+        return result.scalar_one_or_none() is not None
+
+
 
     async def list_pending_executions(
         self,
