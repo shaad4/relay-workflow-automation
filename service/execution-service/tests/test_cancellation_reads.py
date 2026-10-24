@@ -40,9 +40,6 @@ def test_detail_cancellation_timestamp_and_workspace_scope(history):
     execution = history["original"]
     execution.cancel_requested_at = datetime.now(timezone.utc)
     history["session"].commit()
-    # Isolate this read contract from the existing unavailable lineage helpers.
-    history["service"].repository.get_execution_lineage = AsyncMock(return_value={})
-    history["service"].repository.get_recovery_events = AsyncMock(return_value={})
     result = asyncio.run(history["service"].get_execution_by_id(execution.id, history["workspace"]))
     assert ExecutionDetailResponse.model_validate(result).cancel_requested_at == execution.cancel_requested_at
     assert asyncio.run(history["service"].get_execution_by_id(execution.id, history["other_workspace"])) is None
