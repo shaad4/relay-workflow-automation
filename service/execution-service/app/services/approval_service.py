@@ -31,6 +31,7 @@ async def list_pending_approvals(
     workspace_id: str,
     approver_user_id: str,
     session: AsyncSession,
+    status: HumanApprovalStatus = HumanApprovalStatus.PENDING,
 ) -> list[HumanApproval]:
     try:
         result = await session.execute(
@@ -38,7 +39,7 @@ async def list_pending_approvals(
             .where(
                 HumanApproval.workspace_id == workspace_id,
                 HumanApproval.approver_user_id == approver_user_id,
-                HumanApproval.status == HumanApprovalStatus.PENDING,
+                HumanApproval.status == status,
             )
             .order_by(HumanApproval.created_at.desc())
         )

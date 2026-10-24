@@ -33,6 +33,7 @@ class ExecutionListResponse(BaseModel):
 
 
 class ExecutionDetailResponse(ExecutionListItem):
+    cancel_requested_at: datetime | None = None
     attempt_number: int | None = Field(default=None, ge=1)
     workspace_id: UUID
     error: dict | None = None

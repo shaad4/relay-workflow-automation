@@ -1,7 +1,7 @@
 import { apiRequest } from "@/lib/api";
 
-export function getApprovals() {
-  return apiRequest("/approvals/", { method: "GET" });
+export function getApprovals(status = "pending") {
+  return apiRequest(`/approvals/?${new URLSearchParams({ status })}`, { method: "GET" });
 }
 
 export function getApproval(approvalId) {

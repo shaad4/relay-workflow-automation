@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engine.approval_status import HumanApprovalStatus
 from app.dependencies import get_current_identity
 from app.db.database import AsyncSessionLocal
 
@@ -36,11 +37,13 @@ async def get_db():
 async def get_approvals(
     identity: dict = Depends(get_current_identity),
     session: AsyncSession = Depends(get_db),
+    status: HumanApprovalStatus = HumanApprovalStatus.PENDING,
 ):
     approvals = await list_pending_approvals(
         workspace_id=identity["workspace_id"],
         approver_user_id=identity["user_id"],
         session=session,
+        status=status,
     )
 
     return ApprovalListResponse(
