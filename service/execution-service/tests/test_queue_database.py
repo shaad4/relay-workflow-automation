@@ -112,3 +112,43 @@ async def test_dlq_creation_safe_replay_duplicate_and_resolution(monkeypatch, wo
             await service.replay_event(event_id, workspace)
         with pytest.raises(ValueError, match='not_found'):
             await service.replay_event(event_id, uuid4())
+
+
+@pytest.mark.parametrize('outcome', ['completed', 'failed'])
+@pytest.mark.parametrize('cancel_requested', [False, True])
+async def test_terminal_finalization_persists_status_error_and_dlq(workspace, outcome, cancel_requested):
+    execution_id = await pending(workspace)
+    assert await queue.claim_pending_execution(execution_id, 'owner')
+    error = {'message': 'Refund failed', 'details': {'code': 'declined'}} if outcome == 'failed' else None
+    context = {'trigger': {}, 'variables': {}, 'nodes': {'last': {'success': True}}}
+    async with AsyncSessionLocal() as session:
+        execution = await session.get(Execution, execution_id)
+        if cancel_requested:
+            execution.cancel_requested_at = datetime.now(timezone.utc)
+        session.add(ExecutionStep(
+            id=uuid4(), execution_id=execution_id, node_id='last',
+            node_type='action.http_request', status=outcome, sequence=1, attempt=1,
+        ))
+        await session.commit()
+
+    expected = 'cancelled' if cancel_requested else outcome
+    assert await queue.finalize_execution(
+        execution_id, 'owner', outcome, context_data=context, error=error,
+    ) == expected
+    async with AsyncSessionLocal() as session:
+        execution = await session.get(Execution, execution_id)
+        assert execution.status == expected
+        assert execution.completed_at is not None
+        assert execution.claimed_by is None and execution.lease_expires_at is None
+        assert execution.heartbeat_at is None
+        assert execution.error == (None if cancel_requested else error)
+        assert execution.context == context
+        events = (await session.execute(select(DeadLetterEvent).where(
+            DeadLetterEvent.execution_id == execution_id,
+        ))).scalars().all()
+        assert len(events) == (1 if expected == 'failed' else 0)
+        if events:
+            assert events[0].error == error
+            assert events[0].execution_step_id is not None
+    # A stale worker cannot overwrite a terminal result or create another DLQ entry.
+    assert await queue.finalize_execution(execution_id, 'owner', 'failed', error=error) is None

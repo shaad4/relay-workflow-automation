@@ -3,7 +3,8 @@ import asyncio
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update, func, case
+from sqlalchemy import select, update, func, case, literal
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 
 from app.engine.error_classifier import classify_error
@@ -323,7 +324,9 @@ async def finalize_execution(
                     Execution.cancel_requested_at.is_not(None),
                     None,
                 ),
-                else_=error,
+                # CASE values need their own type: dicts require JSON encoding,
+                # and an all-NULL CASE otherwise resolves to text in PostgreSQL.
+                else_=literal(error, type_=JSONB(none_as_null=True)),
             )
 
             if status in {
