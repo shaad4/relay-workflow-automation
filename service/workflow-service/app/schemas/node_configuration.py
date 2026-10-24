@@ -1,28 +1,137 @@
-from typing import Any
 import re
+from decimal import Decimal, InvalidOperation
+from typing import Annotated, Any, Literal
 from uuid import UUID
-
-from datetime import time
-from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from croniter import croniter
-
-
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    ValidatorFunctionWrapHandler,
+    WrapValidator,
     field_validator,
     model_validator,
 )
 
 
-class EmailConfig(BaseModel):
-    # Email configuration previously used the generic JSON node schema.
-    # Preserve its existing fields while validating the new format option.
+def validate_required_text(value: str) -> str:
+    if not value.strip():
+        raise ValueError("Field cannot be empty")
+    return value
+
+
+def is_expression(value: Any) -> bool:
+    return isinstance(value, str) and bool(re.search(r"\{\{\s*[^{}\s]+.*?\}\}", value))
+
+
+def validate_runtime_value(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
+    """Defer expression values until the executor has resolved their inputs."""
+    return value if is_expression(value) else handler(value)
+
+
+RequiredText = Annotated[str, AfterValidator(validate_required_text)]
+RuntimeUUID = Annotated[UUID, WrapValidator(validate_runtime_value)]
+
+
+class WebhookTriggerConfig(BaseModel):
+    # Endpoints live in Integration Service. Older nodes have {} or method/path.
     model_config = ConfigDict(extra="allow")
 
-    body_format: Literal["plain", "html"] = "plain"
+    webhook_id: UUID | None = None
+    method: Literal["POST"] = "POST"
+    path: str | None = None
+
+
+class HttpRequestConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    connection_id: RuntimeUUID
+    url: RequiredText
+    method: str = "GET"
+    timeout: Annotated[
+        float, Field(strict=True, ge=1, le=120), WrapValidator(validate_runtime_value)
+    ] = 10
+    headers: dict[str, str] | list[tuple[str, str]] | str | None = None
+    params: Annotated[
+        dict[str, Any] | str | list[tuple[str, Any]] | None,
+        WrapValidator(validate_runtime_value),
+    ] = None
+    body: Any = None
+
+    @field_validator("method")
+    @classmethod
+    def validate_method(cls, value: str) -> str:
+        # HTTPX also accepts HEAD, OPTIONS and extension methods.
+        if not is_expression(value) and not re.fullmatch(
+            r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", value,
+        ):
+            raise ValueError("HTTP method must be a valid HTTP token")
+        return value
+
+
+class EmailConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    connection_id: RuntimeUUID
+    to: RequiredText
+    subject: RequiredText
+    body: RequiredText
+    body_format: Annotated[
+        Literal["plain", "html"], WrapValidator(validate_runtime_value)
+    ] = "plain"
+
+
+class RefundConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    connection_id: RuntimeUUID
+    # The selected connector determines the payment identifier format.
+    payment_id: RequiredText
+    amount: StrictStr | StrictInt | StrictFloat
+    reason: str | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, value: str | int | float) -> str | int | float:
+        if is_expression(value):
+            return value
+        try:
+            amount = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            raise ValueError("Refund amount must be a valid number")
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError("Refund amount must be greater than zero")
+        return value
+
+
+class HumanApprovalConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    # The executor reads these two fields before expression resolution.
+    approver_user_id: UUID
+    timeout_minutes: int | None = None
+    message: RequiredText
+
+    @field_validator("timeout_minutes", mode="before")
+    @classmethod
+    def validate_timeout(cls, value: Any) -> int | None:
+        if value is None:
+            return value
+        if isinstance(value, bool) or not isinstance(value, (int, str)):
+            raise ValueError("Timeout must be a positive whole number of minutes")
+        try:
+            minutes = int(value)
+        except ValueError:
+            raise ValueError("Timeout must be a positive whole number of minutes")
+        if minutes <= 0:
+            raise ValueError("Timeout must be a positive whole number of minutes")
+        return minutes
 
 
 class RagSearchConfig(BaseModel):
@@ -30,19 +139,16 @@ class RagSearchConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    knowledge_base_id: UUID
+    knowledge_base_id: RuntimeUUID
 
     query: str = Field(
         min_length=1,
         max_length=2000,
     )
 
-    top_k: int = Field(
-        default=5,
-        ge=1,
-        le=20,
-        strict=True,
-    )
+    top_k: Annotated[
+        int, Field(ge=1, le=20, strict=True), WrapValidator(validate_runtime_value)
+    ] = 5
 
     @model_validator(mode="before")
     @classmethod
@@ -86,7 +192,7 @@ class AIDecisionConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    connection_id: UUID
+    connection_id: RuntimeUUID
 
     model: str = Field(
         min_length=1,
@@ -131,6 +237,9 @@ class AIDecisionConfig(BaseModel):
         normalized = []
 
         for value in values:
+            if is_expression(value):
+                normalized.append(value)
+                continue
             decision = value.strip().upper()
 
             if not re.fullmatch(
@@ -171,13 +280,19 @@ class AIDecisionConfig(BaseModel):
         return values
 
 
+    @field_validator("input_mappings", "allowed_decisions", mode="wrap")
+    @classmethod
+    def validate_runtime_inputs(cls, value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
+        return validate_runtime_value(value, handler)
+
+
 
 class AIGenerateConfig(BaseModel):
     """Configuration for a generic AI Generate node."""
 
     model_config = ConfigDict(extra="forbid")
 
-    connection_id: UUID
+    connection_id: RuntimeUUID
 
     model: str = Field(
         min_length=1,
