@@ -26,6 +26,9 @@ from app.models.dead_letter_event import DeadLetterEvent
 from app.models.execution_step import ExecutionStep
 from app.engine.step_status import ExecutionStepStatus
 
+from app.models.human_approval import HumanApproval
+from app.engine.approval_status import HumanApprovalStatus
+
 
 LEASE_SECONDS = 120
 HEARTBEAT_INTERVAL_SECONDS = 30
@@ -329,6 +332,14 @@ async def finalize_execution(
                 ExecutionStatus.CANCELLED,
             }:
                 values["completed_at"] = func.now()
+            else:
+                values["completed_at"] = case(
+                    (
+                        Execution.cancel_requested_at.is_not(None),
+                        func.now(),
+                    ),
+                    else_=Execution.completed_at,
+                )
 
             statement = (
                 update(Execution)
@@ -353,6 +364,35 @@ async def finalize_execution(
                 return None
 
             persisted_status = row.status
+
+            if persisted_status == ExecutionStatus.CANCELLED:
+                await session.execute(
+                    update(HumanApproval)
+                    .where(
+                        HumanApproval.execution_id == execution_id,
+                        HumanApproval.workspace_id == row.workspace_id,
+                        HumanApproval.status == HumanApprovalStatus.PENDING,
+                    )
+                    .values(
+                        status=HumanApprovalStatus.CANCELLED,
+                    )
+                )
+
+                await session.execute(
+                    update(ExecutionStep)
+                    .where(
+                        ExecutionStep.execution_id == execution_id,
+                        ExecutionStep.status.in_([
+                            ExecutionStepStatus.PENDING,
+                            ExecutionStepStatus.RUNNING,
+                            ExecutionStepStatus.WAITING_FOR_APPROVAL,
+                        ]),
+                    )
+                    .values(
+                        status=ExecutionStepStatus.CANCELLED,
+                        completed_at=func.now(),
+                    )
+                )
 
             if persisted_status == ExecutionStatus.FAILED:
                 step_result = await session.execute(
@@ -438,18 +478,46 @@ async def execute_pending_execution(
         workspace_id = str(execution.workspace_id)
         trigger_data = execution.trigger_data
         
+        
         # Check for an approval resume checkpoint.
         saved_context = execution.context or {}
         resume_data = saved_context.get("_resume")
 
-        if not isinstance(resume_data, dict):
-            resume_data = None
+        
+        if "_resume" in saved_context:
+            if (
+                not isinstance(resume_data, dict)
+                or resume_data.get("state") != "pending"
+                or "start_node_id" not in resume_data
+                or (
+                    resume_data["start_node_id"] is not None
+                    and (
+                        not isinstance(
+                            resume_data["start_node_id"], str
+                        )
+                        or not resume_data["start_node_id"].strip()
+                    )
+                )
+            ):
+                persisted_status = await finalize_execution(
+                    execution_id=execution_id,
+                    worker_id=worker_id,
+                    status=ExecutionStatus.FAILED,
+                    error={
+                        "error_code": "INVALID_RESUME_CHECKPOINT",
+                        "message": "Invalid approval resume checkpoint",
+                        "requires_review": True,
+                    },
+                )
 
-        if (
-            resume_data is not None
-            and resume_data.get("state") != "pending"
-        ):
-            resume_data = None
+                if persisted_status is None:
+                    raise RuntimeError(
+                        "Unable to finalize invalid resume checkpoint"
+                    )
+
+                return True
+
+
 
         if resume_data is not None:
             # Resume after the human approval node.
