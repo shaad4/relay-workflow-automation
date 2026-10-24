@@ -101,7 +101,10 @@ class ExecutionQueueRepository:
             .values(
                 status=ExecutionStatus.RUNNING,
                 claimed_by=worker_id,
-                started_at=func.now(),
+                started_at=func.coalesce(
+                    Execution.started_at,
+                    func.now(),
+                ),
                 heartbeat_at=func.now(),
                 lease_expires_at=(
                     func.now()

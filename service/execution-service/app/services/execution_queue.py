@@ -454,7 +454,13 @@ async def execute_pending_execution(
         if resume_data is not None:
             # Resume after the human approval node.
             start_node_id = resume_data.get("start_node_id")
-            execution_context = saved_context
+
+            # Keep the workflow's previous outputs,
+            # but remove the consumed resume checkpoint.
+            execution_context = {
+                **saved_context,
+            }
+            execution_context.pop("_resume", None)
 
         elif execution.replay_start_node_id is not None:
             # Resume a safe DLQ replay.
