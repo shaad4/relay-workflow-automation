@@ -6,7 +6,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from app.routes import dashboard
+from app.routes.dashboard import overview as dashboard
 
 
 def execution_data():

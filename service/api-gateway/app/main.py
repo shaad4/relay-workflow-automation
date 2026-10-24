@@ -1,4 +1,4 @@
-from app.routes.dashboard import router as dashboard_router
+from app.routes.dashboard.overview import router as dashboard_router
 import os
 
 from dotenv import load_dotenv
@@ -6,21 +6,21 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes.auth import router as auth_router
-from app.routes.public_auth import router as public_auth_router
-from app.routes.workflows import router as workflows_router
+from app.routes.auth.authenticated import router as auth_router
+from app.routes.auth.public import router as public_auth_router
+from app.routes.workflows.workflows import router as workflows_router
 
-from app.routes.integration import router as integration_router
-from app.routes.public_webhooks import router as public_webhooks_router
+from app.routes.integrations.webhooks import router as integration_router
+from app.routes.integrations.public_webhooks import router as public_webhooks_router
 
-from app.routes.connections import router as connections_router
-from app.routes.approvals import router as approvals_router
-from app.routes.knowledge_bases import router as knowledge_base_router
-from app.routes.ai_provider_connections import router as ai_provider_connections_router
-from app.routes.manual_triggers import router as manual_triggers_router
-from app.routes.schedules import router as schedules_router
-from app.routes.executions import router as executions_router
-from app.routes.dead_letter import router as dead_letter_router
+from app.routes.integrations.connections import router as connections_router
+from app.routes.executions.approvals import router as approvals_router
+from app.routes.ai.knowledge_bases import router as knowledge_base_router
+from app.routes.ai.provider_connections import router as ai_provider_connections_router
+from app.routes.workflows.manual_triggers import router as manual_triggers_router
+from app.routes.workflows.schedules import router as schedules_router
+from app.routes.executions.executions import router as executions_router
+from app.routes.executions.dead_letter import router as dead_letter_router
 
 load_dotenv()
 

@@ -4,7 +4,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
-from app.routes import public_webhooks as hooks
+from app.routes.integrations import public_webhooks as hooks
 
 @pytest.mark.parametrize('test_mode', [False,True])
 async def test_webhook_proxy_preserves_payload_and_filters_headers(monkeypatch,test_mode):
