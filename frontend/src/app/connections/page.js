@@ -221,7 +221,7 @@ function ConnectionsContent() {
     finally { setDeleting(false); }
   };
 
-  return <ProtectedRoute><DashboardShell pageTitle="Connections"><div className="mx-auto w-full max-w-[1440px] space-y-7">
+  return <ProtectedRoute><DashboardShell pageTitle="Connections"><div className="w-full min-w-0 space-y-7">
     <header className="flex flex-wrap items-center justify-between gap-5">
       <div className="flex items-center gap-4"><div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-[var(--border-default)] bg-[var(--surface)] text-[var(--accent)]"><ConnectionIcon className="h-7 w-7" /></div><div><h1 className="text-[26px] font-semibold tracking-tight text-[var(--text-primary)]">Connections</h1><p className="mt-1 text-[13px] text-[var(--text-secondary)]">Your tools, working together.</p></div></div>
       {section === "integrations" && !loading && !loadError && <div className="flex items-center gap-5 text-right"><div><p className="font-mono text-[22px] leading-7 text-[var(--text-primary)]">{String(items.length).padStart(2, "0")}</p><p className="text-[10px] text-[var(--text-tertiary)]">Saved connections</p></div><div className="border-l border-[var(--border-subtle)] pl-5"><p className="font-mono text-[22px] leading-7 text-[var(--text-primary)]">{String(new Set(items.map((item) => item.provider)).size).padStart(2, "0")}</p><p className="text-[10px] text-[var(--text-tertiary)]">Services in use</p></div></div>}

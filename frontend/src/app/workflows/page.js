@@ -133,7 +133,7 @@ function WorkflowsContent() {
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-6 font-sans">
+    <div className="w-full min-w-0 space-y-6 font-sans">
       <header className="flex flex-col gap-5 border-b border-[var(--border-subtle)] pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.18em] text-[var(--text-tertiary)]"><span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />Workspace automation</div>
