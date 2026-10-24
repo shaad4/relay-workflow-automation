@@ -155,6 +155,7 @@ async def reject_approval(
         raise
 
 
+
 async def decide_approval(
     approval_id: UUID,
     workspace_id: str,
@@ -165,13 +166,62 @@ async def decide_approval(
     if decision not in {"approved", "rejected"}:
         raise ValueError("Invalid approval decision")
 
+    workspace_uuid = UUID(workspace_id)
+    approver_uuid = UUID(approver_user_id)
+
     try:
+        # 1. Find the approval without locking it.
+        result = await session.execute(
+            select(
+                HumanApproval.execution_id
+            ).where(
+                HumanApproval.id == approval_id,
+                HumanApproval.workspace_id == workspace_uuid,
+                HumanApproval.approver_user_id == approver_uuid,
+            )
+        )
+
+        execution_id = result.scalar_one_or_none()
+
+        if execution_id is None:
+            raise ValueError("Approval not found")
+
+        # 2. Lock execution FIRST.
+        result = await session.execute(
+            select(Execution)
+            .where(
+                Execution.id == execution_id,
+                Execution.workspace_id == workspace_uuid,
+            )
+            .with_for_update()
+        )
+
+        execution = result.scalar_one_or_none()
+
+        if execution is None:
+            raise ValueError("Execution not found")
+
+        if (
+            execution.status
+            != ExecutionStatus.WAITING_FOR_APPROVAL
+        ):
+            raise ValueError(
+                "Execution is not waiting for approval"
+            )
+
+        if execution.cancel_requested_at is not None:
+            raise ValueError(
+                "Execution cancellation was requested"
+            )
+
+        # 3. Lock approval SECOND.
         result = await session.execute(
             select(HumanApproval)
             .where(
                 HumanApproval.id == approval_id,
-                HumanApproval.workspace_id == UUID(workspace_id),
-                HumanApproval.approver_user_id == UUID(approver_user_id),
+                HumanApproval.execution_id == execution.id,
+                HumanApproval.workspace_id == workspace_uuid,
+                HumanApproval.approver_user_id == approver_uuid,
             )
             .with_for_update()
         )
@@ -186,32 +236,20 @@ async def decide_approval(
                 f"Approval is already {approval.status}"
             )
 
-        execution = await session.get(
-            Execution,
-            approval.execution_id,
-            with_for_update=True,
-        )
-
-        if (
-            execution is None
-            or execution.workspace_id != UUID(workspace_id)
-        ):
-            raise ValueError("Execution not found")
-
-        if execution.status != ExecutionStatus.WAITING_FOR_APPROVAL:
-            raise ValueError(
-                "Execution is not waiting for approval"
+        # 4. Lock execution step THIRD.
+        result = await session.execute(
+            select(ExecutionStep)
+            .where(
+                ExecutionStep.id == approval.execution_step_id,
+                ExecutionStep.execution_id == execution.id,
             )
-
-        execution_step = await session.get(
-            ExecutionStep,
-            approval.execution_step_id,
-            with_for_update=True,
+            .with_for_update()
         )
+
+        execution_step = result.scalar_one_or_none()
 
         if (
             execution_step is None
-            or execution_step.execution_id != execution.id
             or execution_step.status
             != ExecutionStepStatus.WAITING_FOR_APPROVAL
         ):
@@ -219,38 +257,40 @@ async def decide_approval(
                 "Approval execution step is not waiting"
             )
 
-        # Resolve the matching approval edge before committing.
+        # 5. Resolve approval branch.
         start_node_id = await resolve_approval_branch(
             workflow_id=str(execution.workflow_id),
-            workflow_version_id=str(execution.workflow_version_id),
+            workflow_version_id=str(
+                execution.workflow_version_id
+            ),
             workspace_id=str(execution.workspace_id),
             approval_node_id=execution_step.node_id,
             decision=decision,
         )
 
-        completed_at = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
 
+        # 6. Record approval decision.
         approval.status = (
             HumanApprovalStatus.APPROVED
             if decision == "approved"
             else HumanApprovalStatus.REJECTED
         )
+
         approval.decision = decision
-        approval.decided_at = completed_at
+        approval.decided_at = now
 
         execution_step.status = ExecutionStepStatus.COMPLETED
-        execution_step.completed_at = completed_at
+        execution_step.completed_at = now
 
         if execution_step.started_at:
             execution_step.duration_ms = int(
                 (
-                    completed_at - execution_step.started_at
+                    now - execution_step.started_at
                 ).total_seconds() * 1000
             )
 
-        execution.status = ExecutionStatus.RUNNING
-
-        # Persist the selected branch for resume/recovery.
+        # 7. Save resume checkpoint.
         context_data = dict(execution.context or {})
 
         context_data["_resume"] = {
@@ -261,6 +301,11 @@ async def decide_approval(
         }
 
         execution.context = context_data
+
+        # Keep RUNNING for the existing background
+        # resume implementation. We'll integrate it
+        # with the dispatcher in the next step.
+        execution.status = ExecutionStatus.PENDING
 
         decision_result = ApprovalDecisionResult(
             approval=approval,

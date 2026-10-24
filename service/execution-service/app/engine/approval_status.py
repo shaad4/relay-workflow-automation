@@ -5,4 +5,4 @@ class HumanApprovalStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
-    EXPIRED = "expired"
+    CANCELLED = "cancelled"

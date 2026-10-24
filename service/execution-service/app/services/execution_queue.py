@@ -437,13 +437,35 @@ async def execute_pending_execution(
         )
         workspace_id = str(execution.workspace_id)
         trigger_data = execution.trigger_data
-        replay_start_node_id = execution.replay_start_node_id
+        
+        # Check for an approval resume checkpoint.
+        saved_context = execution.context or {}
+        resume_data = saved_context.get("_resume")
 
-        replay_context = (
-            execution.context
-            if replay_start_node_id is not None
-            else None
-        )
+        if not isinstance(resume_data, dict):
+            resume_data = None
+
+        if (
+            resume_data is not None
+            and resume_data.get("state") != "pending"
+        ):
+            resume_data = None
+
+        if resume_data is not None:
+            # Resume after the human approval node.
+            start_node_id = resume_data.get("start_node_id")
+            execution_context = saved_context
+
+        elif execution.replay_start_node_id is not None:
+            # Resume a safe DLQ replay.
+            start_node_id = execution.replay_start_node_id
+            execution_context = saved_context
+
+        else:
+            # Normal workflow starts from its trigger.
+            start_node_id = None
+            execution_context = None
+
 
     owner_task = asyncio.current_task()
 
@@ -471,20 +493,27 @@ async def execute_pending_execution(
 
     
         try:
-            result = await run_execution(
-                execution_id=execution_id,
-                workflow_id=workflow_id,
-                workflow_version_id=workflow_version_id,
-                workspace_id=workspace_id,
-                trigger_data=trigger_data,
-                context_data=replay_context,
-                start_node_id=replay_start_node_id,
-            )
+            if resume_data is not None and start_node_id is None:
+                # Approval was the final workflow node.
+                # Nothing else needs to execute.
+                final_status = ExecutionStatus.COMPLETED
+                final_context = execution_context
+                final_error = None
 
-            final_status = ExecutionStatus.COMPLETED
-            final_context = result["context"]
-            final_error = None
+            else:
+                result = await run_execution(
+                    execution_id=execution_id,
+                    workflow_id=workflow_id,
+                    workflow_version_id=workflow_version_id,
+                    workspace_id=workspace_id,
+                    trigger_data=trigger_data,
+                    context_data=execution_context,
+                    start_node_id=start_node_id,
+                )
 
+                final_status = ExecutionStatus.COMPLETED
+                final_context = result["context"]
+                final_error = None
         except ExecutionCancellationRequested:
             final_status = ExecutionStatus.CANCELLED
             final_context = None
