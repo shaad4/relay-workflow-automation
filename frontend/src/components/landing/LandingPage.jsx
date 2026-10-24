@@ -126,6 +126,7 @@ export default function LandingPage() {
         </div>
       </header>
       <main id="main">
+        <div className={s.firstScreen}>
         <section className={s.hero}>
           <div className={s.heroStage}>
             <div><span className={s.kicker}>INTELLIGENT WORKFLOW AUTOMATION</span><h1>Less back and forth.<br/><span>More forward.</span></h1></div>
@@ -134,6 +135,7 @@ export default function LandingPage() {
           <div id="product" className={s.preview}><WorkflowMotion/></div>
         </section>
         <ToolStrip/>
+        </div>
         <KnowledgeSection/>
         <section className={s.finalCta}><div><h2>Make room for better work.</h2><p>Build your first workflow with Relay.</p></div><Link href="/register" className={s.primary}>Get started <Icon size={16}/></Link></section>
       </main>
