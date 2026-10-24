@@ -1,3 +1,4 @@
+from app.routes.dashboard import router as dashboard_router
 import os
 
 from dotenv import load_dotenv
@@ -86,3 +87,5 @@ async def health():
         "status": "ok",
         "service": "api-gateway",
     }
+
+app.include_router(dashboard_router)

@@ -1,6 +1,6 @@
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
-import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
+import DashboardOverview from "@/components/dashboard/DashboardOverview";
 
 export const metadata = {
   title: "Dashboard - Relay",
@@ -10,8 +10,8 @@ export const metadata = {
 export default function DashboardPage() {
   return (
     <ProtectedRoute>
-      <DashboardShell pageTitle="Dashboard">
-        <DashboardSkeleton />
+      <DashboardShell pageTitle="Overview">
+        <DashboardOverview />
       </DashboardShell>
     </ProtectedRoute>
   );
