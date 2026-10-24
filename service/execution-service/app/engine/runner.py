@@ -609,20 +609,26 @@ async def run_execution(
                     )
 
                 async with AsyncSessionLocal() as session:
-                    execution_step = await session.get(
-                        ExecutionStep,
-                        execution_step_id,
+                    # Publish the request and its waiting execution together.
+                    # Match cancellation/decision lock order: execution first.
+                    result = await session.execute(
+                        select(Execution).where(Execution.id == execution_id).with_for_update()
                     )
-
-                    execution = await session.get(
-                        Execution,
-                        execution_id,
-                    )
-
+                    execution = result.scalar_one_or_none()
                     if execution is None:
-                        raise ValueError(
-                            f"Execution {execution_id} not found"
-                        )
+                        raise ValueError(f"Execution {execution_id} not found")
+                    if execution.cancel_requested_at is not None or execution.status == ExecutionStatus.CANCELLED:
+                        raise ExecutionCancellationRequested("Execution cancellation requested")
+                    if execution.status != ExecutionStatus.RUNNING:
+                        raise ValueError("Execution is no longer running")
+                    if execution.lease_expires_at is not None and execution.lease_expires_at <= datetime.now(timezone.utc):
+                        raise ValueError("Execution lease expired before approval handoff")
+
+                    execution_step = await session.get(ExecutionStep, execution_step_id)
+                    execution.status = ExecutionStatus.WAITING_FOR_APPROVAL
+                    execution.claimed_by = None
+                    execution.heartbeat_at = None
+                    execution.lease_expires_at = None
 
                     execution_step.status = (
                         ExecutionStepStatus.WAITING_FOR_APPROVAL

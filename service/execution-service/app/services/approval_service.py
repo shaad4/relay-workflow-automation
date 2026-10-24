@@ -202,19 +202,6 @@ async def decide_approval(
         if execution is None:
             raise ValueError("Execution not found")
 
-        if (
-            execution.status
-            != ExecutionStatus.WAITING_FOR_APPROVAL
-        ):
-            raise ValueError(
-                "Execution is not waiting for approval"
-            )
-
-        if execution.cancel_requested_at is not None:
-            raise ValueError(
-                "Execution cancellation was requested"
-            )
-
         # 3. Lock approval SECOND.
         result = await session.execute(
             select(HumanApproval)
@@ -235,6 +222,19 @@ async def decide_approval(
         if approval.status != HumanApprovalStatus.PENDING:
             raise ValueError(
                 f"Approval is already {approval.status}"
+            )
+
+        if (
+            execution.status
+            != ExecutionStatus.WAITING_FOR_APPROVAL
+        ):
+            raise ValueError(
+                "Execution is not waiting for approval"
+            )
+
+        if execution.cancel_requested_at is not None:
+            raise ValueError(
+                "Execution cancellation was requested"
             )
 
         # 4. Lock execution step THIRD.
@@ -303,9 +303,7 @@ async def decide_approval(
 
         execution.context = context_data
 
-        # Keep RUNNING for the existing background
-        # resume implementation. We'll integrate it
-        # with the dispatcher in the next step.
+        # Queue the saved checkpoint for the existing dispatcher.
         execution.status = ExecutionStatus.PENDING
 
         decision_result = ApprovalDecisionResult(

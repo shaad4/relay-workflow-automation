@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import { ExecutionIcon, RefreshExecutions } from "@/components/dashboard/ExecutionUI";
@@ -102,6 +103,7 @@ export default function ApprovalsPage() {
   const [decisionBusy, setDecisionBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   const closeDetailRef = useRef(null);
+  const decisionLocked = useRef(false);
 
   const refresh = useCallback(() => setReload((value) => value + 1), []);
   const notify = useCallback((message, kind = "success") => setNotice({ message, kind, key: Date.now() }), []);
@@ -130,12 +132,15 @@ export default function ApprovalsPage() {
   }, [isInitializing, reload, status]);
 
   useEffect(() => {
-    const onUpdated = () => { setSelectedApproval(null); setDecision(null); refresh(); };
+    const onUpdated = () => {
+      if (!decisionLocked.current) { setSelectedApproval(null); setDecision(null); }
+      refresh();
+    };
     window.addEventListener("relay:approvals-updated", onUpdated);
-    window.addEventListener("focus", onUpdated);
+    window.addEventListener("focus", refresh);
     return () => {
       window.removeEventListener("relay:approvals-updated", onUpdated);
-      window.removeEventListener("focus", onUpdated);
+      window.removeEventListener("focus", refresh);
     };
   }, [refresh]);
 
@@ -167,7 +172,9 @@ export default function ApprovalsPage() {
   };
 
   const retryDetails = () => selectedApproval && showDetails(selectedApproval);
-  const startDecision = (approval, action) => setDecision({ approval, action });
+  const startDecision = (approval, action) => {
+    if (!decisionLocked.current && approval.status === "pending") setDecision({ approval, action });
+  };
   const closeDecision = useCallback(() => { if (!decisionBusy) setDecision(null); }, [decisionBusy]);
   const pageCount = Math.max(1, Math.ceil(approvals.length / PAGE_SIZE));
   const paginatedApprovals = approvals.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -175,7 +182,8 @@ export default function ApprovalsPage() {
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
 
   const confirmDecision = async () => {
-    if (!decision || decisionBusy) return;
+    if (!decision || decisionLocked.current) return;
+    decisionLocked.current = true;
     setDecisionBusy(true);
     const { approval, action } = decision;
     try {
@@ -192,7 +200,7 @@ export default function ApprovalsPage() {
         window.dispatchEvent(new Event("relay:approvals-updated"));
         setDecision(null);
         setSelectedApproval((current) => current?.id === approval.id ? null : current);
-        notify("This approval was already handled. The inbox has been refreshed.", "info");
+        notify(error.message || "Unable to record this decision. Refresh and try again.", "error");
         refresh();
       } else if (error.status === 404) {
         window.dispatchEvent(new Event("relay:approvals-updated"));
@@ -206,6 +214,7 @@ export default function ApprovalsPage() {
         notify("Unable to submit your decision. Please try again.", "error");
       }
     } finally {
+      decisionLocked.current = false;
       setDecisionBusy(false);
     }
   };
@@ -247,7 +256,7 @@ export default function ApprovalsPage() {
           <div className="flex gap-3 sm:gap-5">
             <div className="hidden w-9 shrink-0 flex-col items-center gap-3 sm:flex" aria-hidden="true"><span className="font-mono text-[10px] tabular-nums text-[var(--text-tertiary)]">{String((page - 1) * PAGE_SIZE + index + 1).padStart(2, "0")}</span><span className={`grid h-9 w-9 place-items-center rounded-lg border ${approval.status === "pending" ? "border-[var(--border-default)] bg-[var(--canvas)] text-[var(--text-secondary)]" : "border-[var(--border-subtle)] text-[var(--text-tertiary)]"}`}>{approval.status === "pending" ? <ClockIcon className="h-4 w-4"/> : <ExecutionIcon type="history" className="h-4 w-4"/>}</span></div>
             <div className="min-w-0 flex-1">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-[10px] text-[var(--text-tertiary)]" title={approval.execution_id}>RUN / {String(approval.execution_id || "").slice(0, 8) || "Unavailable"}</span><StatusBadge status={approval.status}/></div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><Link href={`/dashboard/executions/${encodeURIComponent(approval.execution_id)}`} className="rounded font-mono text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--accent)]" title="View execution status and history">RUN / {String(approval.execution_id || "").slice(0, 8) || "Unavailable"} ↗</Link><StatusBadge status={approval.status}/></div>
               <button type="button" onClick={() => showDetails(approval)} className="block w-full rounded text-left text-[14px] font-medium leading-6 text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)] sm:text-[15px]"><span className="line-clamp-3 break-words [overflow-wrap:anywhere]"><ApprovalMessage message={approval.message}/></span><span className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-normal text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]">View request <span aria-hidden="true">↗</span></span></button>
               <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-[var(--border-subtle)] pt-4">
                 <time dateTime={approval.created_at} title={formatDateTime(approval.created_at)} className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]"><ClockIcon className="h-3.5 w-3.5"/>Requested {formatRequested(approval.created_at)}</time>

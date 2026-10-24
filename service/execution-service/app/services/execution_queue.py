@@ -595,11 +595,10 @@ async def execute_pending_execution(
 
 
         except HumanApprovalRequired:
-            final_status = (
-                ExecutionStatus.WAITING_FOR_APPROVAL
-            )
-            final_context = None
-            final_error = None
+            # The runner committed the approval, waiting step, and execution
+            # together and released its lease. Do not finalize again: a user
+            # may already have recorded a decision and queued the next branch.
+            return True
 
         except ActionExecutionFailed as exc:
             final_status = ExecutionStatus.FAILED

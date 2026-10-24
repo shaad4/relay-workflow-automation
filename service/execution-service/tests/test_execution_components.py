@@ -190,7 +190,7 @@ def test_resolve_approval_branch_validates_and_selects_edges(monkeypatch):
     for nodes, edges, node_id, message in [
         (json.loads(definition["nodes_json"]), json.loads(definition["edges_json"]), "missing", "Approval node not found"),
         ([{"node_id": approval_id, "node_type": "action.http_request"}], [], approval_id, "not a human approval node"),
-        (json.loads(definition["nodes_json"]), [{"source_node_id": approval_id, "target_node_id": "approved", "condition": "rejected"}], approval_id, "Expected exactly one edge"),
+        (json.loads(definition["nodes_json"]), [{"source_node_id": approval_id, "target_node_id": "approved", "condition": "invalid"}], approval_id, "Invalid human approval branch configuration"),
     ]:
         definition["nodes_json"], definition["edges_json"] = json.dumps(nodes), json.dumps(edges)
         with pytest.raises(ValueError, match=message):
