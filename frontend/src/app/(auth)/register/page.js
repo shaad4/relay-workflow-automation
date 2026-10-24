@@ -3,7 +3,7 @@ import AuthNavbar from "@/components/layout/AuthNavbar";
 import RegisterForm from "@/components/auth/RegisterForm";
 
 export const metadata = {
-  title: "Create Account - Relay",
+  title: "Create Account",
   description: "Create your Relay account and start building automated workflows.",
 };
 

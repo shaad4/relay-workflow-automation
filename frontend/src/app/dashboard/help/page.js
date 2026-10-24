@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 
@@ -131,6 +132,8 @@ const sections = [
 ];
 
 export default function HelpPage() {
+  useEffect(() => { document.title = "How to Use | Relay"; }, []);
+
   return (
     <ProtectedRoute>
       <DashboardShell pageTitle="How to use Relay">

@@ -32,6 +32,7 @@ function ExecutionDetail({ executionId }) {
   const refresh = useCallback(() => refreshRef.current?.(), []);
 
   useEffect(() => {
+    document.title = "Execution Details | Relay";
     let disposed = false;
     let inFlight = false;
     let timer;
