@@ -6,8 +6,6 @@
 
 **Event → Understand → Retrieve Knowledge → Decide → Validate → Act → Observe → Recover**
 
-<br/>
-
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
@@ -22,160 +20,275 @@
 
 ## 🚀 What is Relay?
 
-Relay is a **multi-tenant workflow automation platform** for processes that are too complex for a simple `Event → Action` rule. A company builds a workflow once in a visual editor, publishes it, and Relay runs it whenever the trigger fires — pulling data from APIs, retrieving company knowledge with **RAG**, making **structured AI decisions**, asking for **human approval**, and **recovering** when something fails .. .
+**Relay** is a multi-tenant, event-driven workflow automation platform for processes that go beyond a simple `event → action` rule. Teams design automation graphs in a visual editor, configure integrations, publish validated workflow versions, and trigger executions through webhooks, manual runs, or schedules.
 
-> Relay never moves money itself. It calls the payment provider's API; the provider performs the refund.
+Workflows can retrieve data from external APIs, search organization knowledge with RAG, generate content, make structured AI decisions, route conditional branches, pause for human approval, and execute external actions. Each execution is tracked through its lifecycle and can be inspected or safely recovered after failures.
 
-## ✨ Key Features
+Relay orchestrates payment operations through payment providers such as Stripe; it does not move or hold funds itself.
 
-| | |
+## ✨ Capabilities
+
+| Capability | Description |
 |---|---|
-| 🎨 **Visual workflow builder** | Drag-and-drop nodes, data mapping with `{{variables}}`, test & publish |
-| 🪝 **Dynamic webhooks** | Per-workflow endpoint, secret auth, instant `202 Accepted` |
-| 📚 **RAG knowledge base** | Upload docs → chunk → embed → pgvector search, tenant-scoped |
-| 🤖 **Controlled AI decisions** | Strict output schema + Pydantic validation before any action runs |
-| 🙋 **Human approval** | Pause, wait for a decision, resume |
-| 🛡️ **Reliability** | Retries with backoff, idempotency keys, dead-letter queue, replay |
-| 🔍 **Observability** | Step-level execution history and audit logs |
-| 🔒 **Security** | Argon2id, JWT, RBAC, workspace isolation, credentials never exposed   |
+| 🎨 **Visual workflow builder** | Node-based editor, expression mapping, workflow validation, drafts, immutable published versions |
+| 🪝 **Three trigger types** | Authenticated webhooks, manual invocations, and cron-based schedules with time zones |
+| 🌐 **External integrations** | HTTP requests, Gmail email delivery, and Stripe test-mode refunds through reusable connections |
+| 📚 **RAG knowledge base** | Document ingestion, chunking, embedding, tenant-scoped pgvector retrieval |
+| 🤖 **AI-powered nodes** | RAG Search, AI Generate, and structured AI Decision with configurable model connections |
+| 🧭 **Conditional routing** | Graph-directed outcomes and team-specific branches |
+| 🙋 **Human-in-the-loop** | Approve/reject decisions, paused executions, multi-stage approvals, and resumption |
+| ⚙️ **Execution reliability** | Async dispatch, PostgreSQL-backed claiming, worker leases, heartbeats, retries, and idempotency |
+| ♻️ **Recovery** | Execution-level dead-letter records, safe failed-node replay, resolution, and linked attempt history |
+| 🔍 **Execution visibility** | Step-level statuses, attempts, duration, errors, cancellation, and historical execution groups |
+| 🔐 **Workspace isolation** | Workspace-scoped access to workflows, executions, knowledge, approvals, and integrations |
 
-## 🏗️ Architecture
+## 🏗️ System Architecture
 
-True microservices, each owning its own database. Three communication layers: **REST** (external), **gRPC** (internal sync), **Kafka** (async events).
+Relay consists of seven core FastAPI services. Each service owns its domain data; the API Gateway provides authenticated client access, gRPC supports internal request/response calls, and Kafka carries asynchronous workflow events. PostgreSQL persists execution state independently of the Kafka consumer, while Celery workers handle scheduled trigger processing and background document ingestion.
 
 ```mermaid
 flowchart TB
-    FE["🖥️ Frontend<br/>Next.js"] -->|REST| GW["🚪 API Gateway"]
-    EXT["🌐 External Systems"] -->|"POST /hooks/{token}"| INT
+    User["Next.js Web Application"] -->|REST| GW["API Gateway"]
+    External["External Webhook Sender"] -->|"POST /hooks/{token}"| INT["Integration Service"]
 
-    GW --> AUTH["🔐 Auth"]
-    GW --> WF["🧩 Workflow"]
-    GW --> INT["🪝 Integration"]
-    GW --> RAG["📚 RAG"]
-    GW --> EXE["⚙️ Execution"]
+    GW --> AUTH["Auth Service"]
+    GW --> WF["Workflow Service"]
+    GW --> INT
+    GW --> EXE["Execution Service"]
+    GW --> RAG["RAG Service"]
+    GW --> ACT["Action Service"]
 
-    INT ==>|"Kafka: workflow.triggered"| K{{"📨 Kafka"}}
-    K ==> EXE
+    INT -->|workflow.triggered| K[(Apache Kafka)]
+    K --> CONS["Execution Kafka Consumer"]
+    CONS -->|persist pending + dedupe key| DB[(Execution PostgreSQL)]
+    DB --> DISP["Async Execution Dispatcher"]
+    DISP --> RUN["Workflow Runner"]
 
-    EXE -.->|gRPC| WF
-    EXE -.->|gRPC| RAG
-    EXE -.->|gRPC| ACT["🔌 Action"]
-    EXE -.->|gRPC| AUTH
+    RUN -.->|gRPC: workflow definition| WF
+    RUN -.->|gRPC: retrieval| RAG
+    RUN -.->|gRPC: execute action| ACT
+    ACT -->|HTTPS| PROVIDERS["External APIs · Gmail · Stripe"]
 
-    ACT -->|HTTPS| PROV["🏦 Providers<br/>Stripe · Email · APIs"]
-
-    classDef svc fill:#eef2ff,stroke:#6366f1,stroke-width:2px,color:#1e1b4b;
-    classDef bus fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#7c2d12;
-    class GW,AUTH,WF,INT,RAG,EXE,ACT svc;
-    class K bus;
+    BEAT["Celery Beat + Integration Worker"] --> INT
+    RWORK["RAG Celery Worker"] --> RAG
+    REDIS[(Redis)] --- BEAT
+    REDIS --- RWORK
 ```
 
-| Service | Owns | Responsibility |
+| Service | Domain responsibility | Persisted data |
 |---|---|---|
-| 🚪 API Gateway | — | Routing, auth context, rate limiting |
-| 🔐 Auth | users, workspaces | Identity & permissions |
-| 🧩 Workflow | workflows, versions, nodes, edges | Definitions, validation, publishing |
-| 🪝 Integration | webhooks | Webhook registration & ingestion |
-| 📚 RAG | knowledge bases, documents, chunks | Ingestion & vector retrieval |
-| ⚙️ Execution | executions, steps, approvals, idempotency, DLQ | Orchestration & reliability |
-| 🔌 Action | connections | Connectors & external side effects |
-| 📝 Audit | audit logs | Audit events |
+| **API Gateway** | Client-facing API routing, authenticated identity context | — |
+| **Auth Service** | Users, workspaces, credentials, sessions, JWT authentication | Users and workspaces |
+| **Workflow Service** | Definitions, nodes, edges, version validation, publish/activation | Workflows and versions |
+| **Integration Service** | Webhooks, ingestion, event publication, scheduled triggers | Webhooks and schedules |
+| **Execution Service** | Kafka ingestion, durable execution queue, orchestration, approvals, cancellation, DLQ | Executions, steps, idempotency and approvals |
+| **Action Service** | Connection management and external connectors | Integration connections |
+| **RAG Service** | Knowledge bases, document processing and semantic retrieval | Documents, chunks and vector embeddings |
 
-## 🔄 How a Workflow Runs
+### Execution lifecycle
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant EXT as 🌐 External System
-    participant INT as 🪝 Integration
-    participant K as 📨 Kafka
-    participant EXE as ⚙️ Execution
-    participant WF as 🧩 Workflow
-    participant RAG as 📚 RAG
-    participant ACT as 🔌 Action
+    participant C as Webhook Client
+    participant I as Integration
+    participant K as Kafka
+    participant E as Execution Consumer
+    participant DB as Execution DB
+    participant D as Dispatcher
+    participant W as Workflow Service
+    participant R as Runner
+    participant A as Action/RAG
 
-    EXT->>INT: POST /hooks/{token}
-    INT->>K: workflow.triggered
-    INT-->>EXT: 202 Accepted
-    K->>EXE: consume event
-    EXE->>WF: gRPC GetPublishedVersion
-    loop each node
-        EXE->>RAG: gRPC Retrieve (RAG nodes)
-        EXE->>ACT: gRPC ExecuteAction (+ idempotency key)
-        EXE->>K: step completed / failed
+    C->>I: POST /hooks/{token}
+    I->>I: Validate webhook and payload
+    I->>K: Publish workflow.triggered
+    I-->>C: 202 Accepted
+    K->>E: Deliver trigger event
+    E->>W: Validate published workflow version (gRPC)
+    E->>DB: Insert pending execution + idempotency key
+    E->>K: Commit consumed offset after DB commit
+    D->>DB: Find and claim pending execution
+    D->>R: Start execution task
+    R->>W: Load immutable workflow version (gRPC)
+    loop Selected graph nodes
+        R->>A: Execute HTTP, AI/RAG or action as applicable
+        A-->>R: Node result
+        R->>DB: Persist step state and context
     end
-    EXE->>K: workflow.completed
+    R->>DB: Finalize execution
 ```
 
-## 🧾 Example: Refund Automation
+**Durable ingestion.** The Kafka consumer commits its offset only after execution persistence succeeds. The idempotency record is scoped by workspace and event key, so redelivery does not create an additional execution for the same event.
+
+**Bounded async dispatch.** The Execution Dispatcher discovers pending rows, schedules asyncio tasks within a configurable concurrency limit, and relies on atomic PostgreSQL claims for worker ownership. Heartbeats renew short-lived leases; expired executions are marked for review rather than blindly rerunning external actions.
+
+**Workflow version isolation.** Each execution references a published workflow version. In-flight runs and replays retain the graph version they started with, even if a new draft is published.
+
+## 🧩 Workflow Example — Policy-Aware Refund Handling
 
 ```mermaid
 flowchart LR
-    W["🪝 Webhook"] --> GO["🌐 Get Order"] --> RG["📚 RAG: Policy"] --> AI["🤖 AI Decision"] --> C{"Condition"}
-    C -- APPROVE --> RF["💳 Refund"] --> EM["✉️ Email"]
-    C -- REJECT --> RJ["✉️ Rejection"]
-    C -- REVIEW --> HA["🙋 Approval"]
-    HA --> RF
+    W["Webhook"] --> O["Fetch Order"] --> KB["RAG Policy Search"] --> AI["AI Decision"] --> C{"Decision"}
+    C -->|Approved| H["Human Approval"]
+    C -->|Rejected| R["Rejection Email"]
+    C -->|Review| H
+    H -->|Approved| RF["Stripe Refund"] --> EM["Confirmation Email"]
+    H -->|Rejected| R
 ```
 
-## 🛡️ Reliability
+Workflows can also support student ticket routing and academic-report emails, using external student APIs and fixed HTML templates.
+
+## 🛡️ Reliability and Safe Recovery
 
 ```mermaid
-flowchart LR
-    S["Execute step"] --> R{"Success?"}
-    R -- Yes --> N["Next node"]
-    R -- "No, retryable" --> B["Backoff 1s → 2s → 4s"] --> S
-    R -- "No, exhausted" --> DLQ[("☠️ DLQ")] --> OP["Replay / Resolve"]
+flowchart TD
+    N["Execute Node"] --> S{"Succeeded?"}
+    S -->|Yes| NEXT["Persist result, advance graph"]
+    S -->|Retryable failure| BACK["Exponential Backoff + Jitter"]
+    BACK -->|Attempt remaining| N
+    S -->|No more retries or non-retryable| F["Mark Step and Execution Failed"]
+    F --> DLQ[("PostgreSQL Dead Letter Event")]
+    DLQ --> CH{"Operator action"}
+    CH -->|Replay safely| P["New Pending Execution"]
+    CH -->|Resolve| CLOSE["Mark Resolved"]
+    P --> DISP["Execution Dispatcher"]
 ```
 
-Duplicate events are blocked by per-workspace **idempotency keys**. Published workflow versions are **immutable**, so running executions are never affected by edits.
+- **Retries:** Up to three attempts for eligible operations, with exponential waits beginning at 2 seconds plus jitter and a configured delay cap.
+- **Idempotency:** Trigger events are deduplicated using workspace-scoped keys. Provider idempotency keys protect supported financial operations.
+- **DLQ:** A failed execution may produce a pending `dead_letter_events` record linking to the failed step, attempts and error.
+- **Guarded replay:** A replay creates a new pending execution pointing to the original failed execution and failed node. Replay eligibility checks the starting operation and attempted downstream side effects; unsafe operations remain restricted.
+- **Concurrency controls:** Local semaphore limits, database execution claims, leases and heartbeats, and transactional DLQ replay locking.
+- **Human review:** Approval nodes pause executions durably and resume the appropriate branch without repeating earlier completed steps.
 
-## 🧰 Tech Stack
+> External side effects can have uncertain outcomes after timeouts or worker interruption. Recovery is conservative; idempotency and provider reconciliation remain necessary for sensitive operations.
 
-**Backend** Python 3.12 · FastAPI · SQLAlchemy 2 · Pydantic v2 · Alembic  
-**Data** PostgreSQL · pgvector · Redis (optional)  
-**Messaging** Apache Kafka · gRPC + Protobuf  
-**Frontend** React / Next.js  
-**Infra** Docker Compose · GitHub Actions · Pytest
+## 📊 Benchmarks and Engineering Validation
 
-## 📁 Structure
+Relay includes a reproducible load-testing harness under [`benchmarks/`](benchmarks/) for exercising manual-trigger workflows and monitoring execution throughput and resource consumption.
+
+**Benchmark setup**
+
+- A lightweight HTTP target with endpoints that simulate **3-second and 10-second response delays**.
+- Configurable request count, submission concurrency and execution concurrency.
+- PostgreSQL-based collection of accepted, completed and failed executions.
+- Container resource sampling for the Execution Service, Action Service, PostgreSQL, Kafka and test target.
+
+**Measured dimensions**
+
+| Metric | Definition |
+|---|---|
+| Accepted executions | Number of manual-trigger requests accepted by the API |
+| Completed / failed | Terminal execution outcomes recorded in PostgreSQL |
+| Throughput | Successful workflows completed per minute |
+| Average / p95 latency | Time from request submission to execution completion |
+| Average / p95 queue delay | Time between execution creation and start |
+| Execution duration | Time between execution start and completion |
+| Failure rate | Percentage of observed executions that failed |
+| Resource utilization | Sampled CPU and memory use for benchmark containers |
+
+**Validated scenarios**
+
+| Scenario | Observed outcome |
+|---|---|
+| Parallel workflow execution | Multiple independent executions progressed under bounded concurrency |
+| Kafka event redelivery | Replayed event ID resolved to the existing execution rather than producing duplicate work |
+| Scheduled workflows | Automatic execution and email delivery verified for observed occurrences |
+| Human approval chaining | Two successive approval gates resumed the same execution with the intended branches |
+| Controlled HTTP failure | HTTP 503 produced a failed execution and inspectable DLQ record |
+| DLQ recovery | External API changed from 503 to 200; safe replay completed from the failed node |
+| Concurrent DLQ replay requests | Two simultaneous requests yielded one accepted replay and one conflict; database confirmed one linked replay |
+| Stripe test-mode refund | Successful partial refund demonstrated against a test payment |
+| RAG-based ticket routing | RAG, AI Decision, AI Generate and team-specific email branches exercised end to end |
+
+The benchmark scripts generate JSON summaries and per-execution CSV files. Numeric throughput and latency claims should be read from a specific benchmark run and interpreted alongside its environment, concurrency setting and workload; no universal throughput figure is asserted here.
+
+## 🧰 Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.12, FastAPI, SQLAlchemy Async, Pydantic v2, Alembic |
+| Storage | PostgreSQL 16, pgvector |
+| Messaging | Apache Kafka, gRPC and Protocol Buffers |
+| Background tasks | Celery, Celery Beat, Redis |
+| Workflow engine | Asyncio dispatcher, PostgreSQL-backed execution queue, graph runner |
+| AI | OpenAI, Gemini and Anthropic-compatible BYOK connections |
+| Integrations | HTTP, Gmail, Stripe |
+| Frontend | Next.js App Router, React, Tailwind CSS |
+| Infrastructure | Docker Compose, GitHub Actions |
+| Testing | Pytest, service-level tests, end-to-end workflow and benchmark scripts |
+
+## 📁 Repository Structure
 
 ```text
-relay/
-├── services/   # api-gateway, auth, workflow, integration, rag, execution, action, audit
-├── proto/      # gRPC contracts
-├── packages/   # shared config, event schemas, observability
-├── frontend/
-├── infrastructure/
-├── tests/
-└── docker-compose.yml
+relay-workflow-automation/
+├── .github/workflows/        # Service CI checks
+├── benchmarks/               # Load target, request driver, resource monitor
+├── frontend/                 # Next.js workflow editor and dashboards
+├── proto/                    # Internal gRPC contracts
+├── scripts/                  # Development helpers
+├── service/
+│   ├── action-service/
+│   ├── api-gateway/
+│   ├── auth-service/
+│   ├── execution-service/
+│   ├── integration-service/
+│   ├── rag-service/
+│   └── workflow-service/
+├── docker-compose.yml
+└── requirements-test.txt
 ```
 
-## ⚡ Quick Start
+## ⚡ Getting Started
+
+### Requirements
+
+- Docker Engine and Docker Compose plugin
+- Git
+- Appropriate environment credentials for integrations you choose to enable
+
+### Run locally
 
 ```bash
-git clone https://github.com/<your-username>/relay.git
-cd relay
-cp .env.example .env
-docker compose up --build
+# Clone the repository
+git clone https://github.com/shaad4/relay-workflow-automation.git
+cd relay-workflow-automation
+
+# Configure service environment variables using the service-specific setup
+# and example environment files where provided.
+
+# Start services
+docker compose up -d --build
+
+# Inspect running containers
+docker compose ps
 ```
 
-## 🗺️ Roadmap
+The Compose stack uses separate service environment files and required database variables. Configure those before starting; integration providers may also require API keys and connection settings. Never commit live secrets.
 
-- [x] Architecture & service design
-- [ ] **Week 1** — Auth, workspaces, workflow model, service skeletons
-- [ ] **Week 2** — Webhooks, connections, actions, human approval
-- [ ] **Week 3** — RAG pipeline & structured AI decisions
-- [ ] **Week 4** — Kafka workers, retries, idempotency, DLQ, dashboard
+## 🧪 Tests
 
-**Later:** more connectors & triggers · OAuth · workflow templates · failed-step replay · tracing
+Backend service tests run in GitHub Actions for pull requests and pushes targeting `dev` and `main`. For a local service test environment, install both the service's dependencies and the shared test requirements, then run pytest from the service directory.
+
+```bash
+cd service/execution-service
+python -m pip install -r requirements.txt -r ../../requirements-test.txt
+python -m pytest tests -q
+```
+
+The benchmark driver is at [`benchmarks/relay_load_test.py`](benchmarks/relay_load_test.py); it requires a published test workflow, authenticated API access and a benchmark database connection.
+
+## 🔭 Future Scope
+
+Additional integrations and OAuth authorization flows, reusable workflow templates, real-time UI updates, deeper distributed tracing and broader recovery guarantees for external side effects.
 
 ## 📄 License
 
-MIT — see [`LICENSE`](LICENSE).
+See [`LICENSE`](LICENSE) for the repository's license terms, if present.
 
 <div align="center">
 
-⭐ **Star the repo if you find Relay interesting!** ⭐
+**Built to make intelligent automation observable, recoverable and practical.**
 
 </div>
