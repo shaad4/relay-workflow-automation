@@ -11,7 +11,7 @@ from app.schemas.executions import ExecutionDetailResponse
 from app.services.approval_service import list_pending_approvals
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from test_execution_history_groups import SessionAdapter
+from session_adapter import SessionAdapter
 
 
 def test_approval_filter_preserves_workspace_and_approver_scope(history):
