@@ -9,7 +9,11 @@ function SearchIcon(props) {
   );
 }
 
-export default function WorkflowSearchEmptyState({ query = "", statusFilter = "all", onClearSearch }) {
+export default function WorkflowSearchEmptyState({
+  query = "",
+  statusFilter = "all",
+  onClearSearch,
+}) {
   return (
     <div className="w-full bg-[var(--surface)] border border-[var(--border-subtle)] rounded-2xl px-6 py-12 text-center">
       <div className="mx-auto w-12 h-12 rounded-xl bg-[var(--elevated)] border border-[var(--border-subtle)] flex items-center justify-center mb-4 text-[var(--text-tertiary)]">
@@ -21,7 +25,18 @@ export default function WorkflowSearchEmptyState({ query = "", statusFilter = "a
       </h3>
 
       <p className="text-[13px] text-[var(--text-secondary)] max-w-md mx-auto mb-5 leading-6 break-words">
-        {query.trim() ? <>No {statusFilter !== "all" ? `${statusFilter} ` : ""}workflows match “<span className="font-medium text-[var(--text-primary)]">{query.trim()}</span>”. Try another name or description.</> : `You don’t have any ${statusFilter === "all" ? "matching" : statusFilter} workflows. Choose another status to see more.`}
+        {query.trim() ? (
+          <>
+            No {statusFilter !== "all" ? `${statusFilter} ` : ""}workflows match
+            “
+            <span className="font-medium text-[var(--text-primary)]">
+              {query.trim()}
+            </span>
+            ”. Try another name or description.
+          </>
+        ) : (
+          `You don’t have any ${statusFilter === "all" ? "matching" : statusFilter} workflows. Choose another status to see more.`
+        )}
       </p>
 
       {onClearSearch && (

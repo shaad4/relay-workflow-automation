@@ -86,17 +86,31 @@ function WorkflowCanvasInner({
   const { screenToFlowPosition, fitView } = useReactFlow();
   const lastExecutionFocus = useRef(null);
   useEffect(() => {
-    if (!executionFocus || lastExecutionFocus.current === executionFocus) return;
-    const node = nodes.find(item => String(item.data?.nodeId ?? item.data?.node_id ?? item.id) === String(executionFocus.nodeId));
+    if (!executionFocus || lastExecutionFocus.current === executionFocus)
+      return;
+    const node = nodes.find(
+      (item) =>
+        String(item.data?.nodeId ?? item.data?.node_id ?? item.id) ===
+        String(executionFocus.nodeId),
+    );
     if (!node) return;
     lastExecutionFocus.current = executionFocus;
-    fitView({ nodes: [{ id: node.id }], padding: 0.6, maxZoom: 1, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240 });
+    fitView({
+      nodes: [{ id: node.id }],
+      padding: 0.6,
+      maxZoom: 1,
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? 0
+        : 240,
+    });
   }, [executionFocus, nodes, fitView]);
 
   useEffect(() => {
     if (onQuickAddReady) {
       onQuickAddReady(() => (width = 0, height = 0) => {
-        const bounds = document.querySelector(".workflow-flow")?.getBoundingClientRect();
+        const bounds = document
+          .querySelector(".workflow-flow")
+          ?.getBoundingClientRect();
         if (!bounds) return { x: 0, y: 0 };
         const center = screenToFlowPosition({
           x: bounds.left + (bounds.width - width) / 2,
@@ -112,24 +126,39 @@ function WorkflowCanvasInner({
       animated: true,
       style: { stroke: "var(--workflow-edge, #52545c)", strokeWidth: 2 },
       selectedStyle: { stroke: "var(--accent)", strokeWidth: 2.5 },
-      labelStyle: { fill: "var(--workflow-edge-label-text, #dedee4)", fontSize: 10, fontWeight: 600 },
-      labelBgStyle: { fill: "var(--workflow-edge-label-bg, #18191e)", fillOpacity: 0.96 },
+      labelStyle: {
+        fill: "var(--workflow-edge-label-text, #dedee4)",
+        fontSize: 10,
+        fontWeight: 600,
+      },
+      labelBgStyle: {
+        fill: "var(--workflow-edge-label-bg, #18191e)",
+        fillOpacity: 0.96,
+      },
       labelBgPadding: [7, 4],
       labelBgBorderRadius: 5,
     }),
-    []
+    [],
   );
 
-  const coloredEdges = useMemo(() => edges.map((edge) => {
-    const color = edge.data?.condition === "approved" ? "#789b88"
-      : edge.data?.condition === "rejected" ? "#ac7d86" : null;
-    if (!color) return edge;
-    return {
-      ...edge,
-      style: { ...edge.style, stroke: color, filter: "none" },
-      labelStyle: { ...edge.labelStyle, fill: color },
-    };
-  }), [edges]);
+  const coloredEdges = useMemo(
+    () =>
+      edges.map((edge) => {
+        const color =
+          edge.data?.condition === "approved"
+            ? "#789b88"
+            : edge.data?.condition === "rejected"
+              ? "#ac7d86"
+              : null;
+        if (!color) return edge;
+        return {
+          ...edge,
+          style: { ...edge.style, stroke: color, filter: "none" },
+          labelStyle: { ...edge.labelStyle, fill: color },
+        };
+      }),
+    [edges],
+  );
 
   const handleDragOver = useCallback((event) => {
     event.preventDefault();
@@ -161,7 +190,7 @@ function WorkflowCanvasInner({
         console.error("Error handling node drop:", err);
       }
     },
-    [isReadOnly, onDropNode, screenToFlowPosition]
+    [isReadOnly, onDropNode, screenToFlowPosition],
   );
 
   const getNodeColor = useCallback((node) => {
@@ -192,8 +221,12 @@ function WorkflowCanvasInner({
         onEdgeClick={(_, edge) => onEdgeSelect && onEdgeSelect(edge)}
         onNodeDragStop={onNodeDragStop}
         onNodeDragStart={onNodeDragStart}
-        onNodeContextMenu={(event, node) => onContextMenu?.(event, { type: "node", id: node.id })}
-        onEdgeContextMenu={(event, edge) => onContextMenu?.(event, { type: "edge", id: edge.id })}
+        onNodeContextMenu={(event, node) =>
+          onContextMenu?.(event, { type: "node", id: node.id })
+        }
+        onEdgeContextMenu={(event, edge) =>
+          onContextMenu?.(event, { type: "edge", id: edge.id })
+        }
         nodeTypes={nodeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
         connectionLineStyle={{ stroke: "var(--accent)", strokeWidth: 2 }}
@@ -208,9 +241,14 @@ function WorkflowCanvasInner({
         className="workflow-flow text-[var(--text-primary)]"
         deleteKeyCode={null}
       >
-        <Background variant="dots" gap={22} size={1.1} color="var(--canvas-grid)" />
+        <Background
+          variant="dots"
+          gap={22}
+          size={1.1}
+          color="var(--canvas-grid)"
+        />
 
-      <Controls className="workflow-controls !bg-[var(--surface)] !border !border-[var(--border-default)] !rounded-xl !shadow-xl fill-[var(--text-secondary)] stroke-[var(--text-secondary)]" />
+        <Controls className="workflow-controls !bg-[var(--surface)] !border !border-[var(--border-default)] !rounded-xl !shadow-xl fill-[var(--text-secondary)] stroke-[var(--text-secondary)]" />
 
         <MiniMap
           bgColor="var(--surface)"

@@ -100,8 +100,12 @@ export const NODE_CATEGORIES = [
         icon: "🧠",
         description: "Classify structured inputs into defined decisions",
         defaultConfig: {
-          connection_id: "", model: "", instructions: "",
-          input_mappings: {}, rag_context: "", allowed_decisions: [],
+          connection_id: "",
+          model: "",
+          instructions: "",
+          input_mappings: {},
+          rag_context: "",
+          allowed_decisions: [],
         },
       },
       {
@@ -122,7 +126,13 @@ export const NODE_CATEGORIES = [
         category: "AI",
         icon: "✨",
         description: "Generate text with a connected AI provider",
-        defaultConfig: { connection_id: "", model: "", instructions: "", prompt: "", rag_context: "" },
+        defaultConfig: {
+          connection_id: "",
+          model: "",
+          instructions: "",
+          prompt: "",
+          rag_context: "",
+        },
       },
     ],
   },
@@ -143,7 +153,8 @@ export const NODE_CATEGORIES = [
         name: "Approval Gate",
         category: "Human",
         icon: "👤",
-        description: "Pause the workflow until a human approves or rejects the request",
+        description:
+          "Pause the workflow until a human approves or rejects the request",
         defaultConfig: {
           approver_user_id: null,
           message: "",
@@ -155,7 +166,10 @@ export const NODE_CATEGORIES = [
 ];
 
 const exampleValuesByType = {
-  "action.http_request": { headers: "Content-Type: application/json", body: "{}" },
+  "action.http_request": {
+    headers: "Content-Type: application/json",
+    body: "{}",
+  },
   "action.email": {
     to: "user@example.com",
     subject: "Workflow Alert",

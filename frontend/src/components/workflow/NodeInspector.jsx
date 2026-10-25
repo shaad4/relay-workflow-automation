@@ -1,16 +1,49 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useContext } from "react";
-import { InspectorReadOnly, InspectorInput, InspectorTextarea, InspectorSelect, InspectorButton, InspectorFieldset } from "./InspectorControls";
+import {
+  InspectorReadOnly,
+  InspectorInput,
+  InspectorTextarea,
+  InspectorSelect,
+  InspectorButton,
+  InspectorFieldset,
+} from "./InspectorControls";
 import ScheduleConfig from "./ScheduleConfig";
 import { normalizeSchedule, scheduleNodePayload } from "./scheduleTrigger";
 import { getNodeDefinition } from "./nodeDefinitions";
-import { normalizeDecisionConfiguration, normalizeRAGConfiguration, ragKnowledgeBaseId, validateNodeConfiguration, validateDecisionReferences, validateGenerateReferences, validateConditionReferences, validateConditionBranches, isLegacyConditionConfiguration, AI_DECISION_FIELDS, renameDecisionInput, upgradeDecisionConfiguration } from "./configValidation";
-import { createWebhook, deleteWebhook, getWebhookEndpoint, listWebhooks, regenerateWebhookToken, updateWebhook } from "@/services/webhooks";
+import {
+  normalizeDecisionConfiguration,
+  normalizeRAGConfiguration,
+  ragKnowledgeBaseId,
+  validateNodeConfiguration,
+  validateDecisionReferences,
+  validateGenerateReferences,
+  validateConditionReferences,
+  validateConditionBranches,
+  isLegacyConditionConfiguration,
+  AI_DECISION_FIELDS,
+  renameDecisionInput,
+  upgradeDecisionConfiguration,
+} from "./configValidation";
+import {
+  createWebhook,
+  deleteWebhook,
+  getWebhookEndpoint,
+  listWebhooks,
+  regenerateWebhookToken,
+  updateWebhook,
+} from "@/services/webhooks";
 import { getWorkflowVersions } from "@/services/workflows";
 import { listKnowledgeBases } from "@/services/knowledgeBases";
-import { listAIConnections, listAIConnectionModels } from "@/services/aiProviderConnections";
-import { AI_PROVIDERS, aiConnectionError } from "@/components/connections/aiConnectionForm";
+import {
+  listAIConnections,
+  listAIConnectionModels,
+} from "@/services/aiProviderConnections";
+import {
+  AI_PROVIDERS,
+  aiConnectionError,
+} from "@/components/connections/aiConnectionForm";
 import { createConnection, listConnections } from "@/services/connections";
 import Link from "next/link";
 import WebhookTestDialog from "@/components/webhooks/WebhookTestDialog";
@@ -76,24 +109,73 @@ function FieldLabel({ children }) {
 }
 
 function VariableFieldLabel({ children, picker }) {
-  return <div className="mb-1 flex items-center justify-between gap-2"><label className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">{children}</label>{picker}</div>;
+  return (
+    <div className="mb-1 flex items-center justify-between gap-2">
+      <label className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+        {children}
+      </label>
+      {picker}
+    </div>
+  );
 }
 
 function VariableText({ value }) {
   const pieces = String(value ?? "").split(/(\{\{[^{}]+\}\})/g);
-  return pieces.map((piece, index) => piece.startsWith("{{") && piece.endsWith("}}")
-    ? <span key={index} className="shrink-0 text-sky-400">{piece}</span>
-    : <span key={index} className="shrink-0 text-[var(--text-primary)]">{piece}</span>);
+  return pieces.map((piece, index) =>
+    piece.startsWith("{{") && piece.endsWith("}}") ? (
+      <span key={index} className="shrink-0 text-sky-400">
+        {piece}
+      </span>
+    ) : (
+      <span key={index} className="shrink-0 text-[var(--text-primary)]">
+        {piece}
+      </span>
+    ),
+  );
 }
 
-function TextInput({ value, onChange, mono = false, variables = false, prefix = "", ariaLabel }) {
+function TextInput({
+  value,
+  onChange,
+  mono = false,
+  variables = false,
+  prefix = "",
+  ariaLabel,
+}) {
   const previewRef = useRef(null);
   if (variables) {
-    return <div className={`relative h-8 w-full overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] transition-colors focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)] ${mono ? "font-mono" : ""}`}>
-      {prefix && <span aria-hidden="true" className="absolute inset-y-0 left-0 z-10 flex items-center border-r border-[var(--border-default)] px-2 text-[11px] text-[var(--text-tertiary)]">{prefix}</span>}
-      <div ref={previewRef} aria-hidden="true" className={`pointer-events-none absolute inset-0 flex items-center overflow-x-auto overflow-y-hidden whitespace-pre text-[12px] [scrollbar-width:none] ${prefix ? "pl-[26px] pr-2.5" : "px-2.5"}`}>{value ? <VariableText value={value} /> : null}</div>
-      <InspectorInput type="text" aria-label={ariaLabel} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onScroll={(e) => { if (previewRef.current) previewRef.current.scrollLeft = e.currentTarget.scrollLeft; }} className={`relative h-full w-full bg-transparent text-[12px] text-transparent caret-sky-400 selection:bg-sky-500/25 focus:outline-none ${prefix ? "pl-[26px] pr-2.5" : "px-2.5"}`} />
-    </div>;
+    return (
+      <div
+        className={`relative h-8 w-full overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] transition-colors focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)] ${mono ? "font-mono" : ""}`}
+      >
+        {prefix && (
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-0 left-0 z-10 flex items-center border-r border-[var(--border-default)] px-2 text-[11px] text-[var(--text-tertiary)]"
+          >
+            {prefix}
+          </span>
+        )}
+        <div
+          ref={previewRef}
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 flex items-center overflow-x-auto overflow-y-hidden whitespace-pre text-[12px] [scrollbar-width:none] ${prefix ? "pl-[26px] pr-2.5" : "px-2.5"}`}
+        >
+          {value ? <VariableText value={value} /> : null}
+        </div>
+        <InspectorInput
+          type="text"
+          aria-label={ariaLabel}
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          onScroll={(e) => {
+            if (previewRef.current)
+              previewRef.current.scrollLeft = e.currentTarget.scrollLeft;
+          }}
+          className={`relative h-full w-full bg-transparent text-[12px] text-transparent caret-sky-400 selection:bg-sky-500/25 focus:outline-none ${prefix ? "pl-[26px] pr-2.5" : "px-2.5"}`}
+        />
+      </div>
+    );
   }
   return (
     <InspectorInput
@@ -106,13 +188,48 @@ function TextInput({ value, onChange, mono = false, variables = false, prefix = 
   );
 }
 
-function TextareaInput({ value, onChange, rows = 3, mono = false, variables = false, placeholder = "", disabled = false, ...accessibility }) {
+function TextareaInput({
+  value,
+  onChange,
+  rows = 3,
+  mono = false,
+  variables = false,
+  placeholder = "",
+  disabled = false,
+  ...accessibility
+}) {
   const previewRef = useRef(null);
   if (variables) {
-    return <div className={`relative w-full overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] transition-colors focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)] ${mono ? "font-mono" : ""}`}>
-      <div ref={previewRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-y-auto whitespace-pre-wrap break-words p-2.5 text-[12px] [scrollbar-width:none]">{value ? <VariableText value={value} /> : <span className="text-[var(--text-disabled)]">{placeholder}</span>}</div>
-      <InspectorTextarea {...accessibility} rows={rows} value={value ?? ""} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} onScroll={(e) => { if (previewRef.current) previewRef.current.scrollTop = e.currentTarget.scrollTop; }} className="relative block w-full resize-none bg-transparent p-2.5 text-[12px] text-transparent caret-sky-400 selection:bg-sky-500/25 placeholder:text-[var(--text-disabled)] focus:outline-none disabled:cursor-not-allowed" />
-    </div>;
+    return (
+      <div
+        className={`relative w-full overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] transition-colors focus-within:border-[var(--border-strong)] focus-within:ring-1 focus-within:ring-[var(--accent)] ${mono ? "font-mono" : ""}`}
+      >
+        <div
+          ref={previewRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 overflow-y-auto whitespace-pre-wrap break-words p-2.5 text-[12px] [scrollbar-width:none]"
+        >
+          {value ? (
+            <VariableText value={value} />
+          ) : (
+            <span className="text-[var(--text-disabled)]">{placeholder}</span>
+          )}
+        </div>
+        <InspectorTextarea
+          {...accessibility}
+          rows={rows}
+          value={value ?? ""}
+          placeholder={placeholder}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+          onScroll={(e) => {
+            if (previewRef.current)
+              previewRef.current.scrollTop = e.currentTarget.scrollTop;
+          }}
+          className="relative block w-full resize-none bg-transparent p-2.5 text-[12px] text-transparent caret-sky-400 selection:bg-sky-500/25 placeholder:text-[var(--text-disabled)] focus:outline-none disabled:cursor-not-allowed"
+        />
+      </div>
+    );
   }
   return (
     <InspectorTextarea
@@ -136,7 +253,9 @@ function SelectInput({ value, onChange, options, ...accessibility }) {
       className="w-full h-8 px-2 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:outline-none"
     >
       {options.map(({ value: v, label }) => (
-        <option key={v} value={v}>{label}</option>
+        <option key={v} value={v}>
+          {label}
+        </option>
       ))}
     </InspectorSelect>
   );
@@ -145,7 +264,15 @@ function SelectInput({ value, onChange, options, ...accessibility }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-node-type configuration panels
 // ─────────────────────────────────────────────────────────────────────────────
-function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOnly, onAssociate, onOpenGuide }) {
+function WebhookConfig({
+  config,
+  workflowId,
+  workflowVersionId,
+  nodeId,
+  isReadOnly,
+  onAssociate,
+  onOpenGuide,
+}) {
   const [webhook, setWebhook] = useState(null);
   const [versionStatus, setVersionStatus] = useState("");
   const [loading, setLoading] = useState(true);
@@ -156,41 +283,72 @@ function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOn
   const [secretVisible, setSecretVisible] = useState(false);
   const [oneTimeSecret, setOneTimeSecret] = useState("");
   const [testOpen, setTestOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", event_name: "", authentication_type: "secret", is_active: true });
+  const [form, setForm] = useState({
+    name: "",
+    event_name: "",
+    authentication_type: "secret",
+    is_active: true,
+  });
 
   const load = async () => {
     // The create response is the only source of plaintext credentials. A list
     // reload deliberately omits them, so don't replace the live creation
     // result while its one-time secret is being shown.
     if (dialog === "secret" && oneTimeSecret) return;
-    if (!workflowId) { setLoading(false); setError("Workflow context is unavailable."); return; }
-    setLoading(true); setError(""); setWebhook(null);
+    if (!workflowId) {
+      setLoading(false);
+      setError("Workflow context is unavailable.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setWebhook(null);
     try {
-      const [raw, versionsResult] = await Promise.all([listWebhooks(), getWorkflowVersions(workflowId)]);
-      const versions = Array.isArray(versionsResult) ? versionsResult : versionsResult?.versions || versionsResult?.results || versionsResult?.data || [];
-      const currentVersion = versions.find((item) => String(item.id) === String(workflowVersionId));
+      const [raw, versionsResult] = await Promise.all([
+        listWebhooks(),
+        getWorkflowVersions(workflowId),
+      ]);
+      const versions = Array.isArray(versionsResult)
+        ? versionsResult
+        : versionsResult?.versions ||
+          versionsResult?.results ||
+          versionsResult?.data ||
+          [];
+      const currentVersion = versions.find(
+        (item) => String(item.id) === String(workflowVersionId),
+      );
       setVersionStatus(currentVersion?.status || "");
-      const records = Array.isArray(raw) ? raw : raw?.webhooks || raw?.results || raw?.data || [];
+      const records = Array.isArray(raw)
+        ? raw
+        : raw?.webhooks || raw?.results || raw?.data || [];
       // A trigger is associated with one specific webhook resource. Do not
       // fall back to another webhook from the same workflow/version: copied
       // or stale node config must never inherit a different version's trigger.
-      const forVersion = records.filter((item) =>
-        String(item.workflow_id) === String(workflowId) &&
-        String(item.workflow_version_id) === String(workflowVersionId)
+      const forVersion = records.filter(
+        (item) =>
+          String(item.workflow_id) === String(workflowId) &&
+          String(item.workflow_version_id) === String(workflowVersionId),
       );
-      const linked = forVersion.find((item) => String(item.id) === String(config.webhook_id));
+      const linked = forVersion.find(
+        (item) => String(item.id) === String(config.webhook_id),
+      );
       // Older nodes may not have persisted webhook_id even though their
       // version already owns a webhook. Associate automatically only when
       // there is exactly one candidate for this exact version; never guess
       // between multiple endpoints or cross into another version.
       const match = linked || (forVersion.length === 1 ? forVersion[0] : null);
       setWebhook(match);
-      if (match && String(match.id) !== String(config.webhook_id)) onAssociate(match);
+      if (match && String(match.id) !== String(config.webhook_id))
+        onAssociate(match);
       else if (!match && config.webhook_id) onAssociate(null);
-    } catch { setError("Unable to load webhook configuration."); }
-    finally { setLoading(false); }
+    } catch {
+      setError("Unable to load webhook configuration.");
+    } finally {
+      setLoading(false);
+    }
   };
-  useEffect(() => { load(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load(); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowId, workflowVersionId, nodeId, config.webhook_id]);
   useEffect(() => {
     if (!dialog) return undefined;
@@ -211,46 +369,148 @@ function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOn
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [dialog, saving]);
   const endpoint = webhook ? getWebhookEndpoint(webhook.public_token) : "";
-  const isDraftVersion = versionStatus && String(versionStatus).toLowerCase() !== "published";
-  const copyEndpoint = async () => { try { await navigator.clipboard.writeText(endpoint); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch { setError("Unable to copy endpoint. Select and copy it manually."); } };
-  const openCreate = () => { setForm({ name: "Webhook", event_name: config.event_name || "", authentication_type: "secret", is_active: !isDraftVersion }); setDialog("create"); setError(""); };
-  const openEdit = () => { setForm({ name: webhook.name || "", event_name: webhook.event_name || "", authentication_type: webhook.authentication_type || "secret", is_active: Boolean(webhook.is_active) }); setDialog("edit"); setError(""); };
+  const isDraftVersion =
+    versionStatus && String(versionStatus).toLowerCase() !== "published";
+  const copyEndpoint = async () => {
+    try {
+      await navigator.clipboard.writeText(endpoint);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setError("Unable to copy endpoint. Select and copy it manually.");
+    }
+  };
+  const openCreate = () => {
+    setForm({
+      name: "Webhook",
+      event_name: config.event_name || "",
+      authentication_type: "secret",
+      is_active: !isDraftVersion,
+    });
+    setDialog("create");
+    setError("");
+  };
+  const openEdit = () => {
+    setForm({
+      name: webhook.name || "",
+      event_name: webhook.event_name || "",
+      authentication_type: webhook.authentication_type || "secret",
+      is_active: Boolean(webhook.is_active),
+    });
+    setDialog("edit");
+    setError("");
+  };
   const submit = async (event) => {
     event?.preventDefault();
-    if (!form.name.trim()) { setError("Webhook name is required."); return; }
-    if (!form.event_name.trim()) { setError("Event name is required."); return; }
-    setSaving(true); setError("");
+    if (!form.name.trim()) {
+      setError("Webhook name is required.");
+      return;
+    }
+    if (!form.event_name.trim()) {
+      setError("Event name is required.");
+      return;
+    }
+    setSaving(true);
+    setError("");
     try {
       if (dialog === "create") {
         const versionsResult = await getWorkflowVersions(workflowId);
-        const versions = Array.isArray(versionsResult) ? versionsResult : versionsResult?.versions || versionsResult?.results || versionsResult?.data || [];
+        const versions = Array.isArray(versionsResult)
+          ? versionsResult
+          : versionsResult?.versions ||
+            versionsResult?.results ||
+            versionsResult?.data ||
+            [];
         const version = versions.find((item) => item.id === workflowVersionId);
-        if (!version) throw new Error("The current workflow version is unavailable.");
-        const created = await createWebhook({ workflow_id: workflowId, workflow_version_id: workflowVersionId, name: form.name.trim(), event_name: form.event_name.trim(), method: "POST", authentication_type: form.authentication_type, is_active: isDraftVersion ? false : form.is_active });
-        setWebhook(created); onAssociate(created); setOneTimeSecret(created.secret || ""); setSecretVisible(false); setCopied(false); setDialog(created.secret ? "secret" : "");
+        if (!version)
+          throw new Error("The current workflow version is unavailable.");
+        const created = await createWebhook({
+          workflow_id: workflowId,
+          workflow_version_id: workflowVersionId,
+          name: form.name.trim(),
+          event_name: form.event_name.trim(),
+          method: "POST",
+          authentication_type: form.authentication_type,
+          is_active: isDraftVersion ? false : form.is_active,
+        });
+        setWebhook(created);
+        onAssociate(created);
+        setOneTimeSecret(created.secret || "");
+        setSecretVisible(false);
+        setCopied(false);
+        setDialog(created.secret ? "secret" : "");
       } else {
         const patch = {};
-        for (const key of ["name", "event_name", "authentication_type", "is_active"]) if (form[key] !== webhook[key]) patch[key] = form[key];
-        const updated = Object.keys(patch).length ? await updateWebhook(webhook.id, patch) : webhook;
-        setWebhook({ ...webhook, ...updated, ...patch }); setDialog("");
+        for (const key of [
+          "name",
+          "event_name",
+          "authentication_type",
+          "is_active",
+        ])
+          if (form[key] !== webhook[key]) patch[key] = form[key];
+        const updated = Object.keys(patch).length
+          ? await updateWebhook(webhook.id, patch)
+          : webhook;
+        setWebhook({ ...webhook, ...updated, ...patch });
+        setDialog("");
       }
-    } catch (err) { setError(err.message || `Unable to ${dialog === "create" ? "create" : "update"} webhook. Please try again.`); }
-    finally { setSaving(false); }
+    } catch (err) {
+      setError(
+        err.message ||
+          `Unable to ${dialog === "create" ? "create" : "update"} webhook. Please try again.`,
+      );
+    } finally {
+      setSaving(false);
+    }
   };
-  const setActive = async (active) => { if (isDraftVersion) return; setSaving(true); setError(""); try { await updateWebhook(webhook.id, { is_active: active }); setWebhook((value) => ({ ...value, is_active: active })); } catch { setError("Unable to update webhook. Please try again."); } finally { setSaving(false); } };
-  const regenerate = async () => { setSaving(true); setError(""); try { const result = await regenerateWebhookToken(webhook.id); const token = result?.public_token || result?.webhook?.public_token || result?.data?.public_token; if (!token) throw new Error(); setWebhook((value) => ({ ...value, public_token: token })); setDialog(""); } catch { setError("Unable to regenerate the webhook URL. Please try again."); } finally { setSaving(false); } };
+  const setActive = async (active) => {
+    if (isDraftVersion) return;
+    setSaving(true);
+    setError("");
+    try {
+      await updateWebhook(webhook.id, { is_active: active });
+      setWebhook((value) => ({ ...value, is_active: active }));
+    } catch {
+      setError("Unable to update webhook. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const regenerate = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const result = await regenerateWebhookToken(webhook.id);
+      const token =
+        result?.public_token ||
+        result?.webhook?.public_token ||
+        result?.data?.public_token;
+      if (!token) throw new Error();
+      setWebhook((value) => ({ ...value, public_token: token }));
+      setDialog("");
+    } catch {
+      setError("Unable to regenerate the webhook URL. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
   const removeWebhook = async () => {
     if (!webhook) return;
-    setSaving(true); setError("");
+    setSaving(true);
+    setError("");
     try {
       await deleteWebhook(webhook.id);
       setWebhook(null);
       onAssociate(null);
       setDialog("");
-    } catch { setError("Unable to delete the webhook. Please try again."); }
-    finally { setSaving(false); }
+    } catch {
+      setError("Unable to delete the webhook. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
-  const inputClass = "w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none";
+  const inputClass =
+    "w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none";
   const closeDialog = () => {
     if (saving) return;
     if (dialog === "secret") {
@@ -265,53 +525,723 @@ function WebhookConfig({ config, workflowId, workflowVersionId, nodeId, isReadOn
     setDialog("");
   };
 
-  if (loading) return <div className="space-y-3"><div className="h-3 w-36 animate-pulse rounded bg-[var(--elevated)]"/><div className="h-16 animate-pulse rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)]"/><p className="text-[11px] text-[var(--text-tertiary)]">Loading webhook configuration…</p></div>;
-  if (error && !webhook) return <div className="space-y-2"><p role="alert" className="text-[11px] text-red-500">{error}</p><InspectorButton type="button" onClick={load} className="text-[11px] text-[var(--accent)]">Retry</InspectorButton></div>;
-  return <div className="space-y-3">
-    {webhook ? <>
-      <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-[12px] font-medium text-[var(--text-primary)]">{webhook.name}</p><p className="mt-1 truncate font-mono text-[10px] text-[var(--text-tertiary)]">{webhook.event_name}</p></div><span className="shrink-0 text-[10px] text-[var(--text-secondary)]"><i className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${webhook.is_active ? "bg-emerald-500" : "bg-[var(--text-tertiary)]"}`}/>{webhook.is_active ? "Active" : "Inactive"}</span></div><div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border-subtle)] pt-2 text-[10px]"><div><span className="text-[var(--text-tertiary)]">Method</span><span className="ml-2 font-mono text-[var(--text-secondary)]">{webhook.method || "POST"}</span></div><div><span className="text-[var(--text-tertiary)]">Auth</span><span className="ml-2 text-[var(--text-secondary)]">{webhook.authentication_type === "none" ? "None" : "Secret"}</span></div></div></div>
-      <section><div className="mb-1 flex items-center justify-between"><FieldLabel>Endpoint</FieldLabel><span className="font-mono text-[9px] text-[var(--text-tertiary)]">POST</span></div><div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-2.5"><input aria-label="Webhook URL" type="text" readOnly value={endpoint} className="block w-full bg-transparent font-mono text-[10px] leading-4 text-[var(--text-secondary)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]" /><div className="mt-2 flex gap-2 border-t border-[var(--border-subtle)] pt-2"><InspectorButton type="button" onClick={copyEndpoint} className="h-7 flex-1 rounded-[5px] border border-[var(--border-default)] px-2 text-[10px] text-[var(--text-secondary)] hover:bg-[var(--elevated)]">{copied ? "Copied" : "Copy URL"}</InspectorButton>{!isReadOnly && <InspectorButton type="button" disabled={saving} onClick={()=>setDialog("regenerate")} className="h-7 flex-1 rounded-[5px] border border-[var(--border-default)] px-2 text-[10px] text-[var(--text-secondary)] hover:bg-[var(--elevated)]">Regenerate URL</InspectorButton>}</div></div></section>
-      <section className="overflow-hidden rounded-[7px] border border-[var(--border-default)] bg-[var(--elevated)]"><div className="flex items-start gap-2.5 p-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-[5px] border border-[var(--border-default)] bg-[var(--surface)] font-mono text-[12px] text-cyan-500" aria-hidden="true">↗</span><div className="min-w-0"><div className="flex items-center gap-1.5"><p className="text-[11px] font-semibold text-[var(--text-primary)]">Test this endpoint</p><span className="rounded border border-[var(--border-subtle)] px-1 py-0.5 font-mono text-[8px] text-[var(--text-tertiary)]">LIVE</span></div><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Send a request from Postman or your system and inspect the payload here.</p></div></div><div className="border-t border-[var(--border-subtle)] p-2.5"><InspectorButton type="button" onClick={()=>setTestOpen(true)} className="group flex h-8 w-full items-center justify-between rounded-[5px] border border-cyan-400/40 bg-cyan-600 px-3 text-[10px] font-semibold text-white transition hover:border-cyan-300/60 hover:bg-cyan-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"><span className="flex items-center gap-2"><span className="grid h-4 w-4 place-items-center rounded-full border border-white/50 text-[8px]">▶</span>Open test environment</span><span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span></InspectorButton></div></section>
-      {!isReadOnly && <><InspectorButton type="button" onClick={openEdit} className="h-8 w-full rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)]">Edit webhook</InspectorButton><div className="flex items-center justify-between gap-3 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-2.5"><div><p className="text-[11px] font-medium text-[var(--text-primary)]">Endpoint status</p><p className="mt-0.5 text-[10px] text-[var(--text-secondary)]"><i className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${webhook.is_active ? "bg-emerald-500" : "bg-[var(--text-tertiary)]"}`}/>{isDraftVersion ? "Inactive until this version is published" : webhook.is_active ? "Active and accepting requests" : "Inactive and not accepting requests"}</p></div><InspectorButton type="button" role="switch" aria-checked={Boolean(webhook.is_active)} aria-label={`${webhook.is_active ? "Disable" : "Enable"} webhook`} disabled={saving || Boolean(isDraftVersion)} onClick={() => setActive(!webhook.is_active)} className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/50 disabled:cursor-wait disabled:opacity-60 ${webhook.is_active ? "border-emerald-600 bg-emerald-600" : "border-[var(--border-strong)] bg-[var(--elevated)]"}`}><span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${webhook.is_active ? "translate-x-[17px]" : "translate-x-[3px]"}`}/></InspectorButton></div></>}
-    </> : <div className="space-y-2"><div className="rounded-[6px] border border-[var(--border-subtle)] p-3"><div className="flex items-center justify-between gap-2"><p className="text-[12px] font-medium text-[var(--text-primary)]">{config.setup_required ? "Webhook setup required" : "No webhook configured"}</p>{config.setup_required && <span className="rounded border border-amber-500/30 bg-amber-500/5 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wide text-amber-600 dark:text-amber-400">Setup required</span>}</div><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">{isDraftVersion ? "Draft webhooks are created inactive, so they cannot receive requests until this version is published." : config.setup_required ? "This workflow version needs its own endpoint. Configure a new webhook URL for this version; other versions stay unchanged." : "Create an endpoint to trigger this workflow from an external service."}</p></div>{!isReadOnly && <InspectorButton type="button" onClick={openCreate} className="h-8 w-full rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)]">＋ {config.setup_required ? "Set up webhook" : "Create webhook"}</InspectorButton>}</div>}
-    {error && webhook && <p role="alert" className="text-[10px] text-red-500">{error}</p>}
-    {dialog && <div className="fixed inset-0 z-[110] flex justify-end bg-black/55"><section role="dialog" aria-modal="true" aria-labelledby="webhook-trigger-dialog-title" className="flex h-full w-full max-w-[480px] flex-col overflow-y-auto border-l border-[var(--border-default)] bg-[var(--surface)] shadow-2xl animate-in slide-in-from-right duration-200"><div className="sticky top-0 z-10 border-b border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><div className="flex items-start justify-between gap-4"><div><p className="text-[9px] font-mono uppercase tracking-[.16em] text-[var(--text-tertiary)]">Webhook trigger · {dialog === "create" ? "New endpoint" : dialog === "edit" ? "Endpoint settings" : dialog === "secret" ? "Credentials" : dialog === "delete" ? "Destructive action" : "Security"}</p><h3 id="webhook-trigger-dialog-title" className="mt-1.5 text-[17px] font-semibold tracking-tight text-[var(--text-primary)]">{dialog === "create" ? "Configure webhook" : dialog === "edit" ? "Edit webhook" : dialog === "secret" ? "Webhook created" : dialog === "delete" ? "Delete webhook?" : "Regenerate endpoint URL?"}</h3><p className="mt-1 text-[11px] leading-4 text-[var(--text-secondary)]">{dialog === "create" ? "Set the endpoint details and trigger destination." : dialog === "edit" ? "Update this workflow's webhook settings." : dialog === "secret" ? "Copy and store the secret before closing." : dialog === "delete" ? "This permanently removes the endpoint." : "This change immediately invalidates the current URL."}</p></div><div className="flex shrink-0 items-center gap-2">{(dialog === "create" || dialog === "edit") && <InspectorButton type="button" onClick={onOpenGuide} className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-[var(--border-default)] px-2.5 text-[10px] font-medium text-[var(--text-secondary)] transition hover:bg-[var(--elevated)]" aria-label="Open webhook usage guide"><span className="grid h-4 w-4 place-items-center rounded-full border border-current font-mono text-[9px]">?</span>Guide</InspectorButton>}<InspectorButton type="button" disabled={saving} onClick={closeDialog} aria-label="Close webhook configuration" className="grid h-8 w-8 shrink-0 place-items-center rounded-[6px] border border-[var(--border-subtle)] text-[16px] text-[var(--text-tertiary)] hover:bg-[var(--elevated)]">×</InspectorButton></div></div></div>
-      {(dialog === "create" || dialog === "edit") && <div role="group" aria-label="Webhook configuration" onKeyDown={(event) => { if (event.key === "Enter" && event.target.tagName !== "BUTTON") { event.preventDefault(); submit(); } }} className="flex-1 space-y-5 p-5"><section className="space-y-3"><div className="border-b border-[var(--border-subtle)] pb-2 text-[9px] font-mono uppercase tracking-[.14em] text-[var(--text-tertiary)]">Endpoint identity</div><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Webhook name<InspectorInput required maxLength={255} value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} className={`${inputClass} mt-1`}/></label><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Event name<InspectorInput required maxLength={255} value={form.event_name} onChange={(e)=>setForm({...form,event_name:e.target.value})} className={`${inputClass} mt-1 font-mono`}/></label></section><section className="space-y-3"><div className="border-b border-[var(--border-subtle)] pb-2 text-[9px] font-mono uppercase tracking-[.14em] text-[var(--text-tertiary)]">Request security</div><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Method<InspectorSelect value="POST" disabled className={`${inputClass} mt-1 opacity-70`}><option>POST</option></InspectorSelect></label><label className="block text-[10px] font-medium text-[var(--text-secondary)]">Authentication<InspectorSelect value={form.authentication_type} onChange={(e)=>setForm({...form,authentication_type:e.target.value})} className={`${inputClass} mt-1`}><option value="secret">Secret</option><option value="none">None</option></InspectorSelect></label>{isDraftVersion ? <div className="rounded-[6px] border border-amber-500/30 bg-amber-500/5 p-3 text-[10px] leading-4 text-amber-700 dark:text-amber-300">This webhook will be created inactive and automatically activated when this workflow version is published.</div> : <label className="flex items-center justify-between rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[11px] text-[var(--text-secondary)]"><span><span className="block font-medium text-[var(--text-primary)]">Active</span><span className="mt-0.5 block text-[10px] text-[var(--text-tertiary)]">{form.is_active ? "Endpoint will accept requests" : "Endpoint will be paused"}</span></span><InspectorButton type="button" role="switch" aria-checked={Boolean(form.is_active)} aria-label="Webhook active" onClick={()=>setForm({...form,is_active:!form.is_active})} className={`relative inline-flex h-5 w-9 items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/50 ${form.is_active ? "border-emerald-600 bg-emerald-600" : "border-[var(--border-strong)] bg-[var(--surface)]"}`}><span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${form.is_active ? "translate-x-[17px]" : "translate-x-[3px]"}`}/></InspectorButton></label>}</section>{dialog === "edit" && <section className="border-t border-[var(--border-subtle)] pt-4"><p className="text-[10px] font-medium text-[var(--text-primary)]">Danger zone</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Permanently remove this webhook and invalidate its endpoint.</p><InspectorButton type="button" onClick={()=>{setError("");setDialog("delete");}} className="mt-2 h-8 rounded-[6px] border border-red-500/30 px-3 text-[10px] text-red-600 hover:bg-red-500/5 dark:text-red-400">Delete webhook</InspectorButton></section>}{dialog === "create" && <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[10px] leading-4 text-[var(--text-secondary)]">{form.authentication_type === "secret" ? "Relay generates the secret automatically. It is displayed once after creation." : "Requests to this endpoint will not require a shared secret."}</div>}{error&&<p role="alert" className="rounded-[6px] border border-red-500/30 bg-red-500/5 p-2 text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><InspectorButton type="button" onClick={closeDialog} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px] text-[var(--text-secondary)]">Cancel</InspectorButton><InspectorButton type="button" onClick={() => submit()} disabled={saving} className="h-8 rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white">{saving ? (dialog === "create" ? "Creating…" : "Saving…") : (dialog === "create" ? "Create webhook" : "Save changes")}</InspectorButton></div></div>}
-      {dialog === "secret" && <div className="flex-1 space-y-5 p-5"><div className="rounded-[6px] border border-amber-500/30 bg-amber-500/5 p-4"><div className="flex items-start gap-3"><span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded border border-amber-500/30 font-semibold text-amber-600 dark:text-amber-400">!</span><div><p className="text-[12px] font-semibold text-[var(--text-primary)]">Copy this secret now</p><p className="mt-1 text-[11px] leading-5 text-[var(--text-secondary)]">This is the only time Relay will show it. If you close this drawer without saving it, you’ll need to create a new webhook to get another secret.</p></div></div></div><section><div className="mb-2 flex items-center justify-between"><FieldLabel>Signing secret</FieldLabel><span className="font-mono text-[9px] uppercase tracking-wide text-[var(--text-tertiary)]">Sensitive</span></div><div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-3"><code className="block min-h-5 break-all font-mono text-[12px] leading-5 text-[var(--text-primary)]" aria-label={secretVisible?"Signing secret":"Masked signing secret"}>{secretVisible ? oneTimeSecret : `${String(oneTimeSecret || "").slice(0, 10)}${"•".repeat(Math.max(12, String(oneTimeSecret || "").length - 10))}`}</code><div className="mt-3 flex flex-wrap gap-2"><InspectorButton type="button" onClick={async()=>{if(!oneTimeSecret){setError("Relay did not return the signing secret. Create a new webhook to receive a new secret.");return;}try{await navigator.clipboard.writeText(oneTimeSecret);setCopied(true);setError("");}catch{setError("Unable to copy secret. Select and copy it manually.");}}} className={`h-8 rounded-[6px] px-3 text-[11px] font-medium ${copied?"border border-emerald-600/40 text-emerald-600 dark:text-emerald-400":"bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"}`}>{copied?"✓ Copied":"Copy secret"}</InspectorButton><InspectorButton type="button" onClick={()=>setSecretVisible((value)=>!value)} aria-pressed={secretVisible} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--elevated)]">{secretVisible?"Hide":"Reveal"}</InspectorButton></div></div></section><div className="rounded-[6px] border border-[var(--border-subtle)] p-3"><p className="text-[10px] font-medium text-[var(--text-primary)]">Store it in your secrets manager</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Use this value in the external service that calls your webhook. It is never included in the endpoint URL or shown again after this drawer closes.</p></div>{error&&<p role="alert" className="text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><InspectorButton type="button" onClick={closeDialog} className="h-8 rounded-[6px] bg-[var(--accent)] px-4 text-[11px] font-medium text-white">Done, secret saved</InspectorButton></div></div>}
-      {dialog === "delete" && <div className="flex-1 space-y-4 p-5"><div className="rounded-[6px] border border-red-500/30 bg-red-500/5 p-3"><p className="text-[11px] font-semibold text-[var(--text-primary)]">{webhook?.name}</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">Deleting this webhook immediately disables its endpoint. External services using it will stop triggering this workflow. This cannot be undone.</p></div>{error&&<p role="alert" className="text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><InspectorButton type="button" disabled={saving} onClick={closeDialog} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px]">Cancel</InspectorButton><InspectorButton type="button" disabled={saving} onClick={removeWebhook} className="h-8 rounded-[6px] bg-red-600 px-3 text-[11px] font-medium text-white hover:bg-red-700">{saving?"Deleting…":"Delete webhook"}</InspectorButton></div></div>}
-      {dialog === "regenerate" && <div className="flex-1 space-y-4 p-5"><div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--elevated)] p-3"><p className="text-[11px] font-medium text-[var(--text-primary)]">Current endpoint will be invalidated</p><code className="mt-2 block break-all font-mono text-[10px] leading-4 text-[var(--text-secondary)]">{`${endpoint.split("/hooks/")[0]}/hooks/••••••••${String(webhook.public_token || "").slice(-4)}`}</code></div><p className="text-[11px] leading-5 text-[var(--text-secondary)]">The current webhook URL will stop working after the token is regenerated. External services using it will need to be updated.</p>{error&&<p role="alert" className="text-[10px] text-red-500">{error}</p>}<div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4"><InspectorButton type="button" onClick={closeDialog} className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px]">Cancel</InspectorButton><InspectorButton type="button" disabled={saving} onClick={regenerate} className="h-8 rounded-[6px] bg-[var(--text-primary)] px-3 text-[11px] text-[var(--canvas)]">{saving?"Regenerating…":"Regenerate token"}</InspectorButton></div></div>}
-    </section></div>}
-    <WebhookTestDialog open={testOpen} webhook={webhook} onClose={() => setTestOpen(false)} />
-  </div>;
+  if (loading)
+    return (
+      <div className="space-y-3">
+        <div className="h-3 w-36 animate-pulse rounded bg-[var(--elevated)]" />
+        <div className="h-16 animate-pulse rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)]" />
+        <p className="text-[11px] text-[var(--text-tertiary)]">
+          Loading webhook configuration…
+        </p>
+      </div>
+    );
+  if (error && !webhook)
+    return (
+      <div className="space-y-2">
+        <p role="alert" className="text-[11px] text-red-500">
+          {error}
+        </p>
+        <InspectorButton
+          type="button"
+          onClick={load}
+          className="text-[11px] text-[var(--accent)]"
+        >
+          Retry
+        </InspectorButton>
+      </div>
+    );
+  return (
+    <div className="space-y-3">
+      {webhook ? (
+        <>
+          <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-[12px] font-medium text-[var(--text-primary)]">
+                  {webhook.name}
+                </p>
+                <p className="mt-1 truncate font-mono text-[10px] text-[var(--text-tertiary)]">
+                  {webhook.event_name}
+                </p>
+              </div>
+              <span className="shrink-0 text-[10px] text-[var(--text-secondary)]">
+                <i
+                  className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${webhook.is_active ? "bg-emerald-500" : "bg-[var(--text-tertiary)]"}`}
+                />
+                {webhook.is_active ? "Active" : "Inactive"}
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border-subtle)] pt-2 text-[10px]">
+              <div>
+                <span className="text-[var(--text-tertiary)]">Method</span>
+                <span className="ml-2 font-mono text-[var(--text-secondary)]">
+                  {webhook.method || "POST"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[var(--text-tertiary)]">Auth</span>
+                <span className="ml-2 text-[var(--text-secondary)]">
+                  {webhook.authentication_type === "none" ? "None" : "Secret"}
+                </span>
+              </div>
+            </div>
+          </div>
+          <section>
+            <div className="mb-1 flex items-center justify-between">
+              <FieldLabel>Endpoint</FieldLabel>
+              <span className="font-mono text-[9px] text-[var(--text-tertiary)]">
+                POST
+              </span>
+            </div>
+            <div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-2.5">
+              <input
+                aria-label="Webhook URL"
+                type="text"
+                readOnly
+                value={endpoint}
+                className="block w-full bg-transparent font-mono text-[10px] leading-4 text-[var(--text-secondary)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+              />
+              <div className="mt-2 flex gap-2 border-t border-[var(--border-subtle)] pt-2">
+                <InspectorButton
+                  type="button"
+                  onClick={copyEndpoint}
+                  className="h-7 flex-1 rounded-[5px] border border-[var(--border-default)] px-2 text-[10px] text-[var(--text-secondary)] hover:bg-[var(--elevated)]"
+                >
+                  {copied ? "Copied" : "Copy URL"}
+                </InspectorButton>
+                {!isReadOnly && (
+                  <InspectorButton
+                    type="button"
+                    disabled={saving}
+                    onClick={() => setDialog("regenerate")}
+                    className="h-7 flex-1 rounded-[5px] border border-[var(--border-default)] px-2 text-[10px] text-[var(--text-secondary)] hover:bg-[var(--elevated)]"
+                  >
+                    Regenerate URL
+                  </InspectorButton>
+                )}
+              </div>
+            </div>
+          </section>
+          <section className="overflow-hidden rounded-[7px] border border-[var(--border-default)] bg-[var(--elevated)]">
+            <div className="flex items-start gap-2.5 p-3">
+              <span
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-[5px] border border-[var(--border-default)] bg-[var(--surface)] font-mono text-[12px] text-cyan-500"
+                aria-hidden="true"
+              >
+                ↗
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[11px] font-semibold text-[var(--text-primary)]">
+                    Test this endpoint
+                  </p>
+                  <span className="rounded border border-[var(--border-subtle)] px-1 py-0.5 font-mono text-[8px] text-[var(--text-tertiary)]">
+                    LIVE
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">
+                  Send a request from Postman or your system and inspect the
+                  payload here.
+                </p>
+              </div>
+            </div>
+            <div className="border-t border-[var(--border-subtle)] p-2.5">
+              <InspectorButton
+                type="button"
+                onClick={() => setTestOpen(true)}
+                className="group flex h-8 w-full items-center justify-between rounded-[5px] border border-cyan-400/40 bg-cyan-600 px-3 text-[10px] font-semibold text-white transition hover:border-cyan-300/60 hover:bg-cyan-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="grid h-4 w-4 place-items-center rounded-full border border-white/50 text-[8px]">
+                    ▶
+                  </span>
+                  Open test environment
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="transition-transform group-hover:translate-x-0.5"
+                >
+                  →
+                </span>
+              </InspectorButton>
+            </div>
+          </section>
+          {!isReadOnly && (
+            <>
+              <InspectorButton
+                type="button"
+                onClick={openEdit}
+                className="h-8 w-full rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)]"
+              >
+                Edit webhook
+              </InspectorButton>
+              <div className="flex items-center justify-between gap-3 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-2.5">
+                <div>
+                  <p className="text-[11px] font-medium text-[var(--text-primary)]">
+                    Endpoint status
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-[var(--text-secondary)]">
+                    <i
+                      className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${webhook.is_active ? "bg-emerald-500" : "bg-[var(--text-tertiary)]"}`}
+                    />
+                    {isDraftVersion
+                      ? "Inactive until this version is published"
+                      : webhook.is_active
+                        ? "Active and accepting requests"
+                        : "Inactive and not accepting requests"}
+                  </p>
+                </div>
+                <InspectorButton
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(webhook.is_active)}
+                  aria-label={`${webhook.is_active ? "Disable" : "Enable"} webhook`}
+                  disabled={saving || Boolean(isDraftVersion)}
+                  onClick={() => setActive(!webhook.is_active)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/50 disabled:cursor-wait disabled:opacity-60 ${webhook.is_active ? "border-emerald-600 bg-emerald-600" : "border-[var(--border-strong)] bg-[var(--elevated)]"}`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${webhook.is_active ? "translate-x-[17px]" : "translate-x-[3px]"}`}
+                  />
+                </InspectorButton>
+              </div>
+            </>
+          )}
+        </>
+      ) : (
+        <div className="space-y-2">
+          <div className="rounded-[6px] border border-[var(--border-subtle)] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[12px] font-medium text-[var(--text-primary)]">
+                {config.setup_required
+                  ? "Webhook setup required"
+                  : "No webhook configured"}
+              </p>
+              {config.setup_required && (
+                <span className="rounded border border-amber-500/30 bg-amber-500/5 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                  Setup required
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">
+              {isDraftVersion
+                ? "Draft webhooks are created inactive, so they cannot receive requests until this version is published."
+                : config.setup_required
+                  ? "This workflow version needs its own endpoint. Configure a new webhook URL for this version; other versions stay unchanged."
+                  : "Create an endpoint to trigger this workflow from an external service."}
+            </p>
+          </div>
+          {!isReadOnly && (
+            <InspectorButton
+              type="button"
+              onClick={openCreate}
+              className="h-8 w-full rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)]"
+            >
+              ＋ {config.setup_required ? "Set up webhook" : "Create webhook"}
+            </InspectorButton>
+          )}
+        </div>
+      )}
+      {error && webhook && (
+        <p role="alert" className="text-[10px] text-red-500">
+          {error}
+        </p>
+      )}
+      {dialog && (
+        <div className="fixed inset-0 z-[110] flex justify-end bg-black/55">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="webhook-trigger-dialog-title"
+            className="flex h-full w-full max-w-[480px] flex-col overflow-y-auto border-l border-[var(--border-default)] bg-[var(--surface)] shadow-2xl animate-in slide-in-from-right duration-200"
+          >
+            <div className="sticky top-0 z-10 border-b border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[9px] font-mono uppercase tracking-[.16em] text-[var(--text-tertiary)]">
+                    Webhook trigger ·{" "}
+                    {dialog === "create"
+                      ? "New endpoint"
+                      : dialog === "edit"
+                        ? "Endpoint settings"
+                        : dialog === "secret"
+                          ? "Credentials"
+                          : dialog === "delete"
+                            ? "Destructive action"
+                            : "Security"}
+                  </p>
+                  <h3
+                    id="webhook-trigger-dialog-title"
+                    className="mt-1.5 text-[17px] font-semibold tracking-tight text-[var(--text-primary)]"
+                  >
+                    {dialog === "create"
+                      ? "Configure webhook"
+                      : dialog === "edit"
+                        ? "Edit webhook"
+                        : dialog === "secret"
+                          ? "Webhook created"
+                          : dialog === "delete"
+                            ? "Delete webhook?"
+                            : "Regenerate endpoint URL?"}
+                  </h3>
+                  <p className="mt-1 text-[11px] leading-4 text-[var(--text-secondary)]">
+                    {dialog === "create"
+                      ? "Set the endpoint details and trigger destination."
+                      : dialog === "edit"
+                        ? "Update this workflow's webhook settings."
+                        : dialog === "secret"
+                          ? "Copy and store the secret before closing."
+                          : dialog === "delete"
+                            ? "This permanently removes the endpoint."
+                            : "This change immediately invalidates the current URL."}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {(dialog === "create" || dialog === "edit") && (
+                    <InspectorButton
+                      type="button"
+                      onClick={onOpenGuide}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-[var(--border-default)] px-2.5 text-[10px] font-medium text-[var(--text-secondary)] transition hover:bg-[var(--elevated)]"
+                      aria-label="Open webhook usage guide"
+                    >
+                      <span className="grid h-4 w-4 place-items-center rounded-full border border-current font-mono text-[9px]">
+                        ?
+                      </span>
+                      Guide
+                    </InspectorButton>
+                  )}
+                  <InspectorButton
+                    type="button"
+                    disabled={saving}
+                    onClick={closeDialog}
+                    aria-label="Close webhook configuration"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-[6px] border border-[var(--border-subtle)] text-[16px] text-[var(--text-tertiary)] hover:bg-[var(--elevated)]"
+                  >
+                    ×
+                  </InspectorButton>
+                </div>
+              </div>
+            </div>
+            {(dialog === "create" || dialog === "edit") && (
+              <div
+                role="group"
+                aria-label="Webhook configuration"
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    event.target.tagName !== "BUTTON"
+                  ) {
+                    event.preventDefault();
+                    submit();
+                  }
+                }}
+                className="flex-1 space-y-5 p-5"
+              >
+                <section className="space-y-3">
+                  <div className="border-b border-[var(--border-subtle)] pb-2 text-[9px] font-mono uppercase tracking-[.14em] text-[var(--text-tertiary)]">
+                    Endpoint identity
+                  </div>
+                  <label className="block text-[10px] font-medium text-[var(--text-secondary)]">
+                    Webhook name
+                    <InspectorInput
+                      required
+                      maxLength={255}
+                      value={form.name}
+                      onChange={(e) =>
+                        setForm({ ...form, name: e.target.value })
+                      }
+                      className={`${inputClass} mt-1`}
+                    />
+                  </label>
+                  <label className="block text-[10px] font-medium text-[var(--text-secondary)]">
+                    Event name
+                    <InspectorInput
+                      required
+                      maxLength={255}
+                      value={form.event_name}
+                      onChange={(e) =>
+                        setForm({ ...form, event_name: e.target.value })
+                      }
+                      className={`${inputClass} mt-1 font-mono`}
+                    />
+                  </label>
+                </section>
+                <section className="space-y-3">
+                  <div className="border-b border-[var(--border-subtle)] pb-2 text-[9px] font-mono uppercase tracking-[.14em] text-[var(--text-tertiary)]">
+                    Request security
+                  </div>
+                  <label className="block text-[10px] font-medium text-[var(--text-secondary)]">
+                    Method
+                    <InspectorSelect
+                      value="POST"
+                      disabled
+                      className={`${inputClass} mt-1 opacity-70`}
+                    >
+                      <option>POST</option>
+                    </InspectorSelect>
+                  </label>
+                  <label className="block text-[10px] font-medium text-[var(--text-secondary)]">
+                    Authentication
+                    <InspectorSelect
+                      value={form.authentication_type}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          authentication_type: e.target.value,
+                        })
+                      }
+                      className={`${inputClass} mt-1`}
+                    >
+                      <option value="secret">Secret</option>
+                      <option value="none">None</option>
+                    </InspectorSelect>
+                  </label>
+                  {isDraftVersion ? (
+                    <div className="rounded-[6px] border border-amber-500/30 bg-amber-500/5 p-3 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
+                      This webhook will be created inactive and automatically
+                      activated when this workflow version is published.
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-between rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[11px] text-[var(--text-secondary)]">
+                      <span>
+                        <span className="block font-medium text-[var(--text-primary)]">
+                          Active
+                        </span>
+                        <span className="mt-0.5 block text-[10px] text-[var(--text-tertiary)]">
+                          {form.is_active
+                            ? "Endpoint will accept requests"
+                            : "Endpoint will be paused"}
+                        </span>
+                      </span>
+                      <InspectorButton
+                        type="button"
+                        role="switch"
+                        aria-checked={Boolean(form.is_active)}
+                        aria-label="Webhook active"
+                        onClick={() =>
+                          setForm({ ...form, is_active: !form.is_active })
+                        }
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/50 ${form.is_active ? "border-emerald-600 bg-emerald-600" : "border-[var(--border-strong)] bg-[var(--surface)]"}`}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${form.is_active ? "translate-x-[17px]" : "translate-x-[3px]"}`}
+                        />
+                      </InspectorButton>
+                    </label>
+                  )}
+                </section>
+                {dialog === "edit" && (
+                  <section className="border-t border-[var(--border-subtle)] pt-4">
+                    <p className="text-[10px] font-medium text-[var(--text-primary)]">
+                      Danger zone
+                    </p>
+                    <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">
+                      Permanently remove this webhook and invalidate its
+                      endpoint.
+                    </p>
+                    <InspectorButton
+                      type="button"
+                      onClick={() => {
+                        setError("");
+                        setDialog("delete");
+                      }}
+                      className="mt-2 h-8 rounded-[6px] border border-red-500/30 px-3 text-[10px] text-red-600 hover:bg-red-500/5 dark:text-red-400"
+                    >
+                      Delete webhook
+                    </InspectorButton>
+                  </section>
+                )}
+                {dialog === "create" && (
+                  <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[10px] leading-4 text-[var(--text-secondary)]">
+                    {form.authentication_type === "secret"
+                      ? "Relay generates the secret automatically. It is displayed once after creation."
+                      : "Requests to this endpoint will not require a shared secret."}
+                  </div>
+                )}
+                {error && (
+                  <p
+                    role="alert"
+                    className="rounded-[6px] border border-red-500/30 bg-red-500/5 p-2 text-[10px] text-red-500"
+                  >
+                    {error}
+                  </p>
+                )}
+                <div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4">
+                  <InspectorButton
+                    type="button"
+                    onClick={closeDialog}
+                    className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px] text-[var(--text-secondary)]"
+                  >
+                    Cancel
+                  </InspectorButton>
+                  <InspectorButton
+                    type="button"
+                    onClick={() => submit()}
+                    disabled={saving}
+                    className="h-8 rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white"
+                  >
+                    {saving
+                      ? dialog === "create"
+                        ? "Creating…"
+                        : "Saving…"
+                      : dialog === "create"
+                        ? "Create webhook"
+                        : "Save changes"}
+                  </InspectorButton>
+                </div>
+              </div>
+            )}
+            {dialog === "secret" && (
+              <div className="flex-1 space-y-5 p-5">
+                <div className="rounded-[6px] border border-amber-500/30 bg-amber-500/5 p-4">
+                  <div className="flex items-start gap-3">
+                    <span
+                      aria-hidden="true"
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded border border-amber-500/30 font-semibold text-amber-600 dark:text-amber-400"
+                    >
+                      !
+                    </span>
+                    <div>
+                      <p className="text-[12px] font-semibold text-[var(--text-primary)]">
+                        Copy this secret now
+                      </p>
+                      <p className="mt-1 text-[11px] leading-5 text-[var(--text-secondary)]">
+                        This is the only time Relay will show it. If you close
+                        this drawer without saving it, you’ll need to create a
+                        new webhook to get another secret.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <section>
+                  <div className="mb-2 flex items-center justify-between">
+                    <FieldLabel>Signing secret</FieldLabel>
+                    <span className="font-mono text-[9px] uppercase tracking-wide text-[var(--text-tertiary)]">
+                      Sensitive
+                    </span>
+                  </div>
+                  <div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-3">
+                    <code
+                      className="block min-h-5 break-all font-mono text-[12px] leading-5 text-[var(--text-primary)]"
+                      aria-label={
+                        secretVisible
+                          ? "Signing secret"
+                          : "Masked signing secret"
+                      }
+                    >
+                      {secretVisible
+                        ? oneTimeSecret
+                        : `${String(oneTimeSecret || "").slice(0, 10)}${"•".repeat(Math.max(12, String(oneTimeSecret || "").length - 10))}`}
+                    </code>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <InspectorButton
+                        type="button"
+                        onClick={async () => {
+                          if (!oneTimeSecret) {
+                            setError(
+                              "Relay did not return the signing secret. Create a new webhook to receive a new secret.",
+                            );
+                            return;
+                          }
+                          try {
+                            await navigator.clipboard.writeText(oneTimeSecret);
+                            setCopied(true);
+                            setError("");
+                          } catch {
+                            setError(
+                              "Unable to copy secret. Select and copy it manually.",
+                            );
+                          }
+                        }}
+                        className={`h-8 rounded-[6px] px-3 text-[11px] font-medium ${copied ? "border border-emerald-600/40 text-emerald-600 dark:text-emerald-400" : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"}`}
+                      >
+                        {copied ? "✓ Copied" : "Copy secret"}
+                      </InspectorButton>
+                      <InspectorButton
+                        type="button"
+                        onClick={() => setSecretVisible((value) => !value)}
+                        aria-pressed={secretVisible}
+                        className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--elevated)]"
+                      >
+                        {secretVisible ? "Hide" : "Reveal"}
+                      </InspectorButton>
+                    </div>
+                  </div>
+                </section>
+                <div className="rounded-[6px] border border-[var(--border-subtle)] p-3">
+                  <p className="text-[10px] font-medium text-[var(--text-primary)]">
+                    Store it in your secrets manager
+                  </p>
+                  <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">
+                    Use this value in the external service that calls your
+                    webhook. It is never included in the endpoint URL or shown
+                    again after this drawer closes.
+                  </p>
+                </div>
+                {error && (
+                  <p role="alert" className="text-[10px] text-red-500">
+                    {error}
+                  </p>
+                )}
+                <div className="sticky bottom-0 -mx-5 mt-auto flex justify-end border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4">
+                  <InspectorButton
+                    type="button"
+                    onClick={closeDialog}
+                    className="h-8 rounded-[6px] bg-[var(--accent)] px-4 text-[11px] font-medium text-white"
+                  >
+                    Done, secret saved
+                  </InspectorButton>
+                </div>
+              </div>
+            )}
+            {dialog === "delete" && (
+              <div className="flex-1 space-y-4 p-5">
+                <div className="rounded-[6px] border border-red-500/30 bg-red-500/5 p-3">
+                  <p className="text-[11px] font-semibold text-[var(--text-primary)]">
+                    {webhook?.name}
+                  </p>
+                  <p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">
+                    Deleting this webhook immediately disables its endpoint.
+                    External services using it will stop triggering this
+                    workflow. This cannot be undone.
+                  </p>
+                </div>
+                {error && (
+                  <p role="alert" className="text-[10px] text-red-500">
+                    {error}
+                  </p>
+                )}
+                <div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4">
+                  <InspectorButton
+                    type="button"
+                    disabled={saving}
+                    onClick={closeDialog}
+                    className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px]"
+                  >
+                    Cancel
+                  </InspectorButton>
+                  <InspectorButton
+                    type="button"
+                    disabled={saving}
+                    onClick={removeWebhook}
+                    className="h-8 rounded-[6px] bg-red-600 px-3 text-[11px] font-medium text-white hover:bg-red-700"
+                  >
+                    {saving ? "Deleting…" : "Delete webhook"}
+                  </InspectorButton>
+                </div>
+              </div>
+            )}
+            {dialog === "regenerate" && (
+              <div className="flex-1 space-y-4 p-5">
+                <div className="rounded-[6px] border border-[var(--border-default)] bg-[var(--elevated)] p-3">
+                  <p className="text-[11px] font-medium text-[var(--text-primary)]">
+                    Current endpoint will be invalidated
+                  </p>
+                  <code className="mt-2 block break-all font-mono text-[10px] leading-4 text-[var(--text-secondary)]">{`${endpoint.split("/hooks/")[0]}/hooks/••••••••${String(webhook.public_token || "").slice(-4)}`}</code>
+                </div>
+                <p className="text-[11px] leading-5 text-[var(--text-secondary)]">
+                  The current webhook URL will stop working after the token is
+                  regenerated. External services using it will need to be
+                  updated.
+                </p>
+                {error && (
+                  <p role="alert" className="text-[10px] text-red-500">
+                    {error}
+                  </p>
+                )}
+                <div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface)] px-5 py-4">
+                  <InspectorButton
+                    type="button"
+                    onClick={closeDialog}
+                    className="h-8 rounded-[6px] border border-[var(--border-default)] px-3 text-[11px]"
+                  >
+                    Cancel
+                  </InspectorButton>
+                  <InspectorButton
+                    type="button"
+                    disabled={saving}
+                    onClick={regenerate}
+                    className="h-8 rounded-[6px] bg-[var(--text-primary)] px-3 text-[11px] text-[var(--canvas)]"
+                  >
+                    {saving ? "Regenerating…" : "Regenerate token"}
+                  </InspectorButton>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+      <WebhookTestDialog
+        open={testOpen}
+        webhook={webhook}
+        onClose={() => setTestOpen(false)}
+      />
+    </div>
+  );
 }
 
 function ManualConfig({ config, onChange, isReadOnly }) {
   return (
     <div className="space-y-3 text-[11px] text-[var(--text-secondary)]">
-      <label className="block">Description
-        <InspectorTextarea value={config.description ?? ""} onChange={(event) => onChange("description", event.target.value)} disabled={isReadOnly} maxLength={500} rows={4} className="mt-1 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-2 text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60" />
-        <span className="block text-right text-[10px] text-[var(--text-tertiary)]">{String(config.description ?? "").length}/500</span>
+      <label className="block">
+        Description
+        <InspectorTextarea
+          value={config.description ?? ""}
+          onChange={(event) => onChange("description", event.target.value)}
+          disabled={isReadOnly}
+          maxLength={500}
+          rows={4}
+          className="mt-1 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] p-2 text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
+        />
+        <span className="block text-right text-[10px] text-[var(--text-tertiary)]">
+          {String(config.description ?? "").length}/500
+        </span>
       </label>
-      <div><span className="block mb-1">Input Type</span><div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-2">JSON Object</div></div>
-      <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 leading-5">Provide JSON when starting the published workflow. Read values with:<code className="mt-1 block font-mono text-[10px]">{"{{trigger.data.order_id}}"}<br/>{"{{trigger.data.customer_email}}"}<br/>{"{{trigger.data.requested_amount}}"}</code></div>
+      <div>
+        <span className="block mb-1">Input Type</span>
+        <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-2">
+          JSON Object
+        </div>
+      </div>
+      <div className="rounded-[6px] border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 leading-5">
+        Provide JSON when starting the published workflow. Read values with:
+        <code className="mt-1 block font-mono text-[10px]">
+          {"{{trigger.data.order_id}}"}
+          <br />
+          {"{{trigger.data.customer_email}}"}
+          <br />
+          {"{{trigger.data.requested_amount}}"}
+        </code>
+      </div>
     </div>
   );
 }
 
-const connectionRowsOf = (data) => Array.isArray(data) ? data : data?.connections || data?.results || data?.data || [];
+const connectionRowsOf = (data) =>
+  Array.isArray(data)
+    ? data
+    : data?.connections || data?.results || data?.data || [];
 
 // Keep legacy absolute URLs out of the path field, including after a connection
 // changes hosts. Avoid URL parsing so workflow expressions stay byte-for-byte intact.
 export function httpRequestPath(value, baseUrl = "") {
   const url = (value || "").trim();
   const base = baseUrl.trim().replace(/\/+$/, "");
-  if (base && url.startsWith(base) && (!url[base.length] || /[/?#]/.test(url[base.length]))) {
+  if (
+    base &&
+    url.startsWith(base) &&
+    (!url[base.length] || /[/?#]/.test(url[base.length]))
+  ) {
     return url.slice(base.length) || "/";
   }
   if (!/^(?:https?:)?\/\//i.test(url)) return url;
   let path = url.replace(/^(?:https?:)?\/\/[^/?#]+/i, "") || "/";
   const basePath = base.replace(/^(?:https?:)?\/\/[^/?#]+/i, "");
-  if (basePath && path.startsWith(basePath) && (!path[basePath.length] || /[/?#]/.test(path[basePath.length]))) {
+  if (
+    basePath &&
+    path.startsWith(basePath) &&
+    (!path[basePath.length] || /[/?#]/.test(path[basePath.length]))
+  ) {
     path = path.slice(basePath.length) || "/";
   }
   return path;
@@ -319,7 +1249,10 @@ export function httpRequestPath(value, baseUrl = "") {
 
 function HttpRequestConfig({ config, onChange, variableContext }) {
   const isReadOnly = useContext(InspectorReadOnly);
-  const timeoutError = validateNodeConfiguration("action.http_request", config).find((error) => error.field === "timeout");
+  const timeoutError = validateNodeConfiguration(
+    "action.http_request",
+    config,
+  ).find((error) => error.field === "timeout");
   const [connections, setConnections] = useState([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [connectionsError, setConnectionsError] = useState(false);
@@ -341,19 +1274,29 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
     let active = true;
     setConnectionsLoading(true);
     setConnectionsError(false);
-    listConnections().then((result) => {
-      if (active) setConnections(connectionRowsOf(result));
-    }).catch(() => {
-      if (active) setConnectionsError(true);
-    }).finally(() => {
-      if (active) setConnectionsLoading(false);
-    });
-    return () => { active = false; };
+    listConnections()
+      .then((result) => {
+        if (active) setConnections(connectionRowsOf(result));
+      })
+      .catch(() => {
+        if (active) setConnectionsError(true);
+      })
+      .finally(() => {
+        if (active) setConnectionsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const httpConnections = connections.filter((connection) => connection.provider === "http");
-  const selectedConnection = httpConnections.find((connection) => String(connection.id) === String(config.connection_id));
-  const connectionBaseUrl = selectedConnection?.config?.base_url?.trim().replace(/\/+$/, "") || "";
+  const httpConnections = connections.filter(
+    (connection) => connection.provider === "http",
+  );
+  const selectedConnection = httpConnections.find(
+    (connection) => String(connection.id) === String(config.connection_id),
+  );
+  const connectionBaseUrl =
+    selectedConnection?.config?.base_url?.trim().replace(/\/+$/, "") || "";
   const requestPath = httpRequestPath(config.url, connectionBaseUrl);
   const handlePathChange = (path) => {
     if (isReadOnly) return;
@@ -363,36 +1306,97 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
       : path;
     onChange("url", composedUrl);
   };
-  const pickerFor = (field, getCurrent = () => config[field] || "", setValue = (value) => onChange(field, value)) => (
-    <VariablePicker {...variableContext} onInsert={(expression) => setValue(`${getCurrent()}${expression}`)} />
+  const pickerFor = (
+    field,
+    getCurrent = () => config[field] || "",
+    setValue = (value) => onChange(field, value),
+  ) => (
+    <VariablePicker
+      {...variableContext}
+      onInsert={(expression) => setValue(`${getCurrent()}${expression}`)}
+    />
   );
 
   return (
     <div className="space-y-3">
       <section className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Connection <span className="text-red-500" aria-hidden="true">*</span></label>
-          <Link href="/connections" className="text-[10px] font-medium text-[var(--accent)] hover:underline">＋ Add connection</Link>
+          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">
+            Connection{" "}
+            <span className="text-red-500" aria-hidden="true">
+              *
+            </span>
+          </label>
+          <Link
+            href="/connections"
+            className="text-[10px] font-medium text-[var(--accent)] hover:underline"
+          >
+            ＋ Add connection
+          </Link>
         </div>
         {connectionsLoading ? (
-          <div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]" aria-label="Loading HTTP connections" />
+          <div
+            className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]"
+            aria-label="Loading HTTP connections"
+          />
         ) : connectionsError ? (
           <div className="flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2">
-            <p role="alert" className="text-[10px] text-red-500">Unable to load HTTP connections.</p>
-            <InspectorButton inspectionAction type="button" onClick={loadConnections} className="text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Retry</InspectorButton>
+            <p role="alert" className="text-[10px] text-red-500">
+              Unable to load HTTP connections.
+            </p>
+            <InspectorButton
+              inspectionAction
+              type="button"
+              onClick={loadConnections}
+              className="text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            >
+              Retry
+            </InspectorButton>
           </div>
         ) : httpConnections.length === 0 ? (
-          <Link href="/connections" className="flex h-9 items-center justify-between rounded-[6px] border border-dashed border-[var(--border-default)] px-3 text-[10px] text-[var(--text-tertiary)] hover:border-[var(--accent)]/50 hover:text-[var(--text-secondary)]"><span>No saved HTTP connections</span><span className="font-medium text-[var(--accent)]">Connect one →</span></Link>
+          <Link
+            href="/connections"
+            className="flex h-9 items-center justify-between rounded-[6px] border border-dashed border-[var(--border-default)] px-3 text-[10px] text-[var(--text-tertiary)] hover:border-[var(--accent)]/50 hover:text-[var(--text-secondary)]"
+          >
+            <span>No saved HTTP connections</span>
+            <span className="font-medium text-[var(--accent)]">
+              Connect one →
+            </span>
+          </Link>
         ) : (
           <>
-            <InspectorSelect aria-label="HTTP request connection (required)" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30">
+            <InspectorSelect
+              aria-label="HTTP request connection (required)"
+              value={config.connection_id ?? ""}
+              onChange={(event) =>
+                onChange("connection_id", event.target.value || undefined)
+              }
+              className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30"
+            >
               <option value="">No connection</option>
               {httpConnections.map((connection) => (
-                <option key={connection.id} value={connection.id}>{connection.name}</option>
+                <option key={connection.id} value={connection.id}>
+                  {connection.name}
+                </option>
               ))}
             </InspectorSelect>
-            {config.connection_id && !selectedConnection && <p className="text-[10px] text-amber-600 dark:text-amber-400">Saved connection unavailable. Select another one.</p>}
-            {selectedConnection && <p className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]" title={connectionBaseUrl}>{connectionBaseUrl || "Base URL not configured"}<span className="px-1.5">·</span>{selectedConnection.auth_type === "none" ? "No auth" : "Auth configured"}</p>}
+            {config.connection_id && !selectedConnection && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                Saved connection unavailable. Select another one.
+              </p>
+            )}
+            {selectedConnection && (
+              <p
+                className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]"
+                title={connectionBaseUrl}
+              >
+                {connectionBaseUrl || "Base URL not configured"}
+                <span className="px-1.5">·</span>
+                {selectedConnection.auth_type === "none"
+                  ? "No auth"
+                  : "Auth configured"}
+              </p>
+            )}
           </>
         )}
       </section>
@@ -411,17 +1415,57 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
         />
       </div>
       <div>
-        <VariableFieldLabel picker={pickerFor("url", () => selectedConnection ? requestPath.replace(/^\/+/, "") : config.url || "", (value) => selectedConnection ? handlePathChange(value) : onChange("url", value))}>{selectedConnection ? "Request path" : "URL"}</VariableFieldLabel>
-        {selectedConnection && <div className="mb-1.5 flex min-w-0 items-center overflow-hidden rounded-[5px] border border-[var(--border-subtle)] bg-[var(--elevated)] font-mono text-[10px] leading-4"><span className="shrink-0 border-r border-[var(--border-subtle)] px-2 py-1.5 text-[var(--text-tertiary)]">BASE</span><span className="truncate px-2 py-1.5 text-[var(--text-secondary)]" title={connectionBaseUrl}>{connectionBaseUrl || "Base URL is not configured"}</span></div>}
+        <VariableFieldLabel
+          picker={pickerFor(
+            "url",
+            () =>
+              selectedConnection
+                ? requestPath.replace(/^\/+/, "")
+                : config.url || "",
+            (value) =>
+              selectedConnection
+                ? handlePathChange(value)
+                : onChange("url", value),
+          )}
+        >
+          {selectedConnection ? "Request path" : "URL"}
+        </VariableFieldLabel>
+        {selectedConnection && (
+          <div className="mb-1.5 flex min-w-0 items-center overflow-hidden rounded-[5px] border border-[var(--border-subtle)] bg-[var(--elevated)] font-mono text-[10px] leading-4">
+            <span className="shrink-0 border-r border-[var(--border-subtle)] px-2 py-1.5 text-[var(--text-tertiary)]">
+              BASE
+            </span>
+            <span
+              className="truncate px-2 py-1.5 text-[var(--text-secondary)]"
+              title={connectionBaseUrl}
+            >
+              {connectionBaseUrl || "Base URL is not configured"}
+            </span>
+          </div>
+        )}
         <TextInput
-          value={selectedConnection ? requestPath.replace(/^\/+/, "") : config.url ?? ""}
-          onChange={(value) => selectedConnection ? handlePathChange(value) : onChange("url", value)}
-          aria-label={selectedConnection ? "HTTP request path" : "HTTP request URL"}
+          value={
+            selectedConnection
+              ? requestPath.replace(/^\/+/, "")
+              : (config.url ?? "")
+          }
+          onChange={(value) =>
+            selectedConnection
+              ? handlePathChange(value)
+              : onChange("url", value)
+          }
+          aria-label={
+            selectedConnection ? "HTTP request path" : "HTTP request URL"
+          }
           variables
           mono
           prefix={selectedConnection ? "/" : ""}
         />
-        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">{selectedConnection ? "The saved connection supplies the base URL and authentication." : "Select a saved connection to reuse its base URL and authentication."}</p>
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+          {selectedConnection
+            ? "The saved connection supplies the base URL and authentication."
+            : "Select a saved connection to reuse its base URL and authentication."}
+        </p>
       </div>
       <div>
         <FieldLabel>Timeout (seconds)</FieldLabel>
@@ -432,20 +1476,38 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
           max={120}
           step={1}
           required
-          value={config.timeout === undefined ? 10 : config.timeout ?? ""}
+          value={config.timeout === undefined ? 10 : (config.timeout ?? "")}
           onChange={(event) => {
             if (isReadOnly) return;
-            onChange("timeout", event.target.value === "" ? "" : event.target.valueAsNumber);
+            onChange(
+              "timeout",
+              event.target.value === "" ? "" : event.target.valueAsNumber,
+            );
           }}
           aria-invalid={!!timeoutError}
           aria-describedby={`http-timeout-help${timeoutError ? " http-timeout-error" : ""}`}
           className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors"
         />
-        <p id="http-timeout-help" className="mt-1 text-[10px] text-[var(--text-tertiary)]">Maximum time to wait for the HTTP response. Default: 10 seconds.</p>
-        {timeoutError && <p id="http-timeout-error" role="alert" className="mt-1 text-[10px] text-red-500">{timeoutError.message}</p>}
+        <p
+          id="http-timeout-help"
+          className="mt-1 text-[10px] text-[var(--text-tertiary)]"
+        >
+          Maximum time to wait for the HTTP response. Default: 10 seconds.
+        </p>
+        {timeoutError && (
+          <p
+            id="http-timeout-error"
+            role="alert"
+            className="mt-1 text-[10px] text-red-500"
+          >
+            {timeoutError.message}
+          </p>
+        )}
       </div>
       <div>
-        <VariableFieldLabel picker={pickerFor("headers")}>Additional headers</VariableFieldLabel>
+        <VariableFieldLabel picker={pickerFor("headers")}>
+          Additional headers
+        </VariableFieldLabel>
         <TextareaInput
           value={config.headers}
           onChange={(v) => onChange("headers", v)}
@@ -453,7 +1515,10 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
           mono
           variables
         />
-        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">One per line: Name: Value. Connection authentication is added separately.</p>
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+          One per line: Name: Value. Connection authentication is added
+          separately.
+        </p>
       </div>
       <div>
         <VariableFieldLabel picker={pickerFor("body")}>Body</VariableFieldLabel>
@@ -480,7 +1545,11 @@ function EmailConfig({ config, onChange, variableContext }) {
     setConnectionsError(false);
     try {
       const result = await listConnections();
-      setConnections(connectionRowsOf(result).filter((connection) => connection.provider === "gmail"));
+      setConnections(
+        connectionRowsOf(result).filter(
+          (connection) => connection.provider === "gmail",
+        ),
+      );
     } catch {
       setConnectionsError(true);
     } finally {
@@ -490,42 +1559,118 @@ function EmailConfig({ config, onChange, variableContext }) {
 
   useEffect(() => {
     let active = true;
-    listConnections().then((result) => {
-      if (active) setConnections(connectionRowsOf(result).filter((connection) => connection.provider === "gmail"));
-    }).catch(() => {
-      if (active) setConnectionsError(true);
-    }).finally(() => {
-      if (active) setConnectionsLoading(false);
-    });
-    return () => { active = false; };
+    listConnections()
+      .then((result) => {
+        if (active)
+          setConnections(
+            connectionRowsOf(result).filter(
+              (connection) => connection.provider === "gmail",
+            ),
+          );
+      })
+      .catch(() => {
+        if (active) setConnectionsError(true);
+      })
+      .finally(() => {
+        if (active) setConnectionsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const selectedGmail = connections.find((connection) => String(connection.id) === String(config.connection_id));
-  const pickerFor = (field) => <VariablePicker {...variableContext} onInsert={(expression) => onChange(field, `${config[field] || ""}${expression}`)} />;
+  const selectedGmail = connections.find(
+    (connection) => String(connection.id) === String(config.connection_id),
+  );
+  const pickerFor = (field) => (
+    <VariablePicker
+      {...variableContext}
+      onInsert={(expression) =>
+        onChange(field, `${config[field] || ""}${expression}`)
+      }
+    />
+  );
 
   return (
     <div className="space-y-3">
       <section className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Gmail account <span className="text-red-500" aria-hidden="true">*</span></label>
-          <Link href="/connections" className="text-[10px] font-medium text-[var(--accent)] hover:underline">＋ Add connection</Link>
+          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">
+            Gmail account{" "}
+            <span className="text-red-500" aria-hidden="true">
+              *
+            </span>
+          </label>
+          <Link
+            href="/connections"
+            className="text-[10px] font-medium text-[var(--accent)] hover:underline"
+          >
+            ＋ Add connection
+          </Link>
         </div>
         {connectionsLoading ? (
-          <div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]" aria-label="Loading Gmail accounts" />
+          <div
+            className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]"
+            aria-label="Loading Gmail accounts"
+          />
         ) : connectionsError ? (
-          <div className="flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2"><p role="alert" className="text-[10px] text-red-500">Unable to load Gmail accounts.</p><InspectorButton inspectionAction type="button" onClick={loadGmailConnections} className="text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Retry</InspectorButton></div>
+          <div className="flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2">
+            <p role="alert" className="text-[10px] text-red-500">
+              Unable to load Gmail accounts.
+            </p>
+            <InspectorButton
+              inspectionAction
+              type="button"
+              onClick={loadGmailConnections}
+              className="text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            >
+              Retry
+            </InspectorButton>
+          </div>
         ) : connections.length === 0 ? (
-          <Link href="/connections" className="flex h-9 items-center justify-between rounded-[6px] border border-dashed border-[var(--border-default)] px-3 text-[10px] text-[var(--text-tertiary)] hover:border-[var(--accent)]/50 hover:text-[var(--text-secondary)]"><span>No Gmail accounts connected</span><span className="font-medium text-[var(--accent)]">Connect one →</span></Link>
+          <Link
+            href="/connections"
+            className="flex h-9 items-center justify-between rounded-[6px] border border-dashed border-[var(--border-default)] px-3 text-[10px] text-[var(--text-tertiary)] hover:border-[var(--accent)]/50 hover:text-[var(--text-secondary)]"
+          >
+            <span>No Gmail accounts connected</span>
+            <span className="font-medium text-[var(--accent)]">
+              Connect one →
+            </span>
+          </Link>
         ) : (
           <>
-            <InspectorSelect aria-label="Gmail sending account (required)" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30"><option value="">Select a Gmail account</option>{connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.config?.email || connection.name}</option>)}</InspectorSelect>
-            {config.connection_id && !selectedGmail && <p className="text-[10px] text-amber-600 dark:text-amber-400">Gmail account unavailable. Select another one.</p>}
-            {selectedGmail && <p className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]">Connected · {selectedGmail.config?.email || selectedGmail.name}</p>}
+            <InspectorSelect
+              aria-label="Gmail sending account (required)"
+              value={config.connection_id ?? ""}
+              onChange={(event) =>
+                onChange("connection_id", event.target.value || undefined)
+              }
+              className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30"
+            >
+              <option value="">Select a Gmail account</option>
+              {connections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {connection.config?.email || connection.name}
+                </option>
+              ))}
+            </InspectorSelect>
+            {config.connection_id && !selectedGmail && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                Gmail account unavailable. Select another one.
+              </p>
+            )}
+            {selectedGmail && (
+              <p className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]">
+                Connected · {selectedGmail.config?.email || selectedGmail.name}
+              </p>
+            )}
           </>
         )}
       </section>
       <div>
-        <VariableFieldLabel picker={pickerFor("to")}>To Email</VariableFieldLabel>
+        <VariableFieldLabel picker={pickerFor("to")}>
+          To Email
+        </VariableFieldLabel>
         <TextInput
           value={config.to}
           onChange={(v) => onChange("to", v)}
@@ -533,7 +1678,9 @@ function EmailConfig({ config, onChange, variableContext }) {
         />
       </div>
       <div>
-        <VariableFieldLabel picker={pickerFor("subject")}>Subject</VariableFieldLabel>
+        <VariableFieldLabel picker={pickerFor("subject")}>
+          Subject
+        </VariableFieldLabel>
         <TextInput
           value={config.subject}
           onChange={(v) => onChange("subject", v)}
@@ -541,17 +1688,27 @@ function EmailConfig({ config, onChange, variableContext }) {
         />
       </div>
       <fieldset>
-        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Body Format</legend>
+        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+          Body Format
+        </legend>
         <div className="flex gap-2">
-          {[{ value: "plain", label: "Plain Text" }, { value: "html", label: "HTML" }].map(({ value, label }) => (
-            <label key={value} className={`flex flex-1 items-center gap-2 rounded-[6px] border px-2.5 py-2 text-[12px] text-[var(--text-primary)] ${isReadOnly ? "" : "cursor-pointer"} ${(config.body_format ?? "plain") === value ? "border-[var(--accent)] bg-[var(--accent)]/5" : "border-[var(--border-default)] bg-[var(--input-bg)]"}`}>
+          {[
+            { value: "plain", label: "Plain Text" },
+            { value: "html", label: "HTML" },
+          ].map(({ value, label }) => (
+            <label
+              key={value}
+              className={`flex flex-1 items-center gap-2 rounded-[6px] border px-2.5 py-2 text-[12px] text-[var(--text-primary)] ${isReadOnly ? "" : "cursor-pointer"} ${(config.body_format ?? "plain") === value ? "border-[var(--accent)] bg-[var(--accent)]/5" : "border-[var(--border-default)] bg-[var(--input-bg)]"}`}
+            >
               <input
                 type="radio"
                 name="email-body-format"
                 value={value}
                 checked={(config.body_format ?? "plain") === value}
                 disabled={isReadOnly}
-                onChange={() => { if (!isReadOnly) onChange("body_format", value); }}
+                onChange={() => {
+                  if (!isReadOnly) onChange("body_format", value);
+                }}
                 className="h-3.5 w-3.5 accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
               />
               {label}
@@ -560,7 +1717,9 @@ function EmailConfig({ config, onChange, variableContext }) {
         </div>
       </fieldset>
       <div>
-        <VariableFieldLabel picker={pickerFor("body")}>Message Body</VariableFieldLabel>
+        <VariableFieldLabel picker={pickerFor("body")}>
+          Message Body
+        </VariableFieldLabel>
         <TextareaInput
           value={config.body}
           onChange={(v) => onChange("body", v)}
@@ -584,7 +1743,11 @@ function RefundConfig({ config, onChange, variableContext }) {
     setConnectionsError(false);
     try {
       const result = await listConnections();
-      setConnections(connectionRowsOf(result).filter((connection) => ["mock_payment", "stripe"].includes(connection.provider)));
+      setConnections(
+        connectionRowsOf(result).filter((connection) =>
+          ["mock_payment", "stripe"].includes(connection.provider),
+        ),
+      );
     } catch {
       setConnectionsError(true);
     } finally {
@@ -604,7 +1767,8 @@ function RefundConfig({ config, onChange, variableContext }) {
         config: {},
       });
       const createdConnection = created?.connection ?? created?.data ?? created;
-      if (createdConnection?.id) onChange("connection_id", createdConnection.id);
+      if (createdConnection?.id)
+        onChange("connection_id", createdConnection.id);
       await loadPaymentConnections();
     } catch {
       setCreateConnectionError(true);
@@ -615,181 +1779,1053 @@ function RefundConfig({ config, onChange, variableContext }) {
 
   useEffect(() => {
     let active = true;
-    listConnections().then((result) => {
-      if (active) setConnections(connectionRowsOf(result).filter((connection) => ["mock_payment", "stripe"].includes(connection.provider)));
-    }).catch(() => {
-      if (active) setConnectionsError(true);
-    }).finally(() => {
-      if (active) setConnectionsLoading(false);
-    });
-    return () => { active = false; };
+    listConnections()
+      .then((result) => {
+        if (active)
+          setConnections(
+            connectionRowsOf(result).filter((connection) =>
+              ["mock_payment", "stripe"].includes(connection.provider),
+            ),
+          );
+      })
+      .catch(() => {
+        if (active) setConnectionsError(true);
+      })
+      .finally(() => {
+        if (active) setConnectionsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const selectedConnection = connections.find((connection) => String(connection.id) === String(config.connection_id));
-  const pickerFor = (field) => <VariablePicker {...variableContext} onInsert={(expression) => onChange(field, `${config[field] || ""}${expression}`)} />;
+  const selectedConnection = connections.find(
+    (connection) => String(connection.id) === String(config.connection_id),
+  );
+  const pickerFor = (field) => (
+    <VariablePicker
+      {...variableContext}
+      onInsert={(expression) =>
+        onChange(field, `${config[field] || ""}${expression}`)
+      }
+    />
+  );
 
   return (
     <div className="space-y-3">
       <section className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">Payment connection <span className="text-red-500" aria-hidden="true">*</span></label>
-          <span className="text-[9px] text-[var(--text-tertiary)]">Mock Payment · Stripe</span>
+          <label className="text-[11px] font-semibold text-[var(--text-secondary)]">
+            Payment connection{" "}
+            <span className="text-red-500" aria-hidden="true">
+              *
+            </span>
+          </label>
+          <span className="text-[9px] text-[var(--text-tertiary)]">
+            Mock Payment · Stripe
+          </span>
         </div>
         {connectionsLoading ? (
-          <div className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]" aria-label="Loading payment connections" />
+          <div
+            className="h-9 animate-pulse rounded-[6px] bg-[var(--elevated)]"
+            aria-label="Loading payment connections"
+          />
         ) : connectionsError ? (
-          <div className="flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2"><p role="alert" className="text-[10px] text-red-500">Unable to load payment connections.</p><InspectorButton inspectionAction type="button" onClick={loadPaymentConnections} className="text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Retry</InspectorButton></div>
+          <div className="flex items-center justify-between gap-2 rounded-[6px] border border-red-500/25 bg-red-500/5 px-2.5 py-2">
+            <p role="alert" className="text-[10px] text-red-500">
+              Unable to load payment connections.
+            </p>
+            <InspectorButton
+              inspectionAction
+              type="button"
+              onClick={loadPaymentConnections}
+              className="text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            >
+              Retry
+            </InspectorButton>
+          </div>
         ) : connections.length === 0 ? (
           <div className="space-y-2 rounded-[6px] border border-dashed border-[var(--border-default)] p-2.5">
-            <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Create a workspace payment connection, or connect Stripe from the Connections page.</p>
-            <InspectorButton type="button" onClick={createMockPaymentConnection} disabled={creatingConnection} className="h-8 w-full rounded-[5px] bg-[var(--accent)] px-2 text-[10px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60">{creatingConnection ? "Creating connection…" : "＋ Create mock payment connection"}</InspectorButton>
-            {createConnectionError && <p role="alert" className="text-[10px] text-red-500">Unable to create the payment connection. Try again.</p>}
+            <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
+              Create a workspace payment connection, or connect Stripe from the
+              Connections page.
+            </p>
+            <InspectorButton
+              type="button"
+              onClick={createMockPaymentConnection}
+              disabled={creatingConnection}
+              className="h-8 w-full rounded-[5px] bg-[var(--accent)] px-2 text-[10px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+            >
+              {creatingConnection
+                ? "Creating connection…"
+                : "＋ Create mock payment connection"}
+            </InspectorButton>
+            {createConnectionError && (
+              <p role="alert" className="text-[10px] text-red-500">
+                Unable to create the payment connection. Try again.
+              </p>
+            )}
           </div>
         ) : (
           <>
-            <InspectorSelect aria-label="Refund payment connection" value={config.connection_id ?? ""} onChange={(event) => onChange("connection_id", event.target.value || undefined)} className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30">
+            <InspectorSelect
+              aria-label="Refund payment connection"
+              value={config.connection_id ?? ""}
+              onChange={(event) =>
+                onChange("connection_id", event.target.value || undefined)
+              }
+              className="h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-2.5 text-[11px] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30"
+            >
               <option value="">Select a payment connection</option>
-              {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name} · {connection.provider === "stripe" ? "Stripe" : "Mock Payment"}</option>)}
+              {connections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {connection.name} ·{" "}
+                  {connection.provider === "stripe" ? "Stripe" : "Mock Payment"}
+                </option>
+              ))}
             </InspectorSelect>
-            {config.connection_id && !selectedConnection && <p className="text-[10px] text-amber-600 dark:text-amber-400">Payment connection unavailable. Select another one.</p>}
-            {selectedConnection && <p className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]">Connected · {selectedConnection.name}</p>}
+            {config.connection_id && !selectedConnection && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                Payment connection unavailable. Select another one.
+              </p>
+            )}
+            {selectedConnection && (
+              <p className="truncate pl-0.5 text-[9px] text-[var(--text-tertiary)]">
+                Connected · {selectedConnection.name}
+              </p>
+            )}
           </>
         )}
       </section>
       <div>
-        <VariableFieldLabel picker={pickerFor("payment_id")}>Payment ID</VariableFieldLabel>
-        <TextInput value={config.payment_id ?? config.charge_id ?? ""} onChange={(value) => onChange("payment_id", value)} variables mono />
+        <VariableFieldLabel picker={pickerFor("payment_id")}>
+          Payment ID
+        </VariableFieldLabel>
+        <TextInput
+          value={config.payment_id ?? config.charge_id ?? ""}
+          onChange={(value) => onChange("payment_id", value)}
+          variables
+          mono
+        />
       </div>
       <div>
-        <VariableFieldLabel picker={pickerFor("amount")}>Amount</VariableFieldLabel>
-        <TextInput value={config.amount ?? ""} onChange={(value) => onChange("amount", value)} variables mono />
-        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Enter the refund amount, or insert a value from a previous node.</p>
+        <VariableFieldLabel picker={pickerFor("amount")}>
+          Amount
+        </VariableFieldLabel>
+        <TextInput
+          value={config.amount ?? ""}
+          onChange={(value) => onChange("amount", value)}
+          variables
+          mono
+        />
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+          Enter the refund amount, or insert a value from a previous node.
+        </p>
       </div>
       <div>
-        <VariableFieldLabel picker={pickerFor("reason")}>Reason</VariableFieldLabel>
-        <TextareaInput value={config.reason ?? ""} onChange={(value) => onChange("reason", value)} rows={2} variables />
+        <VariableFieldLabel picker={pickerFor("reason")}>
+          Reason
+        </VariableFieldLabel>
+        <TextareaInput
+          value={config.reason ?? ""}
+          onChange={(value) => onChange("reason", value)}
+          rows={2}
+          variables
+        />
       </div>
     </div>
   );
 }
 
-function DecisionModels({ connectionId, active, value, onChange, isReadOnly, guidance = "Provider catalogs can include non-text models. Select a model that supports structured text generation; this list does not guarantee compatibility." }) {
+function DecisionModels({
+  connectionId,
+  active,
+  value,
+  onChange,
+  isReadOnly,
+  guidance = "Provider catalogs can include non-text models. Select a model that supports structured text generation; this list does not guarantee compatibility.",
+}) {
   const [result, setResult] = useState({ status: "loading", items: [] });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!connectionId || !active) return;
     let current = true;
-    listAIConnectionModels(connectionId).then((data) => {
-      if (!Array.isArray(data?.models)) throw new Error("Invalid model catalog");
-      if (current) setResult({ status: "ready", items: data.models });
-    }).catch((error) => { if (current) setResult({ status: "error", items: [], error: aiConnectionError(error) }); });
-    return () => { current = false; };
+    listAIConnectionModels(connectionId)
+      .then((data) => {
+        if (!Array.isArray(data?.models))
+          throw new Error("Invalid model catalog");
+        if (current) setResult({ status: "ready", items: data.models });
+      })
+      .catch((error) => {
+        if (current)
+          setResult({
+            status: "error",
+            items: [],
+            error: aiConnectionError(error),
+          });
+      });
+    return () => {
+      current = false;
+    };
   }, [connectionId, active, attempt]);
   const unavailable = value && !result.items.some((item) => item.id === value);
-  return <div className="space-y-1.5"><FieldLabel>Model</FieldLabel>
-    {connectionId && active && result.status === "loading" ? <div role="status" className="h-9 animate-pulse rounded-md bg-[var(--elevated)] motion-reduce:animate-none"><span className="sr-only">Loading models</span></div> : <InspectorSelect aria-label="AI model" value={value || ""} disabled={isReadOnly || !active || result.status !== "ready"} onChange={(event) => onChange("model", event.target.value)} className="h-9 w-full rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"><option value="">{active ? "Choose a model" : "Choose an active connection first"}</option>{unavailable && <option value={value}>{value} (saved selection)</option>}{result.items.map((model) => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}</InspectorSelect>}
-    {result.status === "error" && active && <p role="alert" className="text-[10px] text-red-500">{result.error} <InspectorButton inspectionAction type="button" onClick={() => { setResult({ status: "loading", items: [] }); setAttempt((current) => current + 1); }} className="underline">Retry</InspectorButton></p>}
-    {active && result.status === "ready" && !result.items.length && <p className="text-[10px] text-[var(--text-tertiary)]">No models were returned for this connection.</p>}
-    {active && result.status === "ready" && unavailable && <p role="status" className="text-[10px] text-amber-600 dark:text-amber-400">The saved model is not in this catalog. Its ID is preserved; verify its availability before running.</p>}
-    <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">{guidance}</p>
-  </div>;
+  return (
+    <div className="space-y-1.5">
+      <FieldLabel>Model</FieldLabel>
+      {connectionId && active && result.status === "loading" ? (
+        <div
+          role="status"
+          className="h-9 animate-pulse rounded-md bg-[var(--elevated)] motion-reduce:animate-none"
+        >
+          <span className="sr-only">Loading models</span>
+        </div>
+      ) : (
+        <InspectorSelect
+          aria-label="AI model"
+          value={value || ""}
+          disabled={isReadOnly || !active || result.status !== "ready"}
+          onChange={(event) => onChange("model", event.target.value)}
+          className="h-9 w-full rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"
+        >
+          <option value="">
+            {active ? "Choose a model" : "Choose an active connection first"}
+          </option>
+          {unavailable && (
+            <option value={value}>{value} (saved selection)</option>
+          )}
+          {result.items.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name || model.id}
+            </option>
+          ))}
+        </InspectorSelect>
+      )}
+      {result.status === "error" && active && (
+        <p role="alert" className="text-[10px] text-red-500">
+          {result.error}{" "}
+          <InspectorButton
+            inspectionAction
+            type="button"
+            onClick={() => {
+              setResult({ status: "loading", items: [] });
+              setAttempt((current) => current + 1);
+            }}
+            className="underline"
+          >
+            Retry
+          </InspectorButton>
+        </p>
+      )}
+      {active && result.status === "ready" && !result.items.length && (
+        <p className="text-[10px] text-[var(--text-tertiary)]">
+          No models were returned for this connection.
+        </p>
+      )}
+      {active && result.status === "ready" && unavailable && (
+        <p
+          role="status"
+          className="text-[10px] text-amber-600 dark:text-amber-400"
+        >
+          The saved model is not in this catalog. Its ID is preserved; verify
+          its availability before running.
+        </p>
+      )}
+      <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
+        {guidance}
+      </p>
+    </div>
+  );
 }
 
-function AIDecisionConfig({ config, onChange, onReplace, variableContext, isReadOnly }) {
-  const [connections, setConnections] = useState({ status: "loading", items: [] });
+function AIDecisionConfig({
+  config,
+  onChange,
+  onReplace,
+  variableContext,
+  isReadOnly,
+}) {
+  const [connections, setConnections] = useState({
+    status: "loading",
+    items: [],
+  });
   const [attempt, setAttempt] = useState(0);
   const [mappingError, setMappingError] = useState("");
   useEffect(() => {
     let current = true;
-    listAIConnections().then((items) => {
-      if (!Array.isArray(items)) throw new Error("Invalid connection list");
-      if (current) setConnections({ status: "ready", items });
-    }).catch((error) => { if (current) setConnections({ status: "error", items: [], error: aiConnectionError(error) }); });
-    return () => { current = false; };
+    listAIConnections()
+      .then((items) => {
+        if (!Array.isArray(items)) throw new Error("Invalid connection list");
+        if (current) setConnections({ status: "ready", items });
+      })
+      .catch((error) => {
+        if (current)
+          setConnections({
+            status: "error",
+            items: [],
+            error: aiConnectionError(error),
+          });
+      });
+    return () => {
+      current = false;
+    };
   }, [attempt]);
-  const selected = connections.items.find((item) => item.id === config.connection_id);
+  const selected = connections.items.find(
+    (item) => item.id === config.connection_id,
+  );
   const connectionActive = selected?.status === "active";
   const missing = config.connection_id && !selected;
-  const errors = [...validateNodeConfiguration("ai.decision", config), ...validateDecisionReferences(config, variableContext.nodes, variableContext.edges, variableContext.currentNode.id)];
-  const errorFor = (field) => errors.filter((error) => error.field === field).map((error, index) => <p key={index} role="alert" className="mt-1 text-[10px] leading-4 text-red-500">{error.message}</p>);
-  const mappings = config.input_mappings && typeof config.input_mappings === "object" && !Array.isArray(config.input_mappings) ? config.input_mappings : {};
-  const decisions = Array.isArray(config.allowed_decisions) ? config.allowed_decisions : [];
-  const legacy = Object.keys(config).filter((field) => !AI_DECISION_FIELDS.includes(field));
+  const errors = [
+    ...validateNodeConfiguration("ai.decision", config),
+    ...validateDecisionReferences(
+      config,
+      variableContext.nodes,
+      variableContext.edges,
+      variableContext.currentNode.id,
+    ),
+  ];
+  const errorFor = (field) =>
+    errors
+      .filter((error) => error.field === field)
+      .map((error, index) => (
+        <p
+          key={index}
+          role="alert"
+          className="mt-1 text-[10px] leading-4 text-red-500"
+        >
+          {error.message}
+        </p>
+      ));
+  const mappings =
+    config.input_mappings &&
+    typeof config.input_mappings === "object" &&
+    !Array.isArray(config.input_mappings)
+      ? config.input_mappings
+      : {};
+  const decisions = Array.isArray(config.allowed_decisions)
+    ? config.allowed_decisions
+    : [];
+  const legacy = Object.keys(config).filter(
+    (field) => !AI_DECISION_FIELDS.includes(field),
+  );
   const sectionClass = "space-y-3 border-t border-[var(--border-subtle)] pt-4";
-  const smallButton = "rounded-md border border-[var(--border-default)] px-2.5 py-1.5 text-[10px] font-medium text-[var(--text-secondary)] hover:bg-[var(--elevated)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] disabled:opacity-50";
+  const smallButton =
+    "rounded-md border border-[var(--border-default)] px-2.5 py-1.5 text-[10px] font-medium text-[var(--text-secondary)] hover:bg-[var(--elevated)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] disabled:opacity-50";
   const addInput = () => {
     let index = 1;
     while (Object.hasOwn(mappings, `input_${index}`)) index++;
     onChange("input_mappings", { ...mappings, [`input_${index}`]: "" });
   };
-  return <InspectorFieldset disabled={isReadOnly} className="space-y-4">
-    <p className="text-[11px] leading-5 text-[var(--text-secondary)]">Turn workflow data into a clear decision, with a reason your team can review.</p>
-    {legacy.length > 0 && <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"><p className="text-[11px] font-medium">Legacy configuration needs review</p><p className="text-[10px] leading-4 text-[var(--text-secondary)]">Unsupported fields: {legacy.join(", ")}. Upgrading copies the old prompt into instructions when instructions are empty, retains the model and supported values, and removes unsupported fields. Nothing changes until you choose Upgrade.</p>{typeof config.prompt === "string" && <details><summary className="cursor-pointer text-[10px]">Review saved prompt</summary><p className="mt-1 select-text whitespace-pre-wrap break-words text-[10px]">{config.prompt}</p></details>}<InspectorButton type="button" className={smallButton} onClick={() => onReplace(upgradeDecisionConfiguration(config))}>Upgrade configuration</InspectorButton></div>}
-    <section className="space-y-3">
-      <div className="flex items-center justify-between"><FieldLabel>AI Provider Connection</FieldLabel><Link href="/connections?section=ai" target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--accent)] hover:underline">Manage ↗</Link></div>
-      {connections.status === "loading" ? <div role="status" className="h-9 animate-pulse rounded-md bg-[var(--elevated)] motion-reduce:animate-none"><span className="sr-only">Loading AI connections</span></div> : <InspectorSelect aria-label="AI provider connection" value={config.connection_id || ""} disabled={isReadOnly || connections.status !== "ready"} onChange={(event) => onChange("connection_id", event.target.value)} className="h-9 w-full rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"><option value="">Choose a connection</option>{missing && <option value={config.connection_id} disabled>Unavailable: {config.connection_id}</option>}{connections.items.map((item) => <option key={item.id} value={item.id} disabled={item.status !== "active"}>{item.name} · {AI_PROVIDERS.find((provider) => provider.id === item.provider)?.name || item.provider}{item.status !== "active" ? " (inactive)" : ""}</option>)}</InspectorSelect>}
-      {connections.status === "error" && <p role="alert" className="text-[10px] text-red-500">{connections.error}</p>}
-      {connections.status !== "loading" && <InspectorButton inspectionAction type="button" onClick={() => { setConnections({ status: "loading", items: [] }); setAttempt((current) => current + 1); }} className="text-[10px] text-[var(--text-tertiary)] underline">{connections.status === "error" ? "Retry" : "Refresh connections"}</InspectorButton>}
-      {connections.status === "ready" && !connections.items.length && <p className="text-[10px] text-[var(--text-tertiary)]">No AI provider connections found. <Link href="/connections?section=ai" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] underline">Add a connection ↗</Link></p>}
-      {connections.status === "ready" && config.connection_id && !connectionActive && <p role="alert" className="text-[10px] text-amber-600 dark:text-amber-400">This connection is inactive or unavailable. The saved ID is preserved. Choose an active connection before publishing.</p>}
-      {errorFor("connection_id")}
-      <DecisionModels key={`${config.connection_id}:${connectionActive}`} connectionId={config.connection_id} active={connectionActive} value={config.model} onChange={onChange} isReadOnly={isReadOnly} />
-      {errorFor("model")}
-    </section>
-    <section className={sectionClass}><VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly {...variableContext} onInsert={(expression) => onChange("instructions", `${config.instructions || ""}${expression}`)} />}>AI Instructions</VariableFieldLabel><TextareaInput value={typeof config.instructions === "string" ? config.instructions : ""} onChange={(value) => onChange("instructions", value)} rows={6} variables aria-label="AI instructions" placeholder="Describe what to evaluate, how to choose a decision, and what to explain." /><div className="flex justify-between text-[10px] text-[var(--text-tertiary)]"><span>Required · Be specific about your criteria</span><span>{typeof config.instructions === "string" ? config.instructions.length.toLocaleString() : 0} / 10,000</span></div><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Use variables from the trigger or earlier steps. Their values are filled in when the workflow runs.</p>{errorFor("instructions")}</section>
-    <section className={sectionClass}><div className="flex items-center justify-between"><FieldLabel>Input Mappings</FieldLabel><InspectorButton type="button" className={smallButton} onClick={addInput}>＋ Add input</InspectorButton></div><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Name the data the AI should evaluate. Use text or an upstream variable; a whole-value variable can supply an object or array.</p>
-      {!Object.keys(mappings).length && <p className="rounded-md border border-dashed border-[var(--border-default)] p-3 text-[10px] text-[var(--text-tertiary)]">No inputs yet. Add data from the trigger or an earlier step.</p>}
-      {Object.entries(mappings).map(([name, value], index) => <div key={index} className="space-y-2 rounded-md border border-[var(--border-subtle)] bg-[var(--elevated)]/40 p-2.5"><div className="flex items-center gap-2"><InspectorInput aria-label={`Input ${index + 1} name`} value={name} onChange={(event) => { const next = renameDecisionInput(mappings, name, event.target.value); if (!next) { setMappingError("An input with this name already exists. Choose a unique name."); return; } setMappingError(""); onChange("input_mappings", next); }} className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" /><InspectorButton type="button" aria-label={`Remove input ${name || index + 1}`} onClick={() => { onChange("input_mappings", Object.fromEntries(Object.entries(mappings).filter(([key]) => key !== name))); setMappingError(""); }} className="px-1 text-[var(--text-tertiary)] hover:text-red-500">×</InspectorButton></div>
-        {typeof value === "string" ? <><div className="flex justify-end">{!isReadOnly && <VariablePicker upstreamOnly {...variableContext} onInsert={(expression) => onChange("input_mappings", { ...mappings, [name]: `${value}${expression}` })} />}</div><TextareaInput value={value} onChange={(next) => onChange("input_mappings", { ...mappings, [name]: next })} rows={2} variables mono aria-label={`Input ${name || index + 1} value`} /></> : <div className="space-y-2"><pre className="max-h-36 overflow-auto whitespace-pre-wrap break-all text-[10px]">{JSON.stringify(value, null, 2)}</pre><p className="text-[10px] text-[var(--text-tertiary)]">Structured value preserved. Converting to text changes its type.</p><InspectorButton type="button" className={smallButton} onClick={() => onChange("input_mappings", { ...mappings, [name]: JSON.stringify(value) })}>Edit as text</InspectorButton></div>}
-      </div>)}{mappingError && <p role="alert" className="text-[10px] text-red-500">{mappingError}</p>}{errorFor("input_mappings")}
-    </section>
-    <section className={sectionClass}><VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly ragOnly {...variableContext} onInsert={(expression) => onChange("rag_context", `${config.rag_context || ""}${expression}`)} />}>RAG Knowledge Context</VariableFieldLabel><TextareaInput value={typeof config.rag_context === "string" ? config.rag_context : ""} onChange={(value) => onChange("rag_context", value)} rows={3} mono variables aria-label="RAG Knowledge Context" /><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Optional reference knowledge, separate from your inputs. Insert context from an upstream RAG Search step. Maximum 2,000 characters.</p>{errorFor("rag_context")}</section>
-    <section className={sectionClass}><div className="flex items-center justify-between"><FieldLabel>Allowed Decisions</FieldLabel><span className="text-[10px] text-[var(--text-tertiary)]">{decisions.length} / 20</span></div><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Define 2–20 possible outcomes. Use letters, numbers, and underscores, starting with a letter.</p><div className="space-y-2">{decisions.map((decision, index) => <div key={index} className="flex items-center gap-2"><span className="w-4 text-[10px] tabular-nums text-[var(--text-disabled)]">{index + 1}</span><InspectorInput aria-label={`Decision ${index + 1}`} value={typeof decision === "string" ? decision : ""} maxLength={100} onChange={(event) => onChange("allowed_decisions", decisions.map((value, i) => i === index ? event.target.value.toUpperCase() : value))} onBlur={() => onChange("allowed_decisions", decisions.map((value) => typeof value === "string" ? value.trim().toUpperCase() : value))} className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" /><InspectorButton type="button" aria-label={`Remove decision ${index + 1}`} onClick={() => onChange("allowed_decisions", decisions.filter((_, i) => i !== index))} className="px-1 text-[var(--text-tertiary)] hover:text-red-500">×</InspectorButton></div>)}</div><InspectorButton type="button" disabled={decisions.length >= 20} className={smallButton} onClick={() => onChange("allowed_decisions", [...decisions, ""])}>＋ Add decision</InspectorButton>{errorFor("allowed_decisions")}<p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Connect a Condition node after this step and choose its decision output to route by outcome.</p></section>
-    <section className={sectionClass}><FieldLabel>Validation Failure Behavior</FieldLabel><div className="rounded-md border border-[var(--border-subtle)] bg-[var(--elevated)] p-3"><p className="text-[11px] font-medium">Stop workflow execution</p><p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">Invalid JSON, a disallowed decision, or malformed output fails this step. Downstream actions do not run.</p></div></section>
-    <details className={sectionClass}><summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)]">Output information</summary><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">The output fields are fixed. Fields inside data are flexible and are not individually validated.</p>{["decision", "reason", "data", "model", "input_tokens", "output_tokens"].map((field) => <code key={field} className="block select-text break-all rounded border border-[var(--border-subtle)] bg-[var(--input-bg)] p-2 text-[10px] text-[var(--text-secondary)]">{`{{nodes.${variableContext.currentNode.data.nodeId}.${field}}}`}</code>)}</details>
-  </InspectorFieldset>;
+  return (
+    <InspectorFieldset disabled={isReadOnly} className="space-y-4">
+      <p className="text-[11px] leading-5 text-[var(--text-secondary)]">
+        Turn workflow data into a clear decision, with a reason your team can
+        review.
+      </p>
+      {legacy.length > 0 && (
+        <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+          <p className="text-[11px] font-medium">
+            Legacy configuration needs review
+          </p>
+          <p className="text-[10px] leading-4 text-[var(--text-secondary)]">
+            Unsupported fields: {legacy.join(", ")}. Upgrading copies the old
+            prompt into instructions when instructions are empty, retains the
+            model and supported values, and removes unsupported fields. Nothing
+            changes until you choose Upgrade.
+          </p>
+          {typeof config.prompt === "string" && (
+            <details>
+              <summary className="cursor-pointer text-[10px]">
+                Review saved prompt
+              </summary>
+              <p className="mt-1 select-text whitespace-pre-wrap break-words text-[10px]">
+                {config.prompt}
+              </p>
+            </details>
+          )}
+          <InspectorButton
+            type="button"
+            className={smallButton}
+            onClick={() => onReplace(upgradeDecisionConfiguration(config))}
+          >
+            Upgrade configuration
+          </InspectorButton>
+        </div>
+      )}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <FieldLabel>AI Provider Connection</FieldLabel>
+          <Link
+            href="/connections?section=ai"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-[var(--accent)] hover:underline"
+          >
+            Manage ↗
+          </Link>
+        </div>
+        {connections.status === "loading" ? (
+          <div
+            role="status"
+            className="h-9 animate-pulse rounded-md bg-[var(--elevated)] motion-reduce:animate-none"
+          >
+            <span className="sr-only">Loading AI connections</span>
+          </div>
+        ) : (
+          <InspectorSelect
+            aria-label="AI provider connection"
+            value={config.connection_id || ""}
+            disabled={isReadOnly || connections.status !== "ready"}
+            onChange={(event) => onChange("connection_id", event.target.value)}
+            className="h-9 w-full rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"
+          >
+            <option value="">Choose a connection</option>
+            {missing && (
+              <option value={config.connection_id} disabled>
+                Unavailable: {config.connection_id}
+              </option>
+            )}
+            {connections.items.map((item) => (
+              <option
+                key={item.id}
+                value={item.id}
+                disabled={item.status !== "active"}
+              >
+                {item.name} ·{" "}
+                {AI_PROVIDERS.find((provider) => provider.id === item.provider)
+                  ?.name || item.provider}
+                {item.status !== "active" ? " (inactive)" : ""}
+              </option>
+            ))}
+          </InspectorSelect>
+        )}
+        {connections.status === "error" && (
+          <p role="alert" className="text-[10px] text-red-500">
+            {connections.error}
+          </p>
+        )}
+        {connections.status !== "loading" && (
+          <InspectorButton
+            inspectionAction
+            type="button"
+            onClick={() => {
+              setConnections({ status: "loading", items: [] });
+              setAttempt((current) => current + 1);
+            }}
+            className="text-[10px] text-[var(--text-tertiary)] underline"
+          >
+            {connections.status === "error" ? "Retry" : "Refresh connections"}
+          </InspectorButton>
+        )}
+        {connections.status === "ready" && !connections.items.length && (
+          <p className="text-[10px] text-[var(--text-tertiary)]">
+            No AI provider connections found.{" "}
+            <Link
+              href="/connections?section=ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--accent)] underline"
+            >
+              Add a connection ↗
+            </Link>
+          </p>
+        )}
+        {connections.status === "ready" &&
+          config.connection_id &&
+          !connectionActive && (
+            <p
+              role="alert"
+              className="text-[10px] text-amber-600 dark:text-amber-400"
+            >
+              This connection is inactive or unavailable. The saved ID is
+              preserved. Choose an active connection before publishing.
+            </p>
+          )}
+        {errorFor("connection_id")}
+        <DecisionModels
+          key={`${config.connection_id}:${connectionActive}`}
+          connectionId={config.connection_id}
+          active={connectionActive}
+          value={config.model}
+          onChange={onChange}
+          isReadOnly={isReadOnly}
+        />
+        {errorFor("model")}
+      </section>
+      <section className={sectionClass}>
+        <VariableFieldLabel
+          picker={
+            !isReadOnly && (
+              <VariablePicker
+                upstreamOnly
+                {...variableContext}
+                onInsert={(expression) =>
+                  onChange(
+                    "instructions",
+                    `${config.instructions || ""}${expression}`,
+                  )
+                }
+              />
+            )
+          }
+        >
+          AI Instructions
+        </VariableFieldLabel>
+        <TextareaInput
+          value={
+            typeof config.instructions === "string" ? config.instructions : ""
+          }
+          onChange={(value) => onChange("instructions", value)}
+          rows={6}
+          variables
+          aria-label="AI instructions"
+          placeholder="Describe what to evaluate, how to choose a decision, and what to explain."
+        />
+        <div className="flex justify-between text-[10px] text-[var(--text-tertiary)]">
+          <span>Required · Be specific about your criteria</span>
+          <span>
+            {typeof config.instructions === "string"
+              ? config.instructions.length.toLocaleString()
+              : 0}{" "}
+            / 10,000
+          </span>
+        </div>
+        <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
+          Use variables from the trigger or earlier steps. Their values are
+          filled in when the workflow runs.
+        </p>
+        {errorFor("instructions")}
+      </section>
+      <section className={sectionClass}>
+        <div className="flex items-center justify-between">
+          <FieldLabel>Input Mappings</FieldLabel>
+          <InspectorButton
+            type="button"
+            className={smallButton}
+            onClick={addInput}
+          >
+            ＋ Add input
+          </InspectorButton>
+        </div>
+        <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
+          Name the data the AI should evaluate. Use text or an upstream
+          variable; a whole-value variable can supply an object or array.
+        </p>
+        {!Object.keys(mappings).length && (
+          <p className="rounded-md border border-dashed border-[var(--border-default)] p-3 text-[10px] text-[var(--text-tertiary)]">
+            No inputs yet. Add data from the trigger or an earlier step.
+          </p>
+        )}
+        {Object.entries(mappings).map(([name, value], index) => (
+          <div
+            key={index}
+            className="space-y-2 rounded-md border border-[var(--border-subtle)] bg-[var(--elevated)]/40 p-2.5"
+          >
+            <div className="flex items-center gap-2">
+              <InspectorInput
+                aria-label={`Input ${index + 1} name`}
+                value={name}
+                onChange={(event) => {
+                  const next = renameDecisionInput(
+                    mappings,
+                    name,
+                    event.target.value,
+                  );
+                  if (!next) {
+                    setMappingError(
+                      "An input with this name already exists. Choose a unique name.",
+                    );
+                    return;
+                  }
+                  setMappingError("");
+                  onChange("input_mappings", next);
+                }}
+                className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              />
+              <InspectorButton
+                type="button"
+                aria-label={`Remove input ${name || index + 1}`}
+                onClick={() => {
+                  onChange(
+                    "input_mappings",
+                    Object.fromEntries(
+                      Object.entries(mappings).filter(([key]) => key !== name),
+                    ),
+                  );
+                  setMappingError("");
+                }}
+                className="px-1 text-[var(--text-tertiary)] hover:text-red-500"
+              >
+                ×
+              </InspectorButton>
+            </div>
+            {typeof value === "string" ? (
+              <>
+                <div className="flex justify-end">
+                  {!isReadOnly && (
+                    <VariablePicker
+                      upstreamOnly
+                      {...variableContext}
+                      onInsert={(expression) =>
+                        onChange("input_mappings", {
+                          ...mappings,
+                          [name]: `${value}${expression}`,
+                        })
+                      }
+                    />
+                  )}
+                </div>
+                <TextareaInput
+                  value={value}
+                  onChange={(next) =>
+                    onChange("input_mappings", { ...mappings, [name]: next })
+                  }
+                  rows={2}
+                  variables
+                  mono
+                  aria-label={`Input ${name || index + 1} value`}
+                />
+              </>
+            ) : (
+              <div className="space-y-2">
+                <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-all text-[10px]">
+                  {JSON.stringify(value, null, 2)}
+                </pre>
+                <p className="text-[10px] text-[var(--text-tertiary)]">
+                  Structured value preserved. Converting to text changes its
+                  type.
+                </p>
+                <InspectorButton
+                  type="button"
+                  className={smallButton}
+                  onClick={() =>
+                    onChange("input_mappings", {
+                      ...mappings,
+                      [name]: JSON.stringify(value),
+                    })
+                  }
+                >
+                  Edit as text
+                </InspectorButton>
+              </div>
+            )}
+          </div>
+        ))}
+        {mappingError && (
+          <p role="alert" className="text-[10px] text-red-500">
+            {mappingError}
+          </p>
+        )}
+        {errorFor("input_mappings")}
+      </section>
+      <section className={sectionClass}>
+        <VariableFieldLabel
+          picker={
+            !isReadOnly && (
+              <VariablePicker
+                upstreamOnly
+                ragOnly
+                {...variableContext}
+                onInsert={(expression) =>
+                  onChange(
+                    "rag_context",
+                    `${config.rag_context || ""}${expression}`,
+                  )
+                }
+              />
+            )
+          }
+        >
+          RAG Knowledge Context
+        </VariableFieldLabel>
+        <TextareaInput
+          value={
+            typeof config.rag_context === "string" ? config.rag_context : ""
+          }
+          onChange={(value) => onChange("rag_context", value)}
+          rows={3}
+          mono
+          variables
+          aria-label="RAG Knowledge Context"
+        />
+        <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
+          Optional reference knowledge, separate from your inputs. Insert
+          context from an upstream RAG Search step. Maximum 2,000 characters.
+        </p>
+        {errorFor("rag_context")}
+      </section>
+      <section className={sectionClass}>
+        <div className="flex items-center justify-between">
+          <FieldLabel>Allowed Decisions</FieldLabel>
+          <span className="text-[10px] text-[var(--text-tertiary)]">
+            {decisions.length} / 20
+          </span>
+        </div>
+        <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
+          Define 2–20 possible outcomes. Use letters, numbers, and underscores,
+          starting with a letter.
+        </p>
+        <div className="space-y-2">
+          {decisions.map((decision, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <span className="w-4 text-[10px] tabular-nums text-[var(--text-disabled)]">
+                {index + 1}
+              </span>
+              <InspectorInput
+                aria-label={`Decision ${index + 1}`}
+                value={typeof decision === "string" ? decision : ""}
+                maxLength={100}
+                onChange={(event) =>
+                  onChange(
+                    "allowed_decisions",
+                    decisions.map((value, i) =>
+                      i === index ? event.target.value.toUpperCase() : value,
+                    ),
+                  )
+                }
+                onBlur={() =>
+                  onChange(
+                    "allowed_decisions",
+                    decisions.map((value) =>
+                      typeof value === "string"
+                        ? value.trim().toUpperCase()
+                        : value,
+                    ),
+                  )
+                }
+                className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              />
+              <InspectorButton
+                type="button"
+                aria-label={`Remove decision ${index + 1}`}
+                onClick={() =>
+                  onChange(
+                    "allowed_decisions",
+                    decisions.filter((_, i) => i !== index),
+                  )
+                }
+                className="px-1 text-[var(--text-tertiary)] hover:text-red-500"
+              >
+                ×
+              </InspectorButton>
+            </div>
+          ))}
+        </div>
+        <InspectorButton
+          type="button"
+          disabled={decisions.length >= 20}
+          className={smallButton}
+          onClick={() => onChange("allowed_decisions", [...decisions, ""])}
+        >
+          ＋ Add decision
+        </InspectorButton>
+        {errorFor("allowed_decisions")}
+        <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
+          Connect a Condition node after this step and choose its decision
+          output to route by outcome.
+        </p>
+      </section>
+      <section className={sectionClass}>
+        <FieldLabel>Validation Failure Behavior</FieldLabel>
+        <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--elevated)] p-3">
+          <p className="text-[11px] font-medium">Stop workflow execution</p>
+          <p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">
+            Invalid JSON, a disallowed decision, or malformed output fails this
+            step. Downstream actions do not run.
+          </p>
+        </div>
+      </section>
+      <details className={sectionClass}>
+        <summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)]">
+          Output information
+        </summary>
+        <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
+          The output fields are fixed. Fields inside data are flexible and are
+          not individually validated.
+        </p>
+        {[
+          "decision",
+          "reason",
+          "data",
+          "model",
+          "input_tokens",
+          "output_tokens",
+        ].map((field) => (
+          <code
+            key={field}
+            className="block select-text break-all rounded border border-[var(--border-subtle)] bg-[var(--input-bg)] p-2 text-[10px] text-[var(--text-secondary)]"
+          >{`{{nodes.${variableContext.currentNode.data.nodeId}.${field}}}`}</code>
+        ))}
+      </details>
+    </InspectorFieldset>
+  );
 }
 
 function AIConfig({ config, onChange, variableContext, isReadOnly }) {
-  const [connections, setConnections] = useState({ status: "loading", items: [] });
+  const [connections, setConnections] = useState({
+    status: "loading",
+    items: [],
+  });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let current = true;
-    listAIConnections().then((items) => {
-      if (!Array.isArray(items)) throw new Error("Invalid connection list");
-      if (current) setConnections({ status: "ready", items });
-    }).catch((error) => { if (current) setConnections({ status: "error", items: [], error: aiConnectionError(error) }); });
-    return () => { current = false; };
+    listAIConnections()
+      .then((items) => {
+        if (!Array.isArray(items)) throw new Error("Invalid connection list");
+        if (current) setConnections({ status: "ready", items });
+      })
+      .catch((error) => {
+        if (current)
+          setConnections({
+            status: "error",
+            items: [],
+            error: aiConnectionError(error),
+          });
+      });
+    return () => {
+      current = false;
+    };
   }, [attempt]);
-  const selected = connections.items.find((item) => item.id === config.connection_id);
+  const selected = connections.items.find(
+    (item) => item.id === config.connection_id,
+  );
   const active = selected?.status === "active";
   const missing = config.connection_id && !selected;
-  const errors = [...validateNodeConfiguration("ai.generate", config), ...validateGenerateReferences(config, variableContext.nodes, variableContext.edges, variableContext.currentNode.id)];
-  const errorFor = (field) => errors.filter((error) => error.field === field).map((error, index) => <p key={index} role="alert" className="mt-1 text-[10px] leading-4 text-red-500">{error.message}</p>);
+  const errors = [
+    ...validateNodeConfiguration("ai.generate", config),
+    ...validateGenerateReferences(
+      config,
+      variableContext.nodes,
+      variableContext.edges,
+      variableContext.currentNode.id,
+    ),
+  ];
+  const errorFor = (field) =>
+    errors
+      .filter((error) => error.field === field)
+      .map((error, index) => (
+        <p
+          key={index}
+          role="alert"
+          className="mt-1 text-[10px] leading-4 text-red-500"
+        >
+          {error.message}
+        </p>
+      ));
   const sectionClass = "space-y-3 border-t border-[var(--border-subtle)] pt-4";
-  const nodeId = variableContext.currentNode.data?.nodeId || variableContext.currentNode.id;
-  return <InspectorFieldset disabled={isReadOnly} className="space-y-4">
-    <p className="text-[11px] leading-5 text-[var(--text-secondary)]">Generate text from your workflow data with a connected AI provider.</p>
-    <section className="space-y-3">
-      <div className="flex items-center justify-between"><FieldLabel>AI Provider Connection</FieldLabel><Link href="/connections?section=ai" target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--accent)] hover:underline">Manage ↗</Link></div>
-      {connections.status === "loading" ? <div role="status" className="h-9 animate-pulse rounded-md bg-[var(--elevated)] motion-reduce:animate-none"><span className="sr-only">Loading AI connections</span></div> : <InspectorSelect aria-label="AI provider connection" value={config.connection_id || ""} disabled={isReadOnly || connections.status !== "ready"} onChange={(event) => onChange({ connection_id: event.target.value, model: "" })} className="h-9 w-full rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"><option value="">Choose a connection</option>{missing && <option value={config.connection_id} disabled>Unavailable: {config.connection_id}</option>}{connections.items.map((item) => <option key={item.id} value={item.id} disabled={item.status !== "active"}>{item.name} · {AI_PROVIDERS.find((provider) => provider.id === item.provider)?.name || item.provider}{item.status !== "active" ? " (inactive)" : ""}</option>)}</InspectorSelect>}
-      {connections.status === "error" && <p role="alert" className="text-[10px] text-red-500">{connections.error}</p>}
-      {connections.status !== "loading" && <InspectorButton inspectionAction type="button" onClick={() => { setConnections({ status: "loading", items: [] }); setAttempt((current) => current + 1); }} className="text-[10px] text-[var(--text-tertiary)] underline">{connections.status === "error" ? "Retry" : "Refresh connections"}</InspectorButton>}
-      {connections.status === "ready" && !connections.items.length && <p className="text-[10px] text-[var(--text-tertiary)]">No AI provider connections found. <Link href="/connections?section=ai" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] underline">Add a connection ↗</Link></p>}
-      {connections.status === "ready" && config.connection_id && !active && <p role="alert" className="text-[10px] text-amber-600 dark:text-amber-400">This connection is inactive or unavailable. Its saved ID is preserved; choose an active connection before publishing.</p>}
-      {errorFor("connection_id")}
-      <DecisionModels key={`${config.connection_id}:${active}`} connectionId={config.connection_id} active={active} value={config.model} onChange={onChange} isReadOnly={isReadOnly} guidance="Choose a model that supports text generation. Catalog availability can change." />
-      {errorFor("model")}
-    </section>
-    <section className={sectionClass}><FieldLabel>Instructions</FieldLabel><TextareaInput value={typeof config.instructions === "string" ? config.instructions : ""} onChange={(value) => onChange("instructions", value)} rows={5} aria-label="AI Generate instructions" placeholder="Write a helpful, concise response." /><p className="text-[10px] text-[var(--text-tertiary)]">Optional · Up to 10,000 characters.</p>{errorFor("instructions")}</section>
-    <section className={sectionClass}><VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly {...variableContext} onInsert={(expression) => onChange("prompt", `${config.prompt || ""}${expression}`)} />}>Prompt</VariableFieldLabel><TextareaInput value={typeof config.prompt === "string" ? config.prompt : ""} onChange={(value) => onChange("prompt", value)} rows={5} variables mono aria-label="AI Generate prompt" placeholder="Write a response to {{trigger.data.message}}" /><p className="text-[10px] text-[var(--text-tertiary)]">Required · Up to 10,000 characters. Use variables from the trigger or earlier nodes.</p>{errorFor("prompt")}</section>
-    <section className={sectionClass}><VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly ragOnly {...variableContext} onInsert={(expression) => onChange("rag_context", `${config.rag_context || ""}${expression}`)} />}>RAG Knowledge Context</VariableFieldLabel><TextareaInput value={typeof config.rag_context === "string" ? config.rag_context : ""} onChange={(value) => onChange("rag_context", value)} rows={3} variables mono aria-label="AI Generate RAG Knowledge Context" /><p className="text-[10px] leading-4 text-[var(--text-tertiary)]">Optional reference knowledge from an upstream RAG Search node. Up to 2,000 characters.</p>{errorFor("rag_context")}</section>
-    <details className={sectionClass}><summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)]">Output information</summary>{["content", "model", "input_tokens", "output_tokens"].map((field) => <code key={field} className="block select-text break-all rounded border border-[var(--border-subtle)] bg-[var(--input-bg)] p-2 text-[10px] text-[var(--text-secondary)]">{`{{nodes.${nodeId}.${field}}}`}</code>)}</details>
-    {errorFor("legacy")}
-  </InspectorFieldset>;
+  const nodeId =
+    variableContext.currentNode.data?.nodeId || variableContext.currentNode.id;
+  return (
+    <InspectorFieldset disabled={isReadOnly} className="space-y-4">
+      <p className="text-[11px] leading-5 text-[var(--text-secondary)]">
+        Generate text from your workflow data with a connected AI provider.
+      </p>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <FieldLabel>AI Provider Connection</FieldLabel>
+          <Link
+            href="/connections?section=ai"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-[var(--accent)] hover:underline"
+          >
+            Manage ↗
+          </Link>
+        </div>
+        {connections.status === "loading" ? (
+          <div
+            role="status"
+            className="h-9 animate-pulse rounded-md bg-[var(--elevated)] motion-reduce:animate-none"
+          >
+            <span className="sr-only">Loading AI connections</span>
+          </div>
+        ) : (
+          <InspectorSelect
+            aria-label="AI provider connection"
+            value={config.connection_id || ""}
+            disabled={isReadOnly || connections.status !== "ready"}
+            onChange={(event) =>
+              onChange({ connection_id: event.target.value, model: "" })
+            }
+            className="h-9 w-full rounded-md border border-[var(--border-default)] bg-[var(--input-bg)] px-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"
+          >
+            <option value="">Choose a connection</option>
+            {missing && (
+              <option value={config.connection_id} disabled>
+                Unavailable: {config.connection_id}
+              </option>
+            )}
+            {connections.items.map((item) => (
+              <option
+                key={item.id}
+                value={item.id}
+                disabled={item.status !== "active"}
+              >
+                {item.name} ·{" "}
+                {AI_PROVIDERS.find((provider) => provider.id === item.provider)
+                  ?.name || item.provider}
+                {item.status !== "active" ? " (inactive)" : ""}
+              </option>
+            ))}
+          </InspectorSelect>
+        )}
+        {connections.status === "error" && (
+          <p role="alert" className="text-[10px] text-red-500">
+            {connections.error}
+          </p>
+        )}
+        {connections.status !== "loading" && (
+          <InspectorButton
+            inspectionAction
+            type="button"
+            onClick={() => {
+              setConnections({ status: "loading", items: [] });
+              setAttempt((current) => current + 1);
+            }}
+            className="text-[10px] text-[var(--text-tertiary)] underline"
+          >
+            {connections.status === "error" ? "Retry" : "Refresh connections"}
+          </InspectorButton>
+        )}
+        {connections.status === "ready" && !connections.items.length && (
+          <p className="text-[10px] text-[var(--text-tertiary)]">
+            No AI provider connections found.{" "}
+            <Link
+              href="/connections?section=ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--accent)] underline"
+            >
+              Add a connection ↗
+            </Link>
+          </p>
+        )}
+        {connections.status === "ready" && config.connection_id && !active && (
+          <p
+            role="alert"
+            className="text-[10px] text-amber-600 dark:text-amber-400"
+          >
+            This connection is inactive or unavailable. Its saved ID is
+            preserved; choose an active connection before publishing.
+          </p>
+        )}
+        {errorFor("connection_id")}
+        <DecisionModels
+          key={`${config.connection_id}:${active}`}
+          connectionId={config.connection_id}
+          active={active}
+          value={config.model}
+          onChange={onChange}
+          isReadOnly={isReadOnly}
+          guidance="Choose a model that supports text generation. Catalog availability can change."
+        />
+        {errorFor("model")}
+      </section>
+      <section className={sectionClass}>
+        <FieldLabel>Instructions</FieldLabel>
+        <TextareaInput
+          value={
+            typeof config.instructions === "string" ? config.instructions : ""
+          }
+          onChange={(value) => onChange("instructions", value)}
+          rows={5}
+          aria-label="AI Generate instructions"
+          placeholder="Write a helpful, concise response."
+        />
+        <p className="text-[10px] text-[var(--text-tertiary)]">
+          Optional · Up to 10,000 characters.
+        </p>
+        {errorFor("instructions")}
+      </section>
+      <section className={sectionClass}>
+        <VariableFieldLabel
+          picker={
+            !isReadOnly && (
+              <VariablePicker
+                upstreamOnly
+                {...variableContext}
+                onInsert={(expression) =>
+                  onChange("prompt", `${config.prompt || ""}${expression}`)
+                }
+              />
+            )
+          }
+        >
+          Prompt
+        </VariableFieldLabel>
+        <TextareaInput
+          value={typeof config.prompt === "string" ? config.prompt : ""}
+          onChange={(value) => onChange("prompt", value)}
+          rows={5}
+          variables
+          mono
+          aria-label="AI Generate prompt"
+          placeholder="Write a response to {{trigger.data.message}}"
+        />
+        <p className="text-[10px] text-[var(--text-tertiary)]">
+          Required · Up to 10,000 characters. Use variables from the trigger or
+          earlier nodes.
+        </p>
+        {errorFor("prompt")}
+      </section>
+      <section className={sectionClass}>
+        <VariableFieldLabel
+          picker={
+            !isReadOnly && (
+              <VariablePicker
+                upstreamOnly
+                ragOnly
+                {...variableContext}
+                onInsert={(expression) =>
+                  onChange(
+                    "rag_context",
+                    `${config.rag_context || ""}${expression}`,
+                  )
+                }
+              />
+            )
+          }
+        >
+          RAG Knowledge Context
+        </VariableFieldLabel>
+        <TextareaInput
+          value={
+            typeof config.rag_context === "string" ? config.rag_context : ""
+          }
+          onChange={(value) => onChange("rag_context", value)}
+          rows={3}
+          variables
+          mono
+          aria-label="AI Generate RAG Knowledge Context"
+        />
+        <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
+          Optional reference knowledge from an upstream RAG Search node. Up to
+          2,000 characters.
+        </p>
+        {errorFor("rag_context")}
+      </section>
+      <details className={sectionClass}>
+        <summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)]">
+          Output information
+        </summary>
+        {["content", "model", "input_tokens", "output_tokens"].map((field) => (
+          <code
+            key={field}
+            className="block select-text break-all rounded border border-[var(--border-subtle)] bg-[var(--input-bg)] p-2 text-[10px] text-[var(--text-secondary)]"
+          >{`{{nodes.${nodeId}.${field}}}`}</code>
+        ))}
+      </details>
+      {errorFor("legacy")}
+    </InspectorFieldset>
+  );
 }
 
-function RAGConfig({ config, onChange, variableContext, knowledgeBaseCacheRef, isReadOnly }) {
+function RAGConfig({
+  config,
+  onChange,
+  variableContext,
+  knowledgeBaseCacheRef,
+  isReadOnly,
+}) {
   const [knowledgeBases, setKnowledgeBases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -797,109 +2833,405 @@ function RAGConfig({ config, onChange, variableContext, knowledgeBaseCacheRef, i
   useEffect(() => {
     let active = true;
     if (!knowledgeBaseCacheRef.current) {
-      knowledgeBaseCacheRef.current = listKnowledgeBases().then((items) => {
-        if (!Array.isArray(items)) throw new Error("Invalid knowledge base list");
-        return items;
-      }).catch((error) => { knowledgeBaseCacheRef.current = null; throw error; });
+      knowledgeBaseCacheRef.current = listKnowledgeBases()
+        .then((items) => {
+          if (!Array.isArray(items))
+            throw new Error("Invalid knowledge base list");
+          return items;
+        })
+        .catch((error) => {
+          knowledgeBaseCacheRef.current = null;
+          throw error;
+        });
     }
-    knowledgeBaseCacheRef.current.then((items) => { if (active) setKnowledgeBases(items); })
-      .catch(() => { if (active) setLoadError(true); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    knowledgeBaseCacheRef.current
+      .then((items) => {
+        if (active) setKnowledgeBases(items);
+      })
+      .catch(() => {
+        if (active) setLoadError(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [knowledgeBaseCacheRef, attempt]);
 
   const selectedId = ragKnowledgeBaseId(config);
   const selectedValue = typeof selectedId === "string" ? selectedId : "";
-  const missing = Boolean(selectedValue) && !knowledgeBases.some((item) => item.id === selectedValue);
-  const errors = Object.fromEntries(validateNodeConfiguration("ai.rag_search", config).map((error) => [error.field, error.message]));
-  if (!loading && !loadError && missing) errors.knowledge_base_id ||= "This knowledge base is unavailable. Choose another knowledge base.";
-  const errorFor = (field) => errors[field] && <p id={`rag-${field}-error`} role="alert" className="mt-1 text-[10px] text-red-500">{errors[field]}</p>;
-  const accessibility = (field, label) => ({ "aria-label": label, "aria-invalid": Boolean(errors[field]), "aria-describedby": errors[field] ? `rag-${field}-error` : undefined });
-  const options = [{ value: "", label: "Choose a knowledge base" }, ...knowledgeBases.map((item) => ({ value: item.id, label: item.name }))];
-  if (missing) options.push({ value: selectedValue, label: `${loading || loadError ? "Saved selection" : "Unavailable"}: ${selectedValue}` });
+  const missing =
+    Boolean(selectedValue) &&
+    !knowledgeBases.some((item) => item.id === selectedValue);
+  const errors = Object.fromEntries(
+    validateNodeConfiguration("ai.rag_search", config).map((error) => [
+      error.field,
+      error.message,
+    ]),
+  );
+  if (!loading && !loadError && missing)
+    errors.knowledge_base_id ||=
+      "This knowledge base is unavailable. Choose another knowledge base.";
+  const errorFor = (field) =>
+    errors[field] && (
+      <p
+        id={`rag-${field}-error`}
+        role="alert"
+        className="mt-1 text-[10px] text-red-500"
+      >
+        {errors[field]}
+      </p>
+    );
+  const accessibility = (field, label) => ({
+    "aria-label": label,
+    "aria-invalid": Boolean(errors[field]),
+    "aria-describedby": errors[field] ? `rag-${field}-error` : undefined,
+  });
+  const options = [
+    { value: "", label: "Choose a knowledge base" },
+    ...knowledgeBases.map((item) => ({ value: item.id, label: item.name })),
+  ];
+  if (missing)
+    options.push({
+      value: selectedValue,
+      label: `${loading || loadError ? "Saved selection" : "Unavailable"}: ${selectedValue}`,
+    });
   return (
     <div className="space-y-3">
-      <p className="text-[11px] leading-4 text-[var(--text-tertiary)]">Retrieve relevant knowledge from uploaded company documents.</p>
+      <p className="text-[11px] leading-4 text-[var(--text-tertiary)]">
+        Retrieve relevant knowledge from uploaded company documents.
+      </p>
       <div>
         <FieldLabel>Knowledge Base</FieldLabel>
-        <SelectInput value={selectedValue} onChange={(value) => onChange("knowledge_base_id", value)} options={options} disabled={isReadOnly || loading || loadError} {...accessibility("knowledge_base_id", "Knowledge base")} />
-        {loading && <p role="status" className="mt-1 text-[10px] text-[var(--text-tertiary)]">Loading knowledge bases…</p>}
-        {loadError && <div role="alert" className="mt-1 text-[10px] text-red-500">Unable to load knowledge bases. Your selection is preserved. <InspectorButton inspectionAction type="button" className="underline focus-visible:outline" onClick={() => { knowledgeBaseCacheRef.current = null; setLoading(true); setLoadError(false); setAttempt((value) => value + 1); }}>Retry</InspectorButton></div>}
-        {!loading && !loadError && knowledgeBases.length === 0 && <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">Create a knowledge base and upload documents in <Link href="/dashboard/knowledge-bases" className="text-[var(--accent)] underline">Knowledge Bases</Link>.</p>}
+        <SelectInput
+          value={selectedValue}
+          onChange={(value) => onChange("knowledge_base_id", value)}
+          options={options}
+          disabled={isReadOnly || loading || loadError}
+          {...accessibility("knowledge_base_id", "Knowledge base")}
+        />
+        {loading && (
+          <p
+            role="status"
+            className="mt-1 text-[10px] text-[var(--text-tertiary)]"
+          >
+            Loading knowledge bases…
+          </p>
+        )}
+        {loadError && (
+          <div role="alert" className="mt-1 text-[10px] text-red-500">
+            Unable to load knowledge bases. Your selection is preserved.{" "}
+            <InspectorButton
+              inspectionAction
+              type="button"
+              className="underline focus-visible:outline"
+              onClick={() => {
+                knowledgeBaseCacheRef.current = null;
+                setLoading(true);
+                setLoadError(false);
+                setAttempt((value) => value + 1);
+              }}
+            >
+              Retry
+            </InspectorButton>
+          </div>
+        )}
+        {!loading && !loadError && knowledgeBases.length === 0 && (
+          <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">
+            Create a knowledge base and upload documents in{" "}
+            <Link
+              href="/dashboard/knowledge-bases"
+              className="text-[var(--accent)] underline"
+            >
+              Knowledge Bases
+            </Link>
+            .
+          </p>
+        )}
         {errorFor("knowledge_base_id")}
       </div>
       <div>
-        <VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly {...variableContext} onInsert={(expression) => onChange("query", `${typeof config.query === "string" ? config.query : ""}${expression}`)} />}>Query</VariableFieldLabel>
-        <TextareaInput value={typeof config.query === "string" ? config.query : ""} onChange={(value) => onChange("query", value)} rows={4} mono variables disabled={isReadOnly} {...accessibility("query", "Search query")} />
-        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Use text, upstream variables, or both. Maximum 2,000 characters.</p>
+        <VariableFieldLabel
+          picker={
+            !isReadOnly && (
+              <VariablePicker
+                upstreamOnly
+                {...variableContext}
+                onInsert={(expression) =>
+                  onChange(
+                    "query",
+                    `${typeof config.query === "string" ? config.query : ""}${expression}`,
+                  )
+                }
+              />
+            )
+          }
+        >
+          Query
+        </VariableFieldLabel>
+        <TextareaInput
+          value={typeof config.query === "string" ? config.query : ""}
+          onChange={(value) => onChange("query", value)}
+          rows={4}
+          mono
+          variables
+          disabled={isReadOnly}
+          {...accessibility("query", "Search query")}
+        />
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+          Use text, upstream variables, or both. Maximum 2,000 characters.
+        </p>
         {errorFor("query")}
       </div>
       <div>
         <FieldLabel>Top Results</FieldLabel>
-        <InspectorInput type="number" min="1" max="20" step="1" value={typeof config.top_k === "number" || typeof config.top_k === "string" ? config.top_k : ""} disabled={isReadOnly} onChange={(event) => { const value = event.target.value; onChange("top_k", /^\d+$/.test(value) ? Number(value) : value); }} {...accessibility("top_k", "Top results")} className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none font-mono" />
-        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Retrieve between 1 and 20 chunks.</p>
+        <InspectorInput
+          type="number"
+          min="1"
+          max="20"
+          step="1"
+          value={
+            typeof config.top_k === "number" || typeof config.top_k === "string"
+              ? config.top_k
+              : ""
+          }
+          disabled={isReadOnly}
+          onChange={(event) => {
+            const value = event.target.value;
+            onChange("top_k", /^\d+$/.test(value) ? Number(value) : value);
+          }}
+          {...accessibility("top_k", "Top results")}
+          className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none font-mono"
+        />
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+          Retrieve between 1 and 20 chunks.
+        </p>
         {errorFor("top_k")}
       </div>
       <div className="space-y-2 border-t border-[var(--border-subtle)] pt-3">
         <FieldLabel>Available Outputs</FieldLabel>
-        {[["chunks", "Array of retrieved chunks with source metadata and similarity scores."], ["context", "Combined text for downstream AI prompts."]].map(([field, description]) => <div key={field}><p className="text-[10px] text-[var(--text-secondary)]"><strong>{field}</strong> — {description}</p><code className="block break-all select-text text-[10px] text-[var(--text-tertiary)]">{`{{nodes.${variableContext.currentNode.data.nodeId}.${field}}}`}</code></div>)}
+        {[
+          [
+            "chunks",
+            "Array of retrieved chunks with source metadata and similarity scores.",
+          ],
+          ["context", "Combined text for downstream AI prompts."],
+        ].map(([field, description]) => (
+          <div key={field}>
+            <p className="text-[10px] text-[var(--text-secondary)]">
+              <strong>{field}</strong> — {description}
+            </p>
+            <code className="block break-all select-text text-[10px] text-[var(--text-tertiary)]">{`{{nodes.${variableContext.currentNode.data.nodeId}.${field}}}`}</code>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function OutgoingBranches({ source, workflowNodes, workflowEdges, onSelectEdge, onEdgeConditionChange, isReadOnly }) {
+function OutgoingBranches({
+  source,
+  workflowNodes,
+  workflowEdges,
+  onSelectEdge,
+  onEdgeConditionChange,
+  isReadOnly,
+}) {
   const branches = workflowEdges.filter((edge) => edge.source === source.id);
-  const errors = validateConditionBranches(workflowNodes, workflowEdges)
-    .filter((error) => error.nodeId === (source.data?.nodeId ?? source.id));
-  return <div className="space-y-3 border-t border-[var(--border-subtle)] pt-3">
-    <FieldLabel>Outgoing branches</FieldLabel>
-    {branches.map((edge) => {
-      const target = workflowNodes.find((node) => node.id === edge.target);
-      return <div key={edge.id} className="space-y-2 rounded-[6px] border border-[var(--border-subtle)] p-2.5">
-        <InspectorButton inspectionAction type="button" onClick={() => onSelectEdge?.(edge)} className="text-left text-[11px] text-[var(--accent)] hover:underline">To {target?.data?.label || target?.data?.nodeId || edge.target} →</InspectorButton>
-        <BranchConditionField edge={edge} source={source} nodes={workflowNodes} edges={workflowEdges} isReadOnly={isReadOnly} onChange={(value) => onEdgeConditionChange?.(value, edge.id)} />
-      </div>;
-    })}
-    {!branches.length && <p className="text-[10px] text-[var(--text-tertiary)]">Connect this node to a next step, then choose the branch outcome.</p>}
-    {errors.map((error) => <p key={error.edgeId ?? error.code} role="alert" className="text-[10px] text-red-500">{error.message}</p>)}
-  </div>;
+  const errors = validateConditionBranches(workflowNodes, workflowEdges).filter(
+    (error) => error.nodeId === (source.data?.nodeId ?? source.id),
+  );
+  return (
+    <div className="space-y-3 border-t border-[var(--border-subtle)] pt-3">
+      <FieldLabel>Outgoing branches</FieldLabel>
+      {branches.map((edge) => {
+        const target = workflowNodes.find((node) => node.id === edge.target);
+        return (
+          <div
+            key={edge.id}
+            className="space-y-2 rounded-[6px] border border-[var(--border-subtle)] p-2.5"
+          >
+            <InspectorButton
+              inspectionAction
+              type="button"
+              onClick={() => onSelectEdge?.(edge)}
+              className="text-left text-[11px] text-[var(--accent)] hover:underline"
+            >
+              To {target?.data?.label || target?.data?.nodeId || edge.target} →
+            </InspectorButton>
+            <BranchConditionField
+              edge={edge}
+              source={source}
+              nodes={workflowNodes}
+              edges={workflowEdges}
+              isReadOnly={isReadOnly}
+              onChange={(value) => onEdgeConditionChange?.(value, edge.id)}
+            />
+          </div>
+        );
+      })}
+      {!branches.length && (
+        <p className="text-[10px] text-[var(--text-tertiary)]">
+          Connect this node to a next step, then choose the branch outcome.
+        </p>
+      )}
+      {errors.map((error) => (
+        <p
+          key={error.edgeId ?? error.code}
+          role="alert"
+          className="text-[10px] text-red-500"
+        >
+          {error.message}
+        </p>
+      ))}
+    </div>
+  );
 }
 
-function ConditionConfig({ config, onChange, variableContext, workflowNodes, workflowEdges, onSelectEdge, onEdgeConditionChange, isReadOnly }) {
+function ConditionConfig({
+  config,
+  onChange,
+  variableContext,
+  workflowNodes,
+  workflowEdges,
+  onSelectEdge,
+  onEdgeConditionChange,
+  isReadOnly,
+}) {
   const legacy = isLegacyConditionConfiguration(config);
   return (
     <div className="space-y-3">
-      <p className="text-[12px] font-semibold text-[var(--text-primary)]">Condition</p>
-      {legacy ? <div role="alert" className="rounded-[6px] border border-amber-500/25 bg-amber-500/5 p-2.5 text-[10px] leading-4 text-[var(--text-secondary)]">
-        <p className="font-semibold text-amber-500">Update required before publishing</p>
-        <p className="mt-1">This draft uses older comparison settings. Its original values remain saved until you choose exact-value routing.</p>
-        <code className="mt-2 block break-all text-[var(--text-tertiary)]">{JSON.stringify(config)}</code>
-        {!isReadOnly && <InspectorButton type="button" onClick={() => onChange({ value: "" })} className="mt-2 text-[10px] font-medium text-[var(--accent)] hover:underline">Update to exact-value routing</InspectorButton>}
-      </div> : <div>
-        <VariableFieldLabel picker={!isReadOnly && <VariablePicker upstreamOnly scalarOnly {...variableContext} onInsert={(expression) => onChange("value", expression)} />}>Value to Evaluate</VariableFieldLabel>
-        <TextInput value={typeof config.value === "string" ? config.value : ""} onChange={(value) => onChange("value", value)} mono variables aria-label="Value to Evaluate" />
-        <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">At runtime, this value selects one outgoing edge whose label matches exactly, including letter case. An unmatched value stops execution.</p>
-      </div>}
-      <OutgoingBranches source={variableContext.currentNode} workflowNodes={workflowNodes} workflowEdges={workflowEdges} onSelectEdge={onSelectEdge} onEdgeConditionChange={onEdgeConditionChange} isReadOnly={isReadOnly} />
+      <p className="text-[12px] font-semibold text-[var(--text-primary)]">
+        Condition
+      </p>
+      {legacy ? (
+        <div
+          role="alert"
+          className="rounded-[6px] border border-amber-500/25 bg-amber-500/5 p-2.5 text-[10px] leading-4 text-[var(--text-secondary)]"
+        >
+          <p className="font-semibold text-amber-500">
+            Update required before publishing
+          </p>
+          <p className="mt-1">
+            This draft uses older comparison settings. Its original values
+            remain saved until you choose exact-value routing.
+          </p>
+          <code className="mt-2 block break-all text-[var(--text-tertiary)]">
+            {JSON.stringify(config)}
+          </code>
+          {!isReadOnly && (
+            <InspectorButton
+              type="button"
+              onClick={() => onChange({ value: "" })}
+              className="mt-2 text-[10px] font-medium text-[var(--accent)] hover:underline"
+            >
+              Update to exact-value routing
+            </InspectorButton>
+          )}
+        </div>
+      ) : (
+        <div>
+          <VariableFieldLabel
+            picker={
+              !isReadOnly && (
+                <VariablePicker
+                  upstreamOnly
+                  scalarOnly
+                  {...variableContext}
+                  onInsert={(expression) => onChange("value", expression)}
+                />
+              )
+            }
+          >
+            Value to Evaluate
+          </VariableFieldLabel>
+          <TextInput
+            value={typeof config.value === "string" ? config.value : ""}
+            onChange={(value) => onChange("value", value)}
+            mono
+            variables
+            aria-label="Value to Evaluate"
+          />
+          <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">
+            At runtime, this value selects one outgoing edge whose label matches
+            exactly, including letter case. An unmatched value stops execution.
+          </p>
+        </div>
+      )}
+      <OutgoingBranches
+        source={variableContext.currentNode}
+        workflowNodes={workflowNodes}
+        workflowEdges={workflowEdges}
+        onSelectEdge={onSelectEdge}
+        onEdgeConditionChange={onEdgeConditionChange}
+        isReadOnly={isReadOnly}
+      />
     </div>
   );
 }
 
-function HumanApprovalConfig({ config, onChange, variableContext, errors = {}, isReadOnly = false }) {
-  const picker = <VariablePicker {...variableContext} onInsert={(expression) => onChange("message", `${config.message || ""}${expression}`)} />;
+function HumanApprovalConfig({
+  config,
+  onChange,
+  variableContext,
+  errors = {},
+  isReadOnly = false,
+}) {
+  const picker = (
+    <VariablePicker
+      {...variableContext}
+      onInsert={(expression) =>
+        onChange("message", `${config.message || ""}${expression}`)
+      }
+    />
+  );
   return (
     <div className="space-y-3">
       <div>
-        <VariableFieldLabel picker={picker}>Approval Message</VariableFieldLabel>
-        <TextareaInput value={config.message ?? ""} onChange={(value) => onChange("message", value)} rows={3} variables placeholder="Please review and approve this request." disabled={isReadOnly} />
-        {errors.message && <p role="alert" className="mt-1 text-[10px] text-red-500">{errors.message}</p>}
+        <VariableFieldLabel picker={picker}>
+          Approval Message
+        </VariableFieldLabel>
+        <TextareaInput
+          value={config.message ?? ""}
+          onChange={(value) => onChange("message", value)}
+          rows={3}
+          variables
+          placeholder="Please review and approve this request."
+          disabled={isReadOnly}
+        />
+        {errors.message && (
+          <p role="alert" className="mt-1 text-[10px] text-red-500">
+            {errors.message}
+          </p>
+        )}
       </div>
       <div>
         <FieldLabel>Timeout</FieldLabel>
-        <InspectorInput type="number" min="1" step="1" aria-label="Timeout in minutes" value={config.timeout_minutes ?? ""} onChange={(event) => onChange("timeout_minutes", event.target.value === "" ? null : Number(event.target.value))} disabled={isReadOnly} className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none disabled:opacity-60" />
-        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">Automatically handle the approval if no decision is made within this time.</p>
-        {errors.timeout_minutes && <p role="alert" className="mt-1 text-[10px] text-red-500">{errors.timeout_minutes}</p>}
+        <InspectorInput
+          type="number"
+          min="1"
+          step="1"
+          aria-label="Timeout in minutes"
+          value={config.timeout_minutes ?? ""}
+          onChange={(event) =>
+            onChange(
+              "timeout_minutes",
+              event.target.value === "" ? null : Number(event.target.value),
+            )
+          }
+          disabled={isReadOnly}
+          className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none disabled:opacity-60"
+        />
+        <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+          Automatically handle the approval if no decision is made within this
+          time.
+        </p>
+        {errors.timeout_minutes && (
+          <p role="alert" className="mt-1 text-[10px] text-red-500">
+            {errors.timeout_minutes}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -908,9 +3240,31 @@ function HumanApprovalConfig({ config, onChange, variableContext, errors = {}, i
 function ApprovalConfig({ config, onChange }) {
   return (
     <div className="space-y-3">
-      <div><FieldLabel>Approver Email</FieldLabel><TextInput value={config.approver} onChange={(v) => onChange("approver", v)} /></div>
-      <div><FieldLabel>Timeout (hours)</FieldLabel><TextInput value={String(config.timeout_hours ?? 24)} onChange={(v) => onChange("timeout_hours", Number.parseInt(v, 10) || 24)} mono /></div>
-      <div><FieldLabel>Message</FieldLabel><TextareaInput value={config.message} onChange={(v) => onChange("message", v)} rows={2} /></div>
+      <div>
+        <FieldLabel>Approver Email</FieldLabel>
+        <TextInput
+          value={config.approver}
+          onChange={(v) => onChange("approver", v)}
+        />
+      </div>
+      <div>
+        <FieldLabel>Timeout (hours)</FieldLabel>
+        <TextInput
+          value={String(config.timeout_hours ?? 24)}
+          onChange={(v) =>
+            onChange("timeout_hours", Number.parseInt(v, 10) || 24)
+          }
+          mono
+        />
+      </div>
+      <div>
+        <FieldLabel>Message</FieldLabel>
+        <TextareaInput
+          value={config.message}
+          onChange={(v) => onChange("message", v)}
+          rows={2}
+        />
+      </div>
     </div>
   );
 }
@@ -935,7 +3289,10 @@ export default function NodeInspector({
   onEdgeConditionChange,
 }) {
   const { user } = useAuth();
-  const knowledgeBaseCacheRef = useMemo(() => ({ current: null, scope: [user?.id, workflowId, workflowVersionId] }), [user?.id, workflowId, workflowVersionId]);
+  const knowledgeBaseCacheRef = useMemo(
+    () => ({ current: null, scope: [user?.id, workflowId, workflowVersionId] }),
+    [user?.id, workflowId, workflowVersionId],
+  );
   const [formData, setFormData] = useState({});
   const formDataRef = useRef({});
   const [nodeName, setNodeName] = useState("");
@@ -947,11 +3304,22 @@ export default function NodeInspector({
   useEffect(() => {
     if (selectedNode) {
       setNodeName(selectedNode.data?.label ?? selectedNode.data?.name ?? "");
-      const selectedConfig = selectedNode.data?.typeId === "trigger.schedule" ? normalizeSchedule(selectedNode.data?.config) : { ...(selectedNode.data?.config ?? {}) };
-      if (selectedNode.data?.typeId === "human.approval" && !selectedConfig.approver_user_id && user?.id) {
+      const selectedConfig =
+        selectedNode.data?.typeId === "trigger.schedule"
+          ? normalizeSchedule(selectedNode.data?.config)
+          : { ...(selectedNode.data?.config ?? {}) };
+      if (
+        selectedNode.data?.typeId === "human.approval" &&
+        !selectedConfig.approver_user_id &&
+        user?.id
+      ) {
         selectedConfig.approver_user_id = user.id;
       }
-      if (selectedNode.data?.typeId === "action.http_request" && selectedConfig.timeout === undefined) selectedConfig.timeout = 10;
+      if (
+        selectedNode.data?.typeId === "action.http_request" &&
+        selectedConfig.timeout === undefined
+      )
+        selectedConfig.timeout = 10;
       formDataRef.current = selectedConfig;
       setFormData(selectedConfig);
       setHasLocalChanges(false);
@@ -995,51 +3363,128 @@ export default function NodeInspector({
 
   const typeId = selectedNode.data?.typeId ?? "custom";
   const def = getNodeDefinition(typeId);
-  const variableContext = { nodes: workflowNodes, edges: workflowEdges, currentNode: selectedNode };
+  const variableContext = {
+    nodes: workflowNodes,
+    edges: workflowEdges,
+    currentNode: selectedNode,
+  };
 
   const handleFieldChange = (field, value) => {
     if (isReadOnly) return;
-    let nextConfig = typeId === "logic.condition" && typeof field === "object"
-      ? field
-      : { ...(typeId === "ai.decision" ? selectedNode.data?.config : typeId === "ai.rag_search" ? formDataRef.current : formData), ...(typeof field === "object" ? field : { [field]: value }) };
+    let nextConfig =
+      typeId === "logic.condition" && typeof field === "object"
+        ? field
+        : {
+            ...(typeId === "ai.decision"
+              ? selectedNode.data?.config
+              : typeId === "ai.rag_search"
+                ? formDataRef.current
+                : formData),
+            ...(typeof field === "object" ? field : { [field]: value }),
+          };
     if (typeId === "ai.rag_search") {
       if (field === "knowledge_base_id") delete nextConfig.knowledge_base;
       nextConfig = normalizeRAGConfiguration(nextConfig);
       onUpdateNode?.(selectedNode.id, { config: nextConfig });
     }
-    if (typeId === "ai.decision" || typeId === "ai.generate" || typeId === "logic.condition" || typeId === "trigger.schedule") onUpdateNode?.(selectedNode.id, { config: typeId === "trigger.schedule" ? scheduleNodePayload(nextConfig) : nextConfig });
+    if (
+      typeId === "ai.decision" ||
+      typeId === "ai.generate" ||
+      typeId === "logic.condition" ||
+      typeId === "trigger.schedule"
+    )
+      onUpdateNode?.(selectedNode.id, {
+        config:
+          typeId === "trigger.schedule"
+            ? scheduleNodePayload(nextConfig)
+            : nextConfig,
+      });
     formDataRef.current = nextConfig;
     setFormData(nextConfig);
     setHasLocalChanges(true);
-    setConfigurationErrors((previous) => typeId === "logic.condition" && typeof field === "object"
-      ? []
-      : previous.filter((error) => error.field !== field));
+    setConfigurationErrors((previous) =>
+      typeId === "logic.condition" && typeof field === "object"
+        ? []
+        : previous.filter((error) => error.field !== field),
+    );
   };
 
   const handleSave = (e) => {
     e?.preventDefault();
     if (isReadOnly) return;
-    const configToValidate = typeId === "human.approval"
-      ? { ...formData, approver_user_id: formData.approver_user_id || user?.id }
-      : typeId === "ai.decision" ? selectedNode.data?.config ?? {} : formData;
-    const nextConfigurationErrors = validateNodeConfiguration(typeId, configToValidate);
-    if (typeId === "ai.decision") nextConfigurationErrors.push(...validateDecisionReferences(configToValidate, workflowNodes, workflowEdges, selectedNode.id));
-    if (typeId === "ai.generate") nextConfigurationErrors.push(...validateGenerateReferences(configToValidate, workflowNodes, workflowEdges, selectedNode.id));
-    if (typeId === "logic.condition") nextConfigurationErrors.push(...validateConditionReferences(configToValidate, workflowNodes, workflowEdges, selectedNode.id));
+    const configToValidate =
+      typeId === "human.approval"
+        ? {
+            ...formData,
+            approver_user_id: formData.approver_user_id || user?.id,
+          }
+        : typeId === "ai.decision"
+          ? (selectedNode.data?.config ?? {})
+          : formData;
+    const nextConfigurationErrors = validateNodeConfiguration(
+      typeId,
+      configToValidate,
+    );
+    if (typeId === "ai.decision")
+      nextConfigurationErrors.push(
+        ...validateDecisionReferences(
+          configToValidate,
+          workflowNodes,
+          workflowEdges,
+          selectedNode.id,
+        ),
+      );
+    if (typeId === "ai.generate")
+      nextConfigurationErrors.push(
+        ...validateGenerateReferences(
+          configToValidate,
+          workflowNodes,
+          workflowEdges,
+          selectedNode.id,
+        ),
+      );
+    if (typeId === "logic.condition")
+      nextConfigurationErrors.push(
+        ...validateConditionReferences(
+          configToValidate,
+          workflowNodes,
+          workflowEdges,
+          selectedNode.id,
+        ),
+      );
     setConfigurationErrors(nextConfigurationErrors);
     if (nextConfigurationErrors.length) return;
     if (typeId === "human.approval") {
       const timeout = formData.timeout_minutes;
       const nextErrors = {};
       const approverUserId = formData.approver_user_id || user?.id;
-      if (!String(approverUserId ?? "").trim()) nextErrors.approver_user_id = "Your signed-in user could not be determined. Please refresh your session and try again.";
-      if (!String(formData.message ?? "").trim()) nextErrors.message = "Approval message is required.";
-      if (timeout !== null && timeout !== undefined && timeout !== "" && (!Number.isInteger(Number(timeout)) || Number(timeout) <= 0)) nextErrors.timeout_minutes = "Timeout must be greater than 0 minutes.";
+      if (!String(approverUserId ?? "").trim())
+        nextErrors.approver_user_id =
+          "Your signed-in user could not be determined. Please refresh your session and try again.";
+      if (!String(formData.message ?? "").trim())
+        nextErrors.message = "Approval message is required.";
+      if (
+        timeout !== null &&
+        timeout !== undefined &&
+        timeout !== "" &&
+        (!Number.isInteger(Number(timeout)) || Number(timeout) <= 0)
+      )
+        nextErrors.timeout_minutes = "Timeout must be greater than 0 minutes.";
       setApprovalErrors(nextErrors);
       if (Object.keys(nextErrors).length) return;
-      const normalizedTimeout = timeout === "" || timeout == null ? null : Number(timeout);
-      const configuration = { approver_user_id: approverUserId, message: formData.message, timeout_minutes: normalizedTimeout };
-      if (onUpdateNode) onUpdateNode(selectedNode.id, { label: nodeName, name: nodeName, config: configuration });
+      const normalizedTimeout =
+        timeout === "" || timeout == null ? null : Number(timeout);
+      const configuration = {
+        approver_user_id: approverUserId,
+        message: formData.message,
+        timeout_minutes: normalizedTimeout,
+      };
+      if (onUpdateNode)
+        onUpdateNode(selectedNode.id, {
+          label: nodeName,
+          name: nodeName,
+          config: configuration,
+        });
       setFormData(configuration);
       setHasLocalChanges(false);
       return;
@@ -1048,7 +3493,16 @@ export default function NodeInspector({
       onUpdateNode(selectedNode.id, {
         label: nodeName,
         name: nodeName,
-        config: typeId === "trigger.schedule" ? scheduleNodePayload(formData) : typeId === "trigger.manual" ? { ...formData, input_schema: { type: "object" } } : typeId === "ai.rag_search" ? normalizeRAGConfiguration(formData) : typeId === "ai.decision" ? normalizeDecisionConfiguration(configToValidate) : formData,
+        config:
+          typeId === "trigger.schedule"
+            ? scheduleNodePayload(formData)
+            : typeId === "trigger.manual"
+              ? { ...formData, input_schema: { type: "object" } }
+              : typeId === "ai.rag_search"
+                ? normalizeRAGConfiguration(formData)
+                : typeId === "ai.decision"
+                  ? normalizeDecisionConfiguration(configToValidate)
+                  : formData,
       });
       setHasLocalChanges(false);
     }
@@ -1058,43 +3512,162 @@ export default function NodeInspector({
   const renderConfigPanel = () => {
     switch (typeId) {
       case "trigger.webhook":
-        return <WebhookConfig config={formData} workflowId={workflowId} workflowVersionId={workflowVersionId} nodeId={selectedNode.id} isReadOnly={isReadOnly} onOpenGuide={() => setWebhookGuideOpen(true)} onAssociate={(webhook) => {
-          if (isReadOnly) return;
-          const nextConfig = webhook
-            ? { ...formData, webhook_id: webhook.id, method: webhook.method || "POST", event_name: webhook.event_name || "", setup_required: false }
-            : { ...formData, webhook_id: undefined, method: "POST", event_name: "", setup_required: true };
-          if (!webhook) {
-            delete nextConfig.public_token;
-            delete nextConfig.secret;
-            delete nextConfig.endpoint;
-            delete nextConfig.url;
-            delete nextConfig.path;
-          }
-          setFormData(nextConfig);
-          setHasLocalChanges(true);
-          setConfigurationErrors((previous) => previous.filter((error) => error.field !== "webhook_id"));
-          if (onUpdateNode) onUpdateNode(selectedNode.id, { config: nextConfig });
-        }} />;
+        return (
+          <WebhookConfig
+            config={formData}
+            workflowId={workflowId}
+            workflowVersionId={workflowVersionId}
+            nodeId={selectedNode.id}
+            isReadOnly={isReadOnly}
+            onOpenGuide={() => setWebhookGuideOpen(true)}
+            onAssociate={(webhook) => {
+              if (isReadOnly) return;
+              const nextConfig = webhook
+                ? {
+                    ...formData,
+                    webhook_id: webhook.id,
+                    method: webhook.method || "POST",
+                    event_name: webhook.event_name || "",
+                    setup_required: false,
+                  }
+                : {
+                    ...formData,
+                    webhook_id: undefined,
+                    method: "POST",
+                    event_name: "",
+                    setup_required: true,
+                  };
+              if (!webhook) {
+                delete nextConfig.public_token;
+                delete nextConfig.secret;
+                delete nextConfig.endpoint;
+                delete nextConfig.url;
+                delete nextConfig.path;
+              }
+              setFormData(nextConfig);
+              setHasLocalChanges(true);
+              setConfigurationErrors((previous) =>
+                previous.filter((error) => error.field !== "webhook_id"),
+              );
+              if (onUpdateNode)
+                onUpdateNode(selectedNode.id, { config: nextConfig });
+            }}
+          />
+        );
       case "trigger.schedule":
-        return <ScheduleConfig key={`${selectedNode.id}:${scheduleRevision}`} config={formData} onChange={handleFieldChange} isReadOnly={isReadOnly} workflowId={workflowId} revision={scheduleRevision} externalPending={scheduleBusy} />;
+        return (
+          <ScheduleConfig
+            key={`${selectedNode.id}:${scheduleRevision}`}
+            config={formData}
+            onChange={handleFieldChange}
+            isReadOnly={isReadOnly}
+            workflowId={workflowId}
+            revision={scheduleRevision}
+            externalPending={scheduleBusy}
+          />
+        );
       case "trigger.manual":
-        return <ManualConfig config={formData} onChange={handleFieldChange} isReadOnly={isReadOnly} />;
+        return (
+          <ManualConfig
+            config={formData}
+            onChange={handleFieldChange}
+            isReadOnly={isReadOnly}
+          />
+        );
       case "action.http_request":
-        return <HttpRequestConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} />;
+        return (
+          <HttpRequestConfig
+            config={formData}
+            onChange={handleFieldChange}
+            variableContext={variableContext}
+          />
+        );
       case "action.email":
-        return <EmailConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} />;
+        return (
+          <EmailConfig
+            config={formData}
+            onChange={handleFieldChange}
+            variableContext={variableContext}
+          />
+        );
       case "action.refund":
-        return <RefundConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} />;
+        return (
+          <RefundConfig
+            config={formData}
+            onChange={handleFieldChange}
+            variableContext={variableContext}
+          />
+        );
       case "ai.decision":
-        return <AIDecisionConfig key={`${user?.id}:${selectedNode.id}`} config={selectedNode.data?.config ?? {}} onChange={handleFieldChange} onReplace={(config) => { if (isReadOnly) return; setFormData(config); onUpdateNode?.(selectedNode.id, { config }); setHasLocalChanges(true); }} variableContext={variableContext} isReadOnly={isReadOnly} />;
+        return (
+          <AIDecisionConfig
+            key={`${user?.id}:${selectedNode.id}`}
+            config={selectedNode.data?.config ?? {}}
+            onChange={handleFieldChange}
+            onReplace={(config) => {
+              if (isReadOnly) return;
+              setFormData(config);
+              onUpdateNode?.(selectedNode.id, { config });
+              setHasLocalChanges(true);
+            }}
+            variableContext={variableContext}
+            isReadOnly={isReadOnly}
+          />
+        );
       case "ai.generate":
-        return <AIConfig key={`${user?.id}:${selectedNode.id}`} config={formData} onChange={handleFieldChange} variableContext={variableContext} isReadOnly={isReadOnly} />;
+        return (
+          <AIConfig
+            key={`${user?.id}:${selectedNode.id}`}
+            config={formData}
+            onChange={handleFieldChange}
+            variableContext={variableContext}
+            isReadOnly={isReadOnly}
+          />
+        );
       case "ai.rag_search":
-        return <RAGConfig key={user?.id} config={formData} onChange={handleFieldChange} variableContext={variableContext} knowledgeBaseCacheRef={knowledgeBaseCacheRef} isReadOnly={isReadOnly} />;
+        return (
+          <RAGConfig
+            key={user?.id}
+            config={formData}
+            onChange={handleFieldChange}
+            variableContext={variableContext}
+            knowledgeBaseCacheRef={knowledgeBaseCacheRef}
+            isReadOnly={isReadOnly}
+          />
+        );
       case "logic.condition":
-        return <ConditionConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} workflowNodes={workflowNodes} workflowEdges={workflowEdges} onSelectEdge={onSelectEdge} onEdgeConditionChange={onEdgeConditionChange} isReadOnly={isReadOnly} />;
+        return (
+          <ConditionConfig
+            config={formData}
+            onChange={handleFieldChange}
+            variableContext={variableContext}
+            workflowNodes={workflowNodes}
+            workflowEdges={workflowEdges}
+            onSelectEdge={onSelectEdge}
+            onEdgeConditionChange={onEdgeConditionChange}
+            isReadOnly={isReadOnly}
+          />
+        );
       case "human.approval":
-        return <><HumanApprovalConfig config={formData} onChange={handleFieldChange} variableContext={variableContext} errors={approvalErrors} isReadOnly={isReadOnly} /><OutgoingBranches source={selectedNode} workflowNodes={workflowNodes} workflowEdges={workflowEdges} onSelectEdge={onSelectEdge} onEdgeConditionChange={onEdgeConditionChange} isReadOnly={isReadOnly} /></>;
+        return (
+          <>
+            <HumanApprovalConfig
+              config={formData}
+              onChange={handleFieldChange}
+              variableContext={variableContext}
+              errors={approvalErrors}
+              isReadOnly={isReadOnly}
+            />
+            <OutgoingBranches
+              source={selectedNode}
+              workflowNodes={workflowNodes}
+              workflowEdges={workflowEdges}
+              onSelectEdge={onSelectEdge}
+              onEdgeConditionChange={onEdgeConditionChange}
+              isReadOnly={isReadOnly}
+            />
+          </>
+        );
       default:
         return (
           <div className="p-3 rounded-[6px] bg-[var(--elevated)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)]">
@@ -1106,15 +3679,21 @@ export default function NodeInspector({
 
   // Category accent color
   const getCategoryColor = () => {
-    if (typeId.startsWith("trigger.")) return "bg-[#4F46E5]/10 text-[#4F46E5] border-[#4F46E5]/20";
-    if (typeId.startsWith("action.")) return "bg-[#0EA5E9]/10 text-[#0EA5E9] border-[#0EA5E9]/20";
-    if (typeId.startsWith("ai.")) return "bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/20";
-    if (typeId.startsWith("logic.") || typeId.startsWith("human.")) return "bg-[#D29922]/10 text-[#D29922] border-[#D29922]/20";
+    if (typeId.startsWith("trigger."))
+      return "bg-[#4F46E5]/10 text-[#4F46E5] border-[#4F46E5]/20";
+    if (typeId.startsWith("action."))
+      return "bg-[#0EA5E9]/10 text-[#0EA5E9] border-[#0EA5E9]/20";
+    if (typeId.startsWith("ai."))
+      return "bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/20";
+    if (typeId.startsWith("logic.") || typeId.startsWith("human."))
+      return "bg-[#D29922]/10 text-[#D29922] border-[#D29922]/20";
     return "bg-[var(--elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]";
   };
 
   return (
-    <div className={`w-80 bg-[var(--surface)] border-l border-[var(--border-subtle)] flex flex-col h-full min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain select-text shrink-0 font-sans z-20 animate-in slide-in-from-right duration-150 ${className}`}>
+    <div
+      className={`w-80 bg-[var(--surface)] border-l border-[var(--border-subtle)] flex flex-col h-full min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain select-text shrink-0 font-sans z-20 animate-in slide-in-from-right duration-150 ${className}`}
+    >
       {/* Header */}
       <div className="px-3 py-2.5 border-b border-[var(--border-subtle)] space-y-2">
         <div className="flex items-center justify-between">
@@ -1122,7 +3701,11 @@ export default function NodeInspector({
             <span className="text-[16px] shrink-0">{def.icon}</span>
             <div className="min-w-0">
               <div className="text-[13px] font-semibold text-[var(--text-primary)] truncate">
-                {typeId === "trigger.webhook" ? "Webhook trigger" : typeId === "trigger.manual" ? "Manual Trigger" : nodeName || def.name}
+                {typeId === "trigger.webhook"
+                  ? "Webhook trigger"
+                  : typeId === "trigger.manual"
+                    ? "Manual Trigger"
+                    : nodeName || def.name}
               </div>
               <div className="text-[9px] font-mono text-[var(--text-tertiary)] truncate">
                 {typeId}
@@ -1130,8 +3713,20 @@ export default function NodeInspector({
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            {typeId === "trigger.webhook" && <button type="button" onClick={() => setWebhookGuideOpen(true)} title="How to use this webhook" aria-label="How to use this webhook" className="grid h-6 w-6 place-items-center rounded-full border border-[var(--border-default)] font-mono text-[10px] font-semibold text-[var(--text-secondary)] transition hover:border-cyan-500/50 hover:bg-cyan-500/10 hover:text-cyan-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40">?</button>}
-            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-[4px] border shrink-0 ${getCategoryColor()}`}>
+            {typeId === "trigger.webhook" && (
+              <button
+                type="button"
+                onClick={() => setWebhookGuideOpen(true)}
+                title="How to use this webhook"
+                aria-label="How to use this webhook"
+                className="grid h-6 w-6 place-items-center rounded-full border border-[var(--border-default)] font-mono text-[10px] font-semibold text-[var(--text-secondary)] transition hover:border-cyan-500/50 hover:bg-cyan-500/10 hover:text-cyan-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+              >
+                ?
+              </button>
+            )}
+            <span
+              className={`text-[9px] font-mono px-1.5 py-0.5 rounded-[4px] border shrink-0 ${getCategoryColor()}`}
+            >
               {def.category}
             </span>
             {onClose && (
@@ -1147,13 +3742,23 @@ export default function NodeInspector({
           </div>
         </div>
 
-        {typeId === "trigger.schedule" && <p className="text-[10px] leading-4 text-[var(--text-secondary)]">Automatically run this workflow at scheduled times.</p>}
-        {typeId === "trigger.manual" && <p className="text-[10px] leading-4 text-[var(--text-secondary)]">Start this workflow manually with custom input data.</p>}
+        {typeId === "trigger.schedule" && (
+          <p className="text-[10px] leading-4 text-[var(--text-secondary)]">
+            Automatically run this workflow at scheduled times.
+          </p>
+        )}
+        {typeId === "trigger.manual" && (
+          <p className="text-[10px] leading-4 text-[var(--text-secondary)]">
+            Start this workflow manually with custom input data.
+          </p>
+        )}
         {/* Node ID badge */}
         <div className="flex items-center gap-1">
-          {typeId !== "trigger.webhook" && <span className="text-[9px] font-mono text-[var(--text-tertiary)] bg-[var(--elevated)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
-            id: {selectedNode.data?.nodeId ?? selectedNode.id}
-          </span>}
+          {typeId !== "trigger.webhook" && (
+            <span className="text-[9px] font-mono text-[var(--text-tertiary)] bg-[var(--elevated)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
+              id: {selectedNode.data?.nodeId ?? selectedNode.id}
+            </span>
+          )}
           {hasLocalChanges && !isReadOnly && (
             <span className="text-[9px] font-mono text-[#D29922] bg-[#D29922]/10 px-1.5 py-0.5 rounded border border-[#D29922]/20">
               unsaved
@@ -1162,44 +3767,63 @@ export default function NodeInspector({
         </div>
       </div>
 
-      {isReadOnly && <p className="border-b border-[var(--border-subtle)] px-3 py-2 text-[11px] leading-4 text-[var(--text-secondary)]">Read only · Select and copy any value. Use Edit Workflow to make changes.</p>}
+      {isReadOnly && (
+        <p className="border-b border-[var(--border-subtle)] px-3 py-2 text-[11px] leading-4 text-[var(--text-secondary)]">
+          Read only · Select and copy any value. Use Edit Workflow to make
+          changes.
+        </p>
+      )}
 
       {/* Config form */}
       <form onSubmit={handleSave} className="shrink-0 p-3">
         <div className="space-y-3">
-        {configurationErrors.length > 0 && (
-          <div role="alert" className="rounded-[6px] border border-red-500/25 bg-red-500/5 p-2.5">
-            <p className="text-[10px] font-semibold text-red-500">Complete the required settings before applying this node:</p>
-            <ul className="mt-1 list-inside list-disc space-y-0.5 text-[10px] text-red-500">
-              {configurationErrors.map((error) => <li key={error.field}>{error.message}</li>)}
-            </ul>
+          {configurationErrors.length > 0 && (
+            <div
+              role="alert"
+              className="rounded-[6px] border border-red-500/25 bg-red-500/5 p-2.5"
+            >
+              <p className="text-[10px] font-semibold text-red-500">
+                Complete the required settings before applying this node:
+              </p>
+              <ul className="mt-1 list-inside list-disc space-y-0.5 text-[10px] text-red-500">
+                {configurationErrors.map((error) => (
+                  <li key={error.field}>{error.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {/* Node label */}
+          {typeId !== "trigger.webhook" && (
+            <div>
+              <FieldLabel>Node Label</FieldLabel>
+              <input
+                type="text"
+                value={nodeName}
+                onChange={(e) => {
+                  setNodeName(e.target.value);
+                  setHasLocalChanges(true);
+                }}
+                readOnly={isReadOnly}
+                className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+            </div>
+          )}
+
+          {/* Per-type config */}
+          <div
+            className={`${typeId === "trigger.webhook" ? "" : "pt-2 border-t border-[var(--border-subtle)]"} space-y-3`}
+          >
+            {typeId !== "trigger.webhook" && (
+              <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-tertiary)]">
+                Configuration
+              </div>
+            )}
+            <InspectorReadOnly.Provider
+              value={isReadOnly && typeId !== "trigger.webhook"}
+            >
+              {renderConfigPanel()}
+            </InspectorReadOnly.Provider>
           </div>
-        )}
-        {/* Node label */}
-        {typeId !== "trigger.webhook" && <div>
-          <FieldLabel>Node Label</FieldLabel>
-          <input
-            type="text"
-            value={nodeName}
-            onChange={(e) => {
-              setNodeName(e.target.value);
-              setHasLocalChanges(true);
-            }}
-            readOnly={isReadOnly}
-            className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
-          />
-        </div>}
-
-        {/* Per-type config */}
-        <div className={`${typeId === "trigger.webhook" ? "" : "pt-2 border-t border-[var(--border-subtle)]"} space-y-3`}>
-          {typeId !== "trigger.webhook" && <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-tertiary)]">
-            Configuration
-          </div>}
-          <InspectorReadOnly.Provider value={isReadOnly && typeId !== "trigger.webhook"}>
-            {renderConfigPanel()}
-          </InspectorReadOnly.Provider>
-        </div>
-
         </div>
 
         {/* Actions follow the configuration in the inspector's single scroll area. */}
@@ -1214,7 +3838,9 @@ export default function NodeInspector({
               }`}
             >
               <SaveIcon className="w-3.5 h-3.5 stroke-[1.5]" />
-              <span>{hasLocalChanges ? "Apply node changes" : "Node changes saved"}</span>
+              <span>
+                {hasLocalChanges ? "Apply node changes" : "Node changes saved"}
+              </span>
             </button>
 
             <button
@@ -1228,7 +3854,10 @@ export default function NodeInspector({
           </div>
         )}
       </form>
-      <WebhookUsageGuide open={webhookGuideOpen} onClose={() => setWebhookGuideOpen(false)} />
+      <WebhookUsageGuide
+        open={webhookGuideOpen}
+        onClose={() => setWebhookGuideOpen(false)}
+      />
     </div>
   );
 }

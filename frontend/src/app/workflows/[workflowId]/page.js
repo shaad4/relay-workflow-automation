@@ -54,7 +54,9 @@ function selectVersion(versions, workflow) {
 
   // Sort descending by version_number so newest is first
   const sorted = [...versions].sort(
-    (a, b) => (b.version_number ?? b.version ?? 0) - (a.version_number ?? a.version ?? 0)
+    (a, b) =>
+      (b.version_number ?? b.version ?? 0) -
+      (a.version_number ?? a.version ?? 0),
   );
 
   const draft = sorted.find((v) => v.status === "draft");
@@ -80,89 +82,111 @@ export default function WorkflowBuilderPage({ params }) {
   // Key to force full remount of WorkflowBuilder when version changes
   const [builderKey, setBuilderKey] = useState(0);
 
-  const fetchWorkflowData = useCallback(async (workflowPatch = null) => {
-    if (workflowPatch) {
-      setWorkflow((current) => current ? { ...current, ...workflowPatch } : current);
-      return;
-    }
-    if (!workflowId) {
-      setError("Missing workflow ID");
-      setIsLoading(false);
-      return;
-    }
+  const fetchWorkflowData = useCallback(
+    async (workflowPatch = null) => {
+      if (workflowPatch) {
+        setWorkflow((current) =>
+          current ? { ...current, ...workflowPatch } : current,
+        );
+        return;
+      }
+      if (!workflowId) {
+        setError("Missing workflow ID");
+        setIsLoading(false);
+        return;
+      }
 
-    // AuthProvider restores the cookie session asynchronously on page load.
-    if (isInitializing) {
+      // AuthProvider restores the cookie session asynchronously on page load.
+      if (isInitializing) {
+        setIsLoading(true);
+        return;
+      }
+
       setIsLoading(true);
-      return;
-    }
+      setError(null);
 
-    setIsLoading(true);
-    setError(null);
+      try {
+        // ── 1. Fetch workflow metadata ────────────────────────────────────────
+        const rawWorkflow = await getWorkflow(workflowId);
+        let wfData = rawWorkflow?.data ?? rawWorkflow?.workflow ?? rawWorkflow;
 
-    try {
-      // ── 1. Fetch workflow metadata ────────────────────────────────────────
-      const rawWorkflow = await getWorkflow(workflowId);
-      let wfData = rawWorkflow?.data ?? rawWorkflow?.workflow ?? rawWorkflow;
+        if (!wfData || !wfData.id) throw new Error("Workflow was not found.");
 
-      if (!wfData || !wfData.id) throw new Error("Workflow was not found.");
+        // ── 2. Fetch versions and select best one ─────────────────────────────
+        let selectedVersion = null;
+        const rawVersions = await getWorkflowVersions(workflowId);
+        const versionsList = normalizeList(rawVersions, "versions");
+        selectedVersion = selectVersion(versionsList, wfData);
 
-      // ── 2. Fetch versions and select best one ─────────────────────────────
-      let selectedVersion = null;
-      const rawVersions = await getWorkflowVersions(workflowId);
-      const versionsList = normalizeList(rawVersions, "versions");
-      selectedVersion = selectVersion(versionsList, wfData);
+        if (!selectedVersion)
+          throw new Error("No workflow version was returned by the server.");
 
-      if (!selectedVersion) throw new Error("No workflow version was returned by the server.");
+        // ── 3. Fetch nodes and edges for selected version ─────────────────────
+        const vn = selectedVersion.version_number ?? selectedVersion.version;
+        if (vn == null)
+          throw new Error(
+            "The selected workflow version has no version number.",
+          );
+        const [nodesResponse, edgesResponse] = await Promise.all([
+          getWorkflowNodes(workflowId, vn),
+          getWorkflowEdges(workflowId, vn),
+        ]);
+        const nodesData = normalizeList(nodesResponse, "nodes");
+        const edgesData = normalizeList(edgesResponse, "edges");
 
-      // ── 3. Fetch nodes and edges for selected version ─────────────────────
-      const vn = selectedVersion.version_number ?? selectedVersion.version;
-      if (vn == null) throw new Error("The selected workflow version has no version number.");
-      const [nodesResponse, edgesResponse] = await Promise.all([
-        getWorkflowNodes(workflowId, vn),
-        getWorkflowEdges(workflowId, vn),
-      ]);
-      const nodesData = normalizeList(nodesResponse, "nodes");
-      const edgesData = normalizeList(edgesResponse, "edges");
+        setWorkflow(wfData);
+        setVersion(selectedVersion);
+        setVersions(versionsList);
+        setNodes(nodesData);
+        setEdges(edgesData);
+        // Force WorkflowBuilder to fully remount with fresh state
+        setBuilderKey((k) => k + 1);
+      } catch (err) {
+        console.error("Critical workflow load error:", err);
+        setError(
+          err?.message || "Unable to load this workflow. Please try again.",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [workflowId, isInitializing],
+  );
 
-      setWorkflow(wfData);
-      setVersion(selectedVersion);
-      setVersions(versionsList);
-      setNodes(nodesData);
-      setEdges(edgesData);
-      // Force WorkflowBuilder to fully remount with fresh state
-      setBuilderKey((k) => k + 1);
-    } catch (err) {
-      console.error("Critical workflow load error:", err);
-      setError(err?.message || "Unable to load this workflow. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [workflowId, isInitializing]);
-
-  const selectWorkflowVersion = useCallback(async (versionNumber) => {
-    if (!workflowId || Number(versionNumber) === Number(version?.version_number ?? version?.version)) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const selectedVersion = versions.find((item) =>
-        Number(item.version_number ?? item.version) === Number(versionNumber)
-      );
-      if (!selectedVersion) throw new Error("Workflow version was not found.");
-      const [nodesResponse, edgesResponse] = await Promise.all([
-        getWorkflowNodes(workflowId, versionNumber),
-        getWorkflowEdges(workflowId, versionNumber),
-      ]);
-      setVersion(selectedVersion);
-      setNodes(normalizeList(nodesResponse, "nodes"));
-      setEdges(normalizeList(edgesResponse, "edges"));
-      setBuilderKey((key) => key + 1);
-    } catch (err) {
-      setError(err?.message || "Unable to load this workflow version.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [workflowId, version, versions]);
+  const selectWorkflowVersion = useCallback(
+    async (versionNumber) => {
+      if (
+        !workflowId ||
+        Number(versionNumber) ===
+          Number(version?.version_number ?? version?.version)
+      )
+        return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const selectedVersion = versions.find(
+          (item) =>
+            Number(item.version_number ?? item.version) ===
+            Number(versionNumber),
+        );
+        if (!selectedVersion)
+          throw new Error("Workflow version was not found.");
+        const [nodesResponse, edgesResponse] = await Promise.all([
+          getWorkflowNodes(workflowId, versionNumber),
+          getWorkflowEdges(workflowId, versionNumber),
+        ]);
+        setVersion(selectedVersion);
+        setNodes(normalizeList(nodesResponse, "nodes"));
+        setEdges(normalizeList(edgesResponse, "edges"));
+        setBuilderKey((key) => key + 1);
+      } catch (err) {
+        setError(err?.message || "Unable to load this workflow version.");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [workflowId, version, versions],
+  );
 
   useEffect(() => {
     if (isInitializing) return;
@@ -170,7 +194,9 @@ export default function WorkflowBuilderPage({ params }) {
   }, [fetchWorkflowData, isInitializing]);
 
   useEffect(() => {
-    document.title = workflow?.name ? `${workflow.name} · Workflow Builder | Relay` : "Workflow Builder | Relay";
+    document.title = workflow?.name
+      ? `${workflow.name} · Workflow Builder | Relay`
+      : "Workflow Builder | Relay";
   }, [workflow?.name]);
 
   // ── Loading skeleton ───────────────────────────────────────────────────────
@@ -243,7 +269,10 @@ export default function WorkflowBuilderPage({ params }) {
 
   return (
     <ProtectedRoute>
-      <DashboardShell pageTitle={workflow?.name ?? "Workflow Builder"} fullWidth={true}>
+      <DashboardShell
+        pageTitle={workflow?.name ?? "Workflow Builder"}
+        fullWidth={true}
+      >
         {isLoading ? (
           <LoadingSkeleton />
         ) : error ? (

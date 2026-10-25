@@ -88,7 +88,7 @@ function WorkspaceSetupContent() {
         lowerMsg.includes("session invalid")
       ) {
         setBackendError(
-          "Your workspace setup session has expired. Please sign in with Google again."
+          "Your workspace setup session has expired. Please sign in with Google again.",
         );
       } else if (isNetworkOrDevError) {
         setBackendError("Something went wrong. Please try again.");

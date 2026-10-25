@@ -21,7 +21,10 @@ function RefreshIcon(props) {
 
 export default function WorkflowErrorState({ errorMessage = "", onRetry }) {
   return (
-    <div role="alert" className="w-full bg-[var(--surface)] border border-red-500/20 rounded-2xl px-6 py-12 text-center">
+    <div
+      role="alert"
+      className="w-full bg-[var(--surface)] border border-red-500/20 rounded-2xl px-6 py-12 text-center"
+    >
       <div className="mx-auto w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4 text-red-400">
         <AlertTriangleIcon className="w-6 h-6 stroke-[1.5]" />
       </div>

@@ -50,10 +50,7 @@ export function mapResetPasswordError(errMessage) {
 
   const msg = errMessage.toLowerCase();
 
-  if (
-    msg.includes("invalid reset token") ||
-    msg.includes("invalid token")
-  ) {
+  if (msg.includes("invalid reset token") || msg.includes("invalid token")) {
     return {
       title: "Password reset link unavailable",
       message:
@@ -62,10 +59,7 @@ export function mapResetPasswordError(errMessage) {
     };
   }
 
-  if (
-    msg.includes("already been used") ||
-    msg.includes("already used")
-  ) {
+  if (msg.includes("already been used") || msg.includes("already used")) {
     return {
       title: "Password reset link unavailable",
       message: "This password reset link has already been used.",
@@ -85,8 +79,7 @@ export function mapResetPasswordError(errMessage) {
   if (msg.includes("user not found")) {
     return {
       title: "Account not found",
-      message:
-        "We couldn't find the account associated with this reset link.",
+      message: "We couldn't find the account associated with this reset link.",
       isTokenInvalid: true,
     };
   }
@@ -136,21 +129,21 @@ export default function ResetPasswordForm() {
     ? !formData.password
       ? "Password is required."
       : !isPasswordValid(formData.password)
-      ? "Password does not meet requirements."
-      : null
+        ? "Password does not meet requirements."
+        : null
     : null;
 
   const confirmPasswordError = touched.confirmPassword
     ? !formData.confirmPassword
       ? "Please confirm your password."
       : formData.confirmPassword !== formData.password
-      ? "Passwords do not match."
-      : null
+        ? "Passwords do not match."
+        : null
     : null;
 
   const isFormValid = Boolean(
     isPasswordValid(formData.password) &&
-      formData.confirmPassword === formData.password
+    formData.confirmPassword === formData.password,
   );
 
   const handleSubmit = async (e) => {
@@ -506,7 +499,9 @@ export default function ResetPasswordForm() {
               disabled={isSubmitting}
               onClick={() => setShowConfirmPassword((prev) => !prev)}
               aria-label={
-                showConfirmPassword ? "Hide confirm password" : "Show confirm password"
+                showConfirmPassword
+                  ? "Hide confirm password"
+                  : "Show confirm password"
               }
               className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 rounded p-1 transition-colors duration-100 cursor-pointer disabled:opacity-50"
             >

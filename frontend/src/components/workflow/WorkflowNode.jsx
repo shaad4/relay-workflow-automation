@@ -3,7 +3,10 @@
 import { memo } from "react";
 import { statusLabel } from "@/lib/executions";
 import { Handle, Position } from "@xyflow/react";
-import { ragKnowledgeBaseId, validateNodeConfiguration } from "./configValidation";
+import {
+  ragKnowledgeBaseId,
+  validateNodeConfiguration,
+} from "./configValidation";
 import { getNodeDefinition } from "./nodeDefinitions";
 
 const categoryColors = {
@@ -17,7 +20,9 @@ const categoryColors = {
 function WorkflowNode({ data, selected }) {
   const executionStatus = data?.executionStatus?.toLowerCase();
   const processing = executionStatus === "running" && data?.executionActive;
-  const executionLabel = processing ? "Processing" : statusLabel(executionStatus);
+  const executionLabel = processing
+    ? "Processing"
+    : statusLabel(executionStatus);
   const typeId = data?.typeId || data?.node_type || "custom";
   const def = getNodeDefinition(typeId);
   const name = data?.name || data?.label || def.name;
@@ -28,25 +33,46 @@ function WorkflowNode({ data, selected }) {
   const isCondition = typeId === "logic.condition";
 
   const getConfigSummary = () => {
-    if (typeId === "trigger.webhook") return `${config.method || "POST"}  ${config.event_name || (config.webhook_id ? "Webhook configured" : config.setup_required ? "Setup required" : "Not configured")}`;
-    if (typeId === "trigger.schedule") return `${config.cron || "0 0 * * *"}  ·  ${config.timezone || "UTC"}`;
+    if (typeId === "trigger.webhook")
+      return `${config.method || "POST"}  ${config.event_name || (config.webhook_id ? "Webhook configured" : config.setup_required ? "Setup required" : "Not configured")}`;
+    if (typeId === "trigger.schedule")
+      return `${config.cron || "0 0 * * *"}  ·  ${config.timezone || "UTC"}`;
     if (typeId === "trigger.manual") return "Manual trigger";
-    if (typeId === "action.http_request") return `${config.method || "POST"}  ${config.url || "Request URL not set"}`;
-    if (typeId === "action.email") return `To  ${config.to || "Recipient not set"}`;
-    if (typeId === "action.refund") return `Payment  ${config.payment_id || config.charge_id || "Not configured"}`;
+    if (typeId === "action.http_request")
+      return `${config.method || "POST"}  ${config.url || "Request URL not set"}`;
+    if (typeId === "action.email")
+      return `To  ${config.to || "Recipient not set"}`;
+    if (typeId === "action.refund")
+      return `Payment  ${config.payment_id || config.charge_id || "Not configured"}`;
     if (typeId === "human.approval") {
-      if (!config.approver_user_id && !String(config.message || "").trim()) return "Configure approval";
-      const summary = String(config.message || "").trim().split("\n")[0];
+      if (!config.approver_user_id && !String(config.message || "").trim())
+        return "Configure approval";
+      const summary = String(config.message || "")
+        .trim()
+        .split("\n")[0];
       return summary ? `Approve: ${summary}` : "Approver selected";
     }
-    if (typeId === "ai.decision") return config.model ? `${config.model} · ${Array.isArray(config.allowed_decisions) ? config.allowed_decisions.length : 0} outcomes` : "Choose connection and model";
-    if (typeId === "ai.generate") return config.model || "Choose connection and model";
-    if (typeId === "ai.rag_search") return ragKnowledgeBaseId(config) ? `Knowledge base selected · Top ${config.top_k ?? "—"} results` : "Choose a knowledge base";
-    if (typeId === "logic.condition") return validateNodeConfiguration(typeId, config).some((error) => error.field === "legacy") ? "Update legacy condition" : `Evaluate  ${config.value || "Value not set"}`;
+    if (typeId === "ai.decision")
+      return config.model
+        ? `${config.model} · ${Array.isArray(config.allowed_decisions) ? config.allowed_decisions.length : 0} outcomes`
+        : "Choose connection and model";
+    if (typeId === "ai.generate")
+      return config.model || "Choose connection and model";
+    if (typeId === "ai.rag_search")
+      return ragKnowledgeBaseId(config)
+        ? `Knowledge base selected · Top ${config.top_k ?? "—"} results`
+        : "Choose a knowledge base";
+    if (typeId === "logic.condition")
+      return validateNodeConfiguration(typeId, config).some(
+        (error) => error.field === "legacy",
+      )
+        ? "Update legacy condition"
+        : `Evaluate  ${config.value || "Value not set"}`;
     return "Configured";
   };
 
-  const handleClass = "workflow-handle !h-3 !w-3 !rounded-full !border-2 !border-[var(--canvas)] !bg-[#737373] transition-all hover:!bg-white hover:!scale-125";
+  const handleClass =
+    "workflow-handle !h-3 !w-3 !rounded-full !border-2 !border-[var(--canvas)] !bg-[#737373] transition-all hover:!bg-white hover:!scale-125";
 
   return (
     <div
@@ -55,41 +81,134 @@ function WorkflowNode({ data, selected }) {
       data-processing={processing ? "true" : undefined}
       style={{ "--node-accent": color }}
     >
-      {!isTrigger && <Handle type="target" position={Position.Top} className={`${handleClass} !-top-1.5`} />}
+      {!isTrigger && (
+        <Handle
+          type="target"
+          position={Position.Top}
+          className={`${handleClass} !-top-1.5`}
+        />
+      )}
 
-      <div className="h-[3px] rounded-t-xl" style={{ background: `linear-gradient(90deg, ${color}, ${color}55)` }} />
+      <div
+        className="h-[3px] rounded-t-xl"
+        style={{ background: `linear-gradient(90deg, ${color}, ${color}55)` }}
+      />
       <div className="flex items-center gap-3 px-3.5 pt-3 pb-2.5">
-        <div className="workflow-node-type-icon relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-[17px]" style={{ color, borderColor: `${color}35`, background: `${color}12` }}>
-          {processing ? <svg className="workflow-processing-spinner" viewBox="0 0 32 32" fill="none" strokeWidth="3" aria-hidden="true"><circle cx="16" cy="16" r="12" stroke="currentColor" opacity=".18"/><path d="M16 4a12 12 0 0 1 12 12" stroke="currentColor" strokeLinecap="round"/></svg> : def.icon}
+        <div
+          className="workflow-node-type-icon relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-[17px]"
+          style={{ color, borderColor: `${color}35`, background: `${color}12` }}
+        >
+          {processing ? (
+            <svg
+              className="workflow-processing-spinner"
+              viewBox="0 0 32 32"
+              fill="none"
+              strokeWidth="3"
+              aria-hidden="true"
+            >
+              <circle
+                cx="16"
+                cy="16"
+                r="12"
+                stroke="currentColor"
+                opacity=".18"
+              />
+              <path
+                d="M16 4a12 12 0 0 1 12 12"
+                stroke="currentColor"
+                strokeLinecap="round"
+              />
+            </svg>
+          ) : (
+            def.icon
+          )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="workflow-node-title truncate text-[13px] font-semibold tracking-[-0.02em]">{name}</div>
+          <div className="workflow-node-title truncate text-[13px] font-semibold tracking-[-0.02em]">
+            {name}
+          </div>
           <div className="mt-0.5 flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
-            <span className="workflow-node-category text-[10px] font-medium capitalize">{def.category || group}</span>
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: color }}
+            />
+            <span className="workflow-node-category text-[10px] font-medium capitalize">
+              {def.category || group}
+            </span>
           </div>
         </div>
-        <span className="text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true">···</span>
+        <span
+          className="text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100"
+          aria-hidden="true"
+        >
+          ···
+        </span>
       </div>
 
       <div className="workflow-node-divider mx-3.5 border-t" />
       <div className="px-3.5 py-2.5">
-        <div className="workflow-node-config truncate rounded-md border px-2.5 py-2 font-mono text-[10px] leading-4" title={getConfigSummary()}>
+        <div
+          className="workflow-node-config truncate rounded-md border px-2.5 py-2 font-mono text-[10px] leading-4"
+          title={getConfigSummary()}
+        >
           {getConfigSummary()}
         </div>
       </div>
 
       <div className="workflow-node-footer flex items-center justify-between border-t px-3.5 py-2 text-[10px] text-[var(--text-tertiary)]">
         <span className="inline-flex items-center gap-1.5" aria-live="polite">
-          {executionStatus ? <span key={executionStatus} className="workflow-node-run-state" data-status={executionStatus}>
-            {!processing && <span aria-hidden="true">{executionStatus === "completed" ? "✓" : ["failed", "dead_lettered"].includes(executionStatus) ? "×" : executionStatus === "waiting_for_approval" ? "Ⅱ" : "○"}</span>}
-            {executionLabel}
-          </span> : <>{["ai.rag_search", "ai.decision", "ai.generate", "logic.condition"].includes(typeId) ? (validateNodeConfiguration(typeId, config).length ? "Configuration required" : "Configured") : <><span className="h-1.5 w-1.5 rounded-full bg-[#35c98a] shadow-[0_0_8px_#35c98a80]" />Ready</>}</>}
+          {executionStatus ? (
+            <span
+              key={executionStatus}
+              className="workflow-node-run-state"
+              data-status={executionStatus}
+            >
+              {!processing && (
+                <span aria-hidden="true">
+                  {executionStatus === "completed"
+                    ? "✓"
+                    : ["failed", "dead_lettered"].includes(executionStatus)
+                      ? "×"
+                      : executionStatus === "waiting_for_approval"
+                        ? "Ⅱ"
+                        : "○"}
+                </span>
+              )}
+              {executionLabel}
+            </span>
+          ) : (
+            <>
+              {[
+                "ai.rag_search",
+                "ai.decision",
+                "ai.generate",
+                "logic.condition",
+              ].includes(typeId) ? (
+                validateNodeConfiguration(typeId, config).length ? (
+                  "Configuration required"
+                ) : (
+                  "Configured"
+                )
+              ) : (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#35c98a] shadow-[0_0_8px_#35c98a80]" />
+                  Ready
+                </>
+              )}
+            </>
+          )}
         </span>
-        <span className="workflow-node-id font-mono">{data?.nodeId || data?.node_id || "step"}</span>
+        <span className="workflow-node-id font-mono">
+          {data?.nodeId || data?.node_id || "step"}
+        </span>
       </div>
 
-      <Handle type="source" position={Position.Bottom} className={`${handleClass} !-bottom-1.5 ${isCondition ? "!bg-[#34d399]" : ""}`} title={isCondition ? "Connect a labeled branch" : undefined} />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className={`${handleClass} !-bottom-1.5 ${isCondition ? "!bg-[#34d399]" : ""}`}
+        title={isCondition ? "Connect a labeled branch" : undefined}
+      />
     </div>
   );
 }

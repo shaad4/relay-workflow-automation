@@ -55,7 +55,7 @@ function VerifyEmailContent() {
 
   const [status, setStatus] = useState(token ? "verifying" : "error");
   const [errorMessage, setErrorMessage] = useState(
-    token ? "" : mapVerificationError(null, false)
+    token ? "" : mapVerificationError(null, false),
   );
 
   useEffect(() => {

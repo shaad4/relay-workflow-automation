@@ -73,7 +73,7 @@ export async function getWorkflowNodes(workflowId, versionNumber) {
     `/workflows/${workflowId}/versions/${versionNumber}/nodes/`,
     {
       method: "GET",
-    }
+    },
   );
 }
 
@@ -83,7 +83,7 @@ export async function createWorkflowNode(workflowId, versionNumber, nodeData) {
     {
       method: "POST",
       body: JSON.stringify(nodeData),
-    }
+    },
   );
 }
 
@@ -91,27 +91,23 @@ export async function updateWorkflowNode(
   workflowId,
   versionNumber,
   nodeId,
-  nodeData
+  nodeData,
 ) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/nodes/${nodeId}/`,
     {
       method: "PATCH",
       body: JSON.stringify(nodeData),
-    }
+    },
   );
 }
 
-export async function deleteWorkflowNode(
-  workflowId,
-  versionNumber,
-  nodeId
-) {
+export async function deleteWorkflowNode(workflowId, versionNumber, nodeId) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/nodes/${nodeId}/`,
     {
       method: "DELETE",
-    }
+    },
   );
 }
 
@@ -120,7 +116,7 @@ export async function getWorkflowEdges(workflowId, versionNumber) {
     `/workflows/${workflowId}/versions/${versionNumber}/edges/`,
     {
       method: "GET",
-    }
+    },
   );
 }
 
@@ -130,7 +126,7 @@ export async function createWorkflowEdge(workflowId, versionNumber, edgeData) {
     {
       method: "POST",
       body: JSON.stringify(edgeData),
-    }
+    },
   );
 }
 
@@ -138,27 +134,23 @@ export async function updateWorkflowEdge(
   workflowId,
   versionNumber,
   edgeId,
-  edgeData
+  edgeData,
 ) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/edges/${edgeId}/`,
     {
       method: "PATCH",
       body: JSON.stringify(edgeData),
-    }
+    },
   );
 }
 
-export async function deleteWorkflowEdge(
-  workflowId,
-  versionNumber,
-  edgeId
-) {
+export async function deleteWorkflowEdge(workflowId, versionNumber, edgeId) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/edges/${edgeId}/`,
     {
       method: "DELETE",
-    }
+    },
   );
 }
 
@@ -167,7 +159,7 @@ export async function validateWorkflow(workflowId, versionNumber) {
     `/workflows/${workflowId}/versions/${versionNumber}/validate/`,
     {
       method: "POST",
-    }
+    },
   );
 }
 
@@ -176,7 +168,7 @@ export async function publishWorkflow(workflowId, versionNumber) {
     `/workflows/${workflowId}/versions/${versionNumber}/publish/`,
     {
       method: "POST",
-    }
+    },
   );
 }
 

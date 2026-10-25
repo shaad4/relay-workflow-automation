@@ -1,13 +1,25 @@
 export const outputsByType = {
   "ai.generate": ["content", "model", "input_tokens", "output_tokens"],
-  "ai.decision": ["decision", "reason", "data", "model", "input_tokens", "output_tokens"],
+  "ai.decision": [
+    "decision",
+    "reason",
+    "data",
+    "model",
+    "input_tokens",
+    "output_tokens",
+  ],
   "ai.rag_search": ["chunks", "context"],
   "action.http_request": ["status_code", "body", "headers", "success"],
   "action.email": ["message_id", "thread_id", "label_ids", "success"],
   "action.refund": ["refund_id", "payment_id", "amount", "status", "success"],
 };
 
-export function previousNodesFor(nodes, edges, currentNodeId, includeTriggers = false) {
+export function previousNodesFor(
+  nodes,
+  edges,
+  currentNodeId,
+  includeTriggers = false,
+) {
   const byId = new Map((nodes || []).map((node) => [String(node.id), node]));
   const previousIds = new Set();
   const followingIds = new Set();
@@ -37,6 +49,11 @@ export function previousNodesFor(nodes, edges, currentNodeId, includeTriggers = 
 
   return [...previousIds]
     .map((id) => byId.get(id))
-    .filter((node) => node && !followingIds.has(String(node.id)) && (includeTriggers || !node.data?.typeId?.startsWith("trigger.")))
+    .filter(
+      (node) =>
+        node &&
+        !followingIds.has(String(node.id)) &&
+        (includeTriggers || !node.data?.typeId?.startsWith("trigger.")),
+    )
     .reverse();
 }
