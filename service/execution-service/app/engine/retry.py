@@ -1,4 +1,3 @@
-
 import asyncio
 import random
 from collections.abc import Awaitable, Callable
@@ -6,13 +5,12 @@ from typing import TypeVar
 
 import grpc
 
-from app.engine.exceptions import ActionExecutionFailed
 from app.ai.exceptions import (
     AIRateLimitError,
-    AITimeoutError,
     AIServiceUnavailableError,
+    AITimeoutError,
 )
-from app.engine.exceptions import RetryExhaustedError
+from app.engine.exceptions import ActionExecutionFailed, RetryExhaustedError
 
 T = TypeVar("T")
 
@@ -59,20 +57,15 @@ async def execute_with_retry(
             *RETRYABLE_AI_ERRORS,
             grpc.aio.AioRpcError,
         ) as exc:
-
             # HTTP action failures.
             if isinstance(exc, ActionExecutionFailed):
                 should_retry = (
-                    method is not None
-                    and method.upper() in SAFE_HTTP_METHODS
-                    and exc.retryable
+                    method is not None and method.upper() in SAFE_HTTP_METHODS and exc.retryable
                 )
 
             # RAG gRPC failures.
             elif isinstance(exc, grpc.aio.AioRpcError):
-                should_retry = (
-                    exc.code() in RETRYABLE_GRPC_CODES
-                )
+                should_retry = exc.code() in RETRYABLE_GRPC_CODES
 
             # Temporary AI provider failures.
             else:
@@ -97,6 +90,4 @@ async def execute_with_retry(
 
             await asyncio.sleep(delay)
 
-    raise RuntimeError(
-        f"Retry loop unexpectedly exhausted for {node_id}"
-    )
+    raise RuntimeError(f"Retry loop unexpectedly exhausted for {node_id}")

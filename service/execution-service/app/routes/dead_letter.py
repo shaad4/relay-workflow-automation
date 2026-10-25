@@ -1,13 +1,13 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
 from app.repositories.dead_letter import DeadLetterRepository
+from app.schemas.dead_letter import DeadLetterEventResponse, DeadLetterListResponse
 from app.services.dead_letter import DeadLetterService
-from app.schemas.dead_letter import DeadLetterListResponse, DeadLetterEventResponse
 
 router = APIRouter(
     prefix="/dead-letter-events",
@@ -44,7 +44,6 @@ async def list_dead_letter_events(
     )
 
 
-
 @router.get(
     "/{event_id}/",
     response_model=DeadLetterEventResponse,
@@ -73,7 +72,6 @@ async def get_dead_letter_event(
     return event
 
 
-
 @router.post("/{event_id}/resolve/")
 async def resolve_dead_letter_event(
     event_id: UUID,
@@ -97,8 +95,6 @@ async def resolve_dead_letter_event(
         )
 
     return result
-
-
 
 
 @router.post("/{event_id}/replay/", status_code=202)

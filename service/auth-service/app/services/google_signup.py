@@ -25,10 +25,7 @@ async def create_google_signup_session(
         email=email,
         name=name,
         expires_at=(
-            datetime.now(timezone.utc)
-            + timedelta(
-                minutes=GOOGLE_SIGNUP_SESSION_EXPIRE_MINUTES
-            )
+            datetime.now(timezone.utc) + timedelta(minutes=GOOGLE_SIGNUP_SESSION_EXPIRE_MINUTES)
         ),
     )
 
@@ -58,74 +55,48 @@ async def complete_google_signup(
     signup_session = result.scalar_one_or_none()
 
     if not signup_session:
-        raise ValueError(
-            "Invalid Google signup session"
-        )
+        raise ValueError("Invalid Google signup session")
 
     # 2. Check whether the session was already used
     if signup_session.used_at is not None:
-        raise ValueError(
-            "Google signup session has already been used"
-        )
+        raise ValueError("Google signup session has already been used")
 
     # 3. Check whether the session has expired
     if signup_session.expires_at <= datetime.now(timezone.utc):
-        raise ValueError(
-            "Google signup session has expired"
-        )
+        raise ValueError("Google signup session has expired")
 
     # 4. Validate workspace name
     workspace_name = workspace_name.strip()
 
     if not workspace_name:
-        raise ValueError(
-            "Workspace name is required"
-        )
+        raise ValueError("Workspace name is required")
 
     if len(workspace_name) < 2:
-        raise ValueError(
-            "Workspace name must be at least 2 characters"
-        )
+        raise ValueError("Workspace name must be at least 2 characters")
 
     if len(workspace_name) > 100:
-        raise ValueError(
-            "Workspace name must be 100 characters or fewer"
-        )
+        raise ValueError("Workspace name must be 100 characters or fewer")
 
     # 5. Make sure the Google account wasn't created
     # between the callback and this request.
-    result = await session.execute(
-        select(User).where(
-            User.google_id == signup_session.google_id
-        )
-    )
+    result = await session.execute(select(User).where(User.google_id == signup_session.google_id))
 
     existing_google_user = result.scalar_one_or_none()
 
     if existing_google_user:
-        raise ValueError(
-            "Google account is already registered"
-        )
+        raise ValueError("Google account is already registered")
 
     # 6. Check email again before creating the user
-    result = await session.execute(
-        select(User).where(
-            User.email == signup_session.email
-        )
-    )
+    result = await session.execute(select(User).where(User.email == signup_session.email))
 
     existing_email_user = result.scalar_one_or_none()
 
     if existing_email_user:
-        raise ValueError(
-            "An account with this email already exists"
-        )
+        raise ValueError("An account with this email already exists")
 
     try:
         # 7. Create workspace
-        workspace = Workspace(
-            name=workspace_name
-        )
+        workspace = Workspace(name=workspace_name)
 
         session.add(workspace)
 

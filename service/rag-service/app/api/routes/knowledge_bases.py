@@ -9,11 +9,9 @@ from app.schemas.knowledge_base import (
     KnowledgeBaseCreate,
     KnowledgeBaseResponse,
 )
-from app.services.knowledge_base import KnowledgeBaseService
-
 from app.schemas.search import SearchRequest, SearchResponse
+from app.services.knowledge_base import KnowledgeBaseService
 from app.services.retrieval import RetrievalService
-
 
 router = APIRouter(
     prefix="/knowledge-bases",
@@ -79,7 +77,6 @@ async def get_knowledge_base(
     return knowledge_base
 
 
-
 @router.delete(
     "/{knowledge_base_id}/",
     status_code=204,
@@ -103,7 +100,6 @@ async def delete_knowledge_base(
         )
 
     return None
-
 
 
 @router.post(
@@ -151,4 +147,3 @@ async def search_knowledge_base(
         query=query,
         results=results,
     )
-

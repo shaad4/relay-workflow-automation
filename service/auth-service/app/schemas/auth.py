@@ -10,34 +10,22 @@ from pydantic import (
 
 def validate_password_strength(password: str) -> str:
     if len(password) < 8:
-        raise ValueError(
-            "Password must be at least 8 characters long"
-        )
+        raise ValueError("Password must be at least 8 characters long")
 
     if len(password) > 128:
-        raise ValueError(
-            "Password must not exceed 128 characters"
-        )
+        raise ValueError("Password must not exceed 128 characters")
 
     if not any(char.isupper() for char in password):
-        raise ValueError(
-            "Password must contain at least one uppercase letter"
-        )
+        raise ValueError("Password must contain at least one uppercase letter")
 
     if not any(char.islower() for char in password):
-        raise ValueError(
-            "Password must contain at least one lowercase letter"
-        )
+        raise ValueError("Password must contain at least one lowercase letter")
 
     if not any(char.isdigit() for char in password):
-        raise ValueError(
-            "Password must contain at least one number"
-        )
+        raise ValueError("Password must contain at least one number")
 
     if not any(not char.isalnum() for char in password):
-        raise ValueError(
-            "Password must contain at least one special character"
-        )
+        raise ValueError("Password must contain at least one special character")
 
     return password
 
@@ -75,9 +63,7 @@ class RegisterResponse(BaseModel):
     email: EmailStr
     workspace_id: uuid.UUID
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = {"from_attributes": True}
 
 
 class LoginRequest(BaseModel):
@@ -121,12 +107,14 @@ class ResetPasswordRequest(BaseModel):
 class ResetPasswordResponse(BaseModel):
     message: str
 
+
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
 
 class ResendVerificationResponse(BaseModel):
     message: str
+
 
 class GoogleSignupCompleteRequest(BaseModel):
     signup_session_id: uuid.UUID

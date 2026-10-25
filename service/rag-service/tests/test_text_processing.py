@@ -1,5 +1,4 @@
 import pytest
-
 from app.parsers.document_parser import parse_document
 from app.parsers.document_processor import process_document
 from app.parsers.text_chunker import chunk_text
@@ -7,7 +6,10 @@ from app.parsers.text_cleaner import clean_text
 
 
 def test_clean_text_preserves_unicode_and_paragraphs():
-    assert clean_text("  Café\t  東京\r\n\r\n\r\n Second   paragraph \x00") == "Café 東京\n\nSecond paragraph"
+    assert (
+        clean_text("  Café\t  東京\r\n\r\n\r\n Second   paragraph \x00")
+        == "Café 東京\n\nSecond paragraph"
+    )
 
 
 @pytest.mark.parametrize("value", ["", "  \n  ", "\x00"])
@@ -28,7 +30,9 @@ def test_chunk_boundaries_and_overlap_preserve_content():
     assert len(chunks) > 1
     assert all(len(chunk) <= 100 for chunk in chunks)
     assert chunks[0][-20:] == chunks[1][:20]
-    assert "".join(chunk if index == 0 else chunk[20:] for index, chunk in enumerate(chunks)) == text
+    assert (
+        "".join(chunk if index == 0 else chunk[20:] for index, chunk in enumerate(chunks)) == text
+    )
 
 
 def test_short_document_and_multiple_paragraphs():
@@ -43,7 +47,9 @@ def test_process_document_handles_synthetic_text():
     assert chunks == ["Café\n\nSecond paragraph"]
 
 
-@pytest.mark.parametrize("content,content_type", [(b"", "text/plain"), (b"\xff", "text/plain"), (b"x", "image/png")])
+@pytest.mark.parametrize(
+    "content,content_type", [(b"", "text/plain"), (b"\xff", "text/plain"), (b"x", "image/png")]
+)
 def test_parser_rejects_invalid_documents(content, content_type):
     with pytest.raises(ValueError):
         parse_document(content, content_type)

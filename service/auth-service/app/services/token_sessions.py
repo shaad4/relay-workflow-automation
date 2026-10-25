@@ -73,9 +73,7 @@ async def rotate_refresh_token(
 
     try:
         result = await session.execute(
-            select(RefreshSession)
-            .where(RefreshSession.id == session_id)
-            .with_for_update()
+            select(RefreshSession).where(RefreshSession.id == session_id).with_for_update()
         )
         row = result.scalar_one_or_none()
         now = datetime.now(timezone.utc)
@@ -125,9 +123,7 @@ async def revoke_refresh_session(
 
     try:
         result = await session.execute(
-            select(RefreshSession)
-            .where(RefreshSession.id == parsed_id)
-            .with_for_update()
+            select(RefreshSession).where(RefreshSession.id == parsed_id).with_for_update()
         )
         row = result.scalar_one_or_none()
         if row is None:

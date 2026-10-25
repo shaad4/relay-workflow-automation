@@ -1,8 +1,6 @@
 import grpc
 
-from app.grpc.generated.workflow import workflow_pb2
-from app.grpc.generated.workflow import workflow_pb2_grpc
-
+from app.grpc.generated.workflow import workflow_pb2, workflow_pb2_grpc
 
 WORKFLOW_GRPC_URL = "workflow-service:50052"
 
@@ -10,9 +8,7 @@ WORKFLOW_GRPC_URL = "workflow-service:50052"
 class WorkflowGrpcClient:
     def __init__(self):
         self.channel = grpc.aio.insecure_channel(WORKFLOW_GRPC_URL)
-        self.stub = workflow_pb2_grpc.WorkflowInternalServiceStub(
-            self.channel
-        )
+        self.stub = workflow_pb2_grpc.WorkflowInternalServiceStub(self.channel)
 
     async def validate_workflow_version(
         self,
@@ -42,7 +38,6 @@ class WorkflowGrpcClient:
             request,
             timeout=10,
         )
-
 
     async def get_workflow_definition(
         self,

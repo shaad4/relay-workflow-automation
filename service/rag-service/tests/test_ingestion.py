@@ -4,19 +4,27 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-
 from app.services.ingestion import IngestionService
 
 
 def service(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "synthetic-test-key")
-    monkeypatch.setattr("app.services.ingestion.SupabaseStorage", lambda: SimpleNamespace(download=lambda path: b"Synthetic document"))
+    monkeypatch.setattr(
+        "app.services.ingestion.SupabaseStorage",
+        lambda: SimpleNamespace(download=lambda path: b"Synthetic document"),
+    )
+
     async def immediate(function, *args, **kwargs):
         return function(*args, **kwargs)
+
     monkeypatch.setattr("app.services.ingestion.run_in_threadpool", immediate)
     db = AsyncMock()
     ingestion = IngestionService(db)
-    ingestion.document_repository.get_by_id = AsyncMock(return_value=SimpleNamespace(status="pending", storage_path="synthetic/path.txt", content_type="text/plain"))
+    ingestion.document_repository.get_by_id = AsyncMock(
+        return_value=SimpleNamespace(
+            status="pending", storage_path="synthetic/path.txt", content_type="text/plain"
+        )
+    )
     ingestion.document_repository.claim_for_ingestion = AsyncMock(return_value=True)
     ingestion.document_repository.transition_ingestion_status = AsyncMock(return_value=True)
     ingestion.document_repository.complete_ingestion = AsyncMock(return_value=True)
@@ -30,9 +38,19 @@ def test_ingestion_tracks_status_and_stores_chunks(monkeypatch):
     ingestion = service(monkeypatch)
     document, workspace = uuid.uuid4(), uuid.uuid4()
     assert asyncio.run(ingestion.ingest_document(document, workspace)) == 1
-    assert [call.kwargs["new_status"] for call in ingestion.document_repository.transition_ingestion_status.await_args_list] == ["chunking", "embedding"]
-    ingestion.chunk_repository.create_chunks.assert_awaited_once_with(document_id=document, workspace_id=workspace, chunks=["Synthetic document"], embeddings=[[0.1] * 1536])
-    ingestion.document_repository.complete_ingestion.assert_awaited_once_with(document_id=document, workspace_id=workspace)
+    assert [
+        call.kwargs["new_status"]
+        for call in ingestion.document_repository.transition_ingestion_status.await_args_list
+    ] == ["chunking", "embedding"]
+    ingestion.chunk_repository.create_chunks.assert_awaited_once_with(
+        document_id=document,
+        workspace_id=workspace,
+        chunks=["Synthetic document"],
+        embeddings=[[0.1] * 1536],
+    )
+    ingestion.document_repository.complete_ingestion.assert_awaited_once_with(
+        document_id=document, workspace_id=workspace
+    )
     assert ingestion.db.commit.await_count == 4
 
 

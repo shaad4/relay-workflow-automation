@@ -15,9 +15,16 @@ from test_workflow_service import FakeSession, Result
 
 def test_workflow_response_exposes_actual_published_pointer():
     version_id = uuid4()
-    workflow = NS(id=uuid4(), workspace_id=uuid4(), name="Scheduled", description=None,
-                  status="active", published_version_id=version_id,
-                  created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+    workflow = NS(
+        id=uuid4(),
+        workspace_id=uuid4(),
+        name="Scheduled",
+        description=None,
+        status="active",
+        published_version_id=version_id,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
     assert WorkflowResponse.model_validate(workflow).published_version_id == version_id
     del workflow.published_version_id
     assert WorkflowResponse.model_validate(workflow).published_version_id is None
@@ -30,14 +37,19 @@ def test_post_commit_schedule_error_preserves_publication(monkeypatch):
     session = FakeSession([Result(scalar=workflow), Result(scalar=version)])
     closed = []
 
-    async def validate(**kwargs): return {"valid": True}
-    async def has_trigger(*args): return True
+    async def validate(**kwargs):
+        return {"valid": True}
+
+    async def has_trigger(*args):
+        return True
 
     class Client:
         async def sync_workflow_schedule(self, **kwargs):
             assert session.commits == 1
             raise RuntimeError("RPC unavailable")
-        async def close(self): closed.append(True)
+
+        async def close(self):
+            closed.append(True)
 
     monkeypatch.setattr(service, "validate_workflow", validate)
     monkeypatch.setattr(service, "_published_version_has_schedule_trigger", has_trigger)

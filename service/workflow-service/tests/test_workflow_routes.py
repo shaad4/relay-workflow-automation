@@ -1,13 +1,13 @@
-import sys
 import asyncio
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
-import pytest
-import httpx
 import grpc
+import httpx
+import pytest
 from fastapi import FastAPI
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -232,7 +232,9 @@ def test_delete_workflow_returns_conflict_for_active_status(client, monkeypatch)
     assert response.json()["detail"].startswith("Only draft or inactive workflows can be deleted")
 
 
-def test_delete_workflow_returns_conflict_if_status_changes_during_delete(client, monkeypatch, approval_cleanup):
+def test_delete_workflow_returns_conflict_if_status_changes_during_delete(
+    client, monkeypatch, approval_cleanup
+):
     async def get_workflow(workflow_id, workspace_id, session):
         return workflow
 
@@ -301,7 +303,9 @@ def test_create_list_update_delete_nodes(client, monkeypatch):
     async def list_workflow_nodes(workflow_id, version_number, workspace_id, session):
         return [node]
 
-    async def update_workflow_node(workflow_id, version_number, node_id, workspace_id, data, session):
+    async def update_workflow_node(
+        workflow_id, version_number, node_id, workspace_id, data, session
+    ):
         return node
 
     async def delete_workflow_node(workflow_id, version_number, node_id, workspace_id, session):
@@ -345,7 +349,9 @@ def test_create_list_update_delete_edges(client, monkeypatch):
     async def list_workflow_edges(workflow_id, version_number, workspace_id, session):
         return [edge]
 
-    async def update_workflow_edge(workflow_id, version_number, edge_id, workspace_id, data, session):
+    async def update_workflow_edge(
+        workflow_id, version_number, edge_id, workspace_id, data, session
+    ):
         return edge
 
     async def delete_workflow_edge(workflow_id, version_number, edge_id, workspace_id, session):
@@ -400,7 +406,10 @@ def test_validate_and_publish_workflow(client, monkeypatch):
 
 @pytest.mark.parametrize(
     ("route", "service_name", "status"),
-    [("activate", "activate_workflow", "active"), ("deactivate", "deactivate_workflow", "inactive")],
+    [
+        ("activate", "activate_workflow", "active"),
+        ("deactivate", "deactivate_workflow", "inactive"),
+    ],
 )
 def test_activate_and_deactivate_workflow(client, monkeypatch, route, service_name, status):
     result = SimpleNamespace(
@@ -502,11 +511,10 @@ def test_workflow_route_uses_auth_service_grpc(monkeypatch):
         ("Bearer ", "Invalid authorization header"),
     ],
 )
-def test_auth_dependency_rejects_missing_or_malformed_header(
-    authorization, expected_detail
-):
-    from fastapi import HTTPException
+def test_auth_dependency_rejects_missing_or_malformed_header(authorization, expected_detail):
     import asyncio
+
+    from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(get_current_identity(authorization=authorization))
@@ -515,8 +523,9 @@ def test_auth_dependency_rejects_missing_or_malformed_header(
 
 
 def test_auth_dependency_rejects_invalid_token_and_closes_client(monkeypatch):
-    from fastapi import HTTPException
     import asyncio
+
+    from fastapi import HTTPException
 
     calls = {"token": None, "closed": False}
 
@@ -539,6 +548,7 @@ def test_auth_dependency_rejects_invalid_token_and_closes_client(monkeypatch):
 def test_get_workflow_includes_published_version_id(client, monkeypatch):
     async def get_workflow(**kwargs):
         return SimpleNamespace(**{**vars(workflow), "published_version_id": VERSION_ID})
+
     monkeypatch.setattr(workflows, "get_workflow", get_workflow)
     response = client.get(f"/workflows/{WORKFLOW_ID}/")
     assert response.status_code == 200
@@ -548,6 +558,7 @@ def test_get_workflow_includes_published_version_id(client, monkeypatch):
 def test_publish_reports_schedule_sync_failure_after_commit(client, monkeypatch):
     async def publish(**kwargs):
         raise workflows.ScheduleSynchronizationError("already committed")
+
     monkeypatch.setattr(workflows, "publish_workflow", publish)
     response = client.post(f"/workflows/{WORKFLOW_ID}/versions/1/publish/")
     assert response.status_code == 503

@@ -1,16 +1,16 @@
 import uuid
 from datetime import datetime, timezone
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     DateTime,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Text,
-    ForeignKeyConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
-from pgvector.sqlalchemy import Vector
 
 from app.db.base import Base
 
@@ -56,15 +56,15 @@ class DocumentChunk(Base):
     )
 
     __table_args__ = (
-    Index(
-        "ix_document_chunks_workspace_document",
-        "workspace_id",
-        "document_id",
-    ),
-    ForeignKeyConstraint(
-        ["document_id", "workspace_id"],
-        ["documents.id", "documents.workspace_id"],
-        ondelete="CASCADE",
-        name="fk_document_chunks_document_workspace",
-    ),
-)
+        Index(
+            "ix_document_chunks_workspace_document",
+            "workspace_id",
+            "document_id",
+        ),
+        ForeignKeyConstraint(
+            ["document_id", "workspace_id"],
+            ["documents.id", "documents.workspace_id"],
+            ondelete="CASCADE",
+            name="fk_document_chunks_document_workspace",
+        ),
+    )

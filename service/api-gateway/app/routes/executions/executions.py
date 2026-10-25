@@ -1,10 +1,8 @@
-
 from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
-
 
 router = APIRouter(prefix="/executions")
 
@@ -63,41 +61,28 @@ async def proxy_execution_request(
 ):
     path_segments = path.split("/") if path else []
 
-    if any(
-        segment in {".", ".."}
-        for segment in path_segments
-    ):
+    if any(segment in {".", ".."} for segment in path_segments):
         raise HTTPException(
             status_code=400,
             detail="Invalid execution path",
         )
 
-    encoded_path = "/".join(
-        quote(segment, safe="")
-        for segment in path_segments
-    )
+    encoded_path = "/".join(quote(segment, safe="") for segment in path_segments)
 
     base_url = f"{EXECUTION_SERVICE_URL}/executions"
 
-    url = (
-        f"{base_url}/{encoded_path}/"
-        if encoded_path
-        else f"{base_url}/"
-    )
+    url = f"{base_url}/{encoded_path}/" if encoded_path else f"{base_url}/"
 
     connection_headers = {
         name.strip().lower()
-        for name in request.headers.get(
-            "connection", ""
-        ).split(",")
+        for name in request.headers.get("connection", "").split(",")
         if name.strip()
     }
 
     headers = {
         key: value
         for key, value in request.headers.items()
-        if key.lower()
-        not in EXCLUDED_HEADERS | connection_headers
+        if key.lower() not in EXCLUDED_HEADERS | connection_headers
     }
 
     try:
@@ -126,17 +111,14 @@ async def proxy_execution_request(
 
     response_connection_headers = {
         name.strip().lower()
-        for name in response.headers.get(
-            "connection", ""
-        ).split(",")
+        for name in response.headers.get("connection", "").split(",")
         if name.strip()
     }
 
     response_headers = {
         key: value
         for key, value in response.headers.items()
-        if key.lower()
-        not in EXCLUDED_HEADERS | response_connection_headers
+        if key.lower() not in EXCLUDED_HEADERS | response_connection_headers
     }
 
     return Response(

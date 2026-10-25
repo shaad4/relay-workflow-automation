@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import String, DateTime, Index, UniqueConstraint
+from sqlalchemy import DateTime, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,14 +40,14 @@ class KnowledgeBase(Base):
     )
 
     __table_args__ = (
-    Index(
-        "ix_knowledge_bases_workspace_name",
-        "workspace_id",
-        "name",
-    ),
-    UniqueConstraint(
-        "id",
-        "workspace_id",
-        name="uq_knowledge_bases_id_workspace",
-    ),
-)
+        Index(
+            "ix_knowledge_bases_workspace_name",
+            "workspace_id",
+            "name",
+        ),
+        UniqueConstraint(
+            "id",
+            "workspace_id",
+            name="uq_knowledge_bases_id_workspace",
+        ),
+    )

@@ -23,26 +23,18 @@ class ConnectionCreate(BaseModel):
     @model_validator(mode="after")
     def validate_authentication(self):
         if self.auth_type not in SUPPORTED_AUTH_TYPES:
-            raise ValueError(
-                f"Unsupported auth_type: {self.auth_type}"
-            )
+            raise ValueError(f"Unsupported auth_type: {self.auth_type}")
 
         if self.auth_type != "none" and not self.credential:
-            raise ValueError(
-                "credential is required for this authentication type"
-            )
+            raise ValueError("credential is required for this authentication type")
 
         if self.auth_type == "api_key_header":
             if not self.config or not self.config.get("auth_header"):
-                raise ValueError(
-                    "config.auth_header is required for api_key_header"
-                )
+                raise ValueError("config.auth_header is required for api_key_header")
 
         if self.auth_type == "api_key_query":
             if not self.config or not self.config.get("auth_param"):
-                raise ValueError(
-                    "config.auth_param is required for api_key_query"
-                )
+                raise ValueError("config.auth_param is required for api_key_query")
 
         return self
 

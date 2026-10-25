@@ -1,6 +1,5 @@
 import asyncio
 import sys
-from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -36,9 +35,13 @@ def test_create_pending_execution(monkeypatch, session, duplicate):
     }
     event.update(trigger_type="manual", payload={"email": "test@example.com"})
     client = SimpleNamespace(
-        validate_workflow_version=AsyncMock(return_value=SimpleNamespace(
-            valid=True, status="published", workflow_status="active",
-        )),
+        validate_workflow_version=AsyncMock(
+            return_value=SimpleNamespace(
+                valid=True,
+                status="published",
+                workflow_status="active",
+            )
+        ),
         close=AsyncMock(),
     )
     monkeypatch.setattr(execution_queue, "WorkflowClient", lambda: client)
@@ -51,7 +54,9 @@ def test_create_pending_execution(monkeypatch, session, duplicate):
     existing_id = uuid4()
     if duplicate:
         session.commit.side_effect = IntegrityError("insert", {}, Exception("duplicate"))
-        session.execute.return_value.scalar_one_or_none.return_value = SimpleNamespace(id=existing_id)
+        session.execute.return_value.scalar_one_or_none.return_value = SimpleNamespace(
+            id=existing_id
+        )
 
     expected_id = existing_id if duplicate else execution_id
     assert asyncio.run(execution_queue.create_pending_execution(event)) == expected_id
@@ -103,9 +108,17 @@ def test_failed_execution_is_persisted(session):
     )
     session.execute.return_value.scalar_one_or_none.return_value = None
 
-    assert asyncio.run(execution_queue.finalize_execution(
-        execution_id, "worker-1", ExecutionStatus.FAILED, error=error,
-    )) == ExecutionStatus.FAILED
+    assert (
+        asyncio.run(
+            execution_queue.finalize_execution(
+                execution_id,
+                "worker-1",
+                ExecutionStatus.FAILED,
+                error=error,
+            )
+        )
+        == ExecutionStatus.FAILED
+    )
     assert session.execute.await_count == 2
     params = session.execute.await_args_list[0].args[0].compile().params
     assert ExecutionStatus.FAILED in params.values()

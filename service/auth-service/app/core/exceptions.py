@@ -9,6 +9,4 @@ class EmailVerificationRequired(Exception):
         self.user_email = user_email
         self.user_name = user_name
 
-        super().__init__(
-            "Please verify your email before logging in"
-        )
+        super().__init__("Please verify your email before logging in")

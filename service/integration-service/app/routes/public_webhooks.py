@@ -1,10 +1,11 @@
 from uuid import uuid4
 
+import grpc
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-import grpc
 
-from .webhooks import get_db
+from app.kafka.producer import publish_workflow_triggered
+from app.schemas.events import WorkflowTriggeredEvent
 from app.services.webhook_service import (
     InactiveWorkflowError,
     UnpublishedWorkflowVersionError,
@@ -14,9 +15,8 @@ from app.services.webhook_service import (
     verify_webhook_secret,
 )
 from app.services.webhook_test_sessions import publish_result, publish_session_result
-from app.kafka.producer import publish_workflow_triggered
-from app.schemas.events import WorkflowTriggeredEvent
 
+from .webhooks import get_db
 
 router = APIRouter(
     prefix="/hooks",
@@ -52,7 +52,6 @@ async def receive_webhook(
 
     # 3. Validate secret when authentication is enabled
     if webhook.authentication_type == "secret":
-
         if not x_relay_secret:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -91,12 +90,23 @@ async def receive_webhook(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except grpc.aio.AioRpcError as exc:
         if exc.code() == grpc.StatusCode.NOT_FOUND:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow or workflow version not found") from exc
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workflow or workflow version not found",
+            ) from exc
         if exc.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
-            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Workflow Service request timed out") from exc
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Workflow Service request timed out",
+            ) from exc
         if exc.code() == grpc.StatusCode.UNAVAILABLE:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Workflow Service is unavailable") from exc
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to validate workflow") from exc
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Workflow Service is unavailable",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to validate workflow"
+        ) from exc
 
     # 4. Read the incoming webhook payload
     try:
@@ -157,7 +167,12 @@ async def test_webhook(
     # 2. Check whether webhook is active
     if not webhook.is_active:
         if test_session_id:
-            await publish_result(test_session_id, str(webhook.id), "failed", {"status_code": 403, "detail": "Webhook is inactive"})
+            await publish_result(
+                test_session_id,
+                str(webhook.id),
+                "failed",
+                {"status_code": 403, "detail": "Webhook is inactive"},
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Webhook is inactive",
@@ -165,10 +180,14 @@ async def test_webhook(
 
     # 3. Validate secret when authentication is enabled
     if webhook.authentication_type == "secret":
-
         if not x_relay_secret:
             if test_session_id:
-                await publish_result(test_session_id, str(webhook.id), "failed", {"status_code": 401, "detail": "Webhook secret is required"})
+                await publish_result(
+                    test_session_id,
+                    str(webhook.id),
+                    "failed",
+                    {"status_code": 401, "detail": "Webhook secret is required"},
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Webhook secret is required",
@@ -176,7 +195,15 @@ async def test_webhook(
 
         if not webhook.secret_hash:
             if test_session_id:
-                await publish_result(test_session_id, str(webhook.id), "failed", {"status_code": 500, "detail": "Webhook authentication is not configured correctly"})
+                await publish_result(
+                    test_session_id,
+                    str(webhook.id),
+                    "failed",
+                    {
+                        "status_code": 500,
+                        "detail": "Webhook authentication is not configured correctly",
+                    },
+                )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Webhook authentication is not configured correctly",
@@ -187,7 +214,12 @@ async def test_webhook(
             secret_hash=webhook.secret_hash,
         ):
             if test_session_id:
-                await publish_result(test_session_id, str(webhook.id), "failed", {"status_code": 401, "detail": "Invalid webhook secret"})
+                await publish_result(
+                    test_session_id,
+                    str(webhook.id),
+                    "failed",
+                    {"status_code": 401, "detail": "Invalid webhook secret"},
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid webhook secret",
@@ -198,8 +230,15 @@ async def test_webhook(
         payload = await request.json()
     except Exception:
         if test_session_id:
-            await publish_result(test_session_id, str(webhook.id), "failed", {"status_code": 400, "detail": "Request body must be valid JSON"})
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request body must be valid JSON")
+            await publish_result(
+                test_session_id,
+                str(webhook.id),
+                "failed",
+                {"status_code": 400, "detail": "Request body must be valid JSON"},
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Request body must be valid JSON"
+        )
 
     # 5. Return the received payload to the caller and mirror it to the active UI session.
     result = {

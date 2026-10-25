@@ -1,4 +1,3 @@
-from app.routes.dashboard import router as dashboard_router
 import asyncio
 from contextlib import asynccontextmanager
 
@@ -7,28 +6,26 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.grpc.server import start_grpc_server
-
 from app.kafka.consumer import (
+    consume_workflow_triggered,
     start_consumer,
     stop_consumer,
-    consume_workflow_triggered,
 )
-
 from app.kafka.lifecycle_producer import (
     start_lifecycle_producer,
     stop_lifecycle_producer,
 )
-
-from app.services.execution_dispatcher import ExecutionDispatcher
-
-from app.routes.approvals import (
-    router as approvals_router,
-)
 from app.routes.ai_provider_connections import (
     router as ai_provider_connections_router,
 )
-from app.routes.executions import router as executions_router
+from app.routes.approvals import (
+    router as approvals_router,
+)
+from app.routes.dashboard import router as dashboard_router
 from app.routes.dead_letter import router as dead_letter_router
+from app.routes.executions import router as executions_router
+from app.services.execution_dispatcher import ExecutionDispatcher
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -85,13 +82,9 @@ async def lifespan(app: FastAPI):
 
         app.state.background_worker_failed = True
 
-    consumer_task.add_done_callback(
-        handle_background_task_done
-    )
+    consumer_task.add_done_callback(handle_background_task_done)
 
-    dispatcher_task.add_done_callback(
-        handle_background_task_done
-    )
+    dispatcher_task.add_done_callback(handle_background_task_done)
 
     try:
         yield
@@ -171,6 +164,7 @@ app.include_router(ai_provider_connections_router)
 app.include_router(executions_router)
 app.include_router(dead_letter_router)
 
+
 @app.get("/health")
 async def health(request: Request):
     consumer_task = getattr(
@@ -211,5 +205,6 @@ async def health(request: Request):
         "status": "ok",
         "service": "execution-service",
     }
+
 
 app.include_router(dashboard_router)

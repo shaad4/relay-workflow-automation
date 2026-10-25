@@ -9,7 +9,6 @@ from app.routes.executions import get_db
 from app.schemas.dashboard import DashboardRange, DashboardSummary
 from app.services.dashboard import get_dashboard_summary
 
-
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 

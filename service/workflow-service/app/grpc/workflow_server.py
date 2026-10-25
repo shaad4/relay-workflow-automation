@@ -1,20 +1,17 @@
-import grpc
 import json
+
+import grpc
 from sqlalchemy import select
 
 from app.db.database import AsyncSessionLocal
+from app.grpc.generated.workflow import workflow_pb2, workflow_pb2_grpc
 from app.models.workflow import Workflow
-from app.models.workflow_version import WorkflowVersion
 from app.models.workflow_edge import WorkflowEdge
 from app.models.workflow_node import WorkflowNode
-from app.grpc.generated.workflow import workflow_pb2
-from app.grpc.generated.workflow import workflow_pb2_grpc
+from app.models.workflow_version import WorkflowVersion
 
 
-class WorkflowInternalService(
-    workflow_pb2_grpc.WorkflowInternalServiceServicer
-):
-
+class WorkflowInternalService(workflow_pb2_grpc.WorkflowInternalServiceServicer):
     async def GetPublishedVersion(self, request, context):
         async with AsyncSessionLocal() as session:
             result = await session.execute(
@@ -28,9 +25,7 @@ class WorkflowInternalService(
 
             if not workflow or not workflow.published_version_id:
                 context.set_code(grpc.StatusCode.NOT_FOUND)
-                context.set_details(
-                    "Published workflow version not found"
-                )
+                context.set_details("Published workflow version not found")
                 return workflow_pb2.GetPublishedVersionResponse()
 
             version_result = await session.execute(
@@ -44,9 +39,7 @@ class WorkflowInternalService(
 
             if not version:
                 context.set_code(grpc.StatusCode.NOT_FOUND)
-                context.set_details(
-                    "Published workflow version not found"
-                )
+                context.set_details("Published workflow version not found")
                 return workflow_pb2.GetPublishedVersionResponse()
 
             return workflow_pb2.GetPublishedVersionResponse(

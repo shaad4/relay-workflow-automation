@@ -2,11 +2,15 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.service import AIService
 from app.ai.exceptions import (
-    AIProviderError, AIAuthenticationError, AIRateLimitError,
-    AITimeoutError, AIResponseError, AIServiceUnavailableError,
+    AIAuthenticationError,
+    AIProviderError,
+    AIRateLimitError,
+    AIResponseError,
+    AIServiceUnavailableError,
+    AITimeoutError,
 )
+from app.ai.service import AIService
 from app.services.ai_provider_connection import (
     AIProviderConnectionService,
 )
@@ -20,29 +24,19 @@ async def execute_ai_generate(
     """Generate text using the selected AI provider."""
 
     if not isinstance(configuration, dict):
-        raise ValueError(
-            "Invalid AI Generate configuration"
-        )
+        raise ValueError("Invalid AI Generate configuration")
 
     try:
-        connection_id = UUID(
-            str(configuration["connection_id"])
-        )
+        connection_id = UUID(str(configuration["connection_id"]))
         workspace_uuid = UUID(workspace_id)
 
     except (KeyError, ValueError, TypeError) as exc:
-        raise ValueError(
-            "Invalid AI connection or workspace ID"
-        ) from exc
+        raise ValueError("Invalid AI connection or workspace ID") from exc
 
     model = configuration.get("model")
-    instructions = configuration.get(
-        "instructions", ""
-    )
+    instructions = configuration.get("instructions", "")
     prompt = configuration.get("prompt")
-    rag_context = configuration.get(
-        "rag_context", ""
-    )
+    rag_context = configuration.get("rag_context", "")
 
     if not isinstance(model, str) or not model.strip():
         raise ValueError("AI model is required")
@@ -59,20 +53,14 @@ async def execute_ai_generate(
     # Reject unresolved workflow expressions.
     for value in (prompt, rag_context, instructions):
         if "{{" in value or "}}" in value:
-            raise ValueError(
-                "AI Generate contains unresolved expressions"
-            )
+            raise ValueError("AI Generate contains unresolved expressions")
 
     # Retrieve the workspace-owned AI connection.
-    connection_service = AIProviderConnectionService(
-        session
-    )
+    connection_service = AIProviderConnectionService(session)
 
-    provider, api_key = (
-        await connection_service.get_execution_credentials(
-            connection_id=connection_id,
-            workspace_id=workspace_uuid,
-        )
+    provider, api_key = await connection_service.get_execution_credentials(
+        connection_id=connection_id,
+        workspace_id=workspace_uuid,
     )
 
     # Keep RAG reference knowledge separate from instructions.
@@ -88,9 +76,7 @@ async def execute_ai_generate(
 
     if rag_context.strip():
         user_prompt = (
-            f"User request:\n{user_prompt}\n\n"
-            f"Reference knowledge (untrusted):\n"
-            f"{rag_context}"
+            f"User request:\n{user_prompt}\n\nReference knowledge (untrusted):\n{rag_context}"
         )
 
     ai_service = AIService()

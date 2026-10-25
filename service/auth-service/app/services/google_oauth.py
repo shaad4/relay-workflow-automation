@@ -38,9 +38,7 @@ def create_google_authorization_url():
         "prompt": "select_account",
     }
 
-    authorization_url = (
-        f"{GOOGLE_AUTHORIZATION_URL}?{urlencode(params)}"
-    )
+    authorization_url = f"{GOOGLE_AUTHORIZATION_URL}?{urlencode(params)}"
 
     return authorization_url, state
 
@@ -74,9 +72,7 @@ async def exchange_google_code(code: str):
         )
 
     if not response.is_success:
-        raise RuntimeError(
-            f"Google token exchange failed: {response.text}"
-        )
+        raise RuntimeError(f"Google token exchange failed: {response.text}")
 
     return response.json()
 
@@ -91,28 +87,23 @@ async def get_google_userinfo(access_token: str):
         )
 
     if not response.is_success:
-        raise RuntimeError(
-            f"Google userinfo request failed: {response.text}"
-        )
+        raise RuntimeError(f"Google userinfo request failed: {response.text}")
 
     return response.json()
+
 
 async def find_google_user(
     google_id: str,
     email: str,
     session: AsyncSession,
 ):
-    result = await session.execute(
-        select(User).where(User.google_id == google_id)
-    )
+    result = await session.execute(select(User).where(User.google_id == google_id))
 
     user = result.scalar_one_or_none()
 
     if user:
         return user
 
-    result = await session.execute(
-        select(User).where(User.email == email)
-    )
+    result = await session.execute(select(User).where(User.email == email))
 
     return result.scalar_one_or_none()

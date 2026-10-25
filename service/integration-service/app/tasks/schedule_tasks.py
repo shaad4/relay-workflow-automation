@@ -7,9 +7,9 @@ from sqlalchemy import select, update
 from app.celery_app import celery_app
 from app.db.database import AsyncSessionLocal
 from app.kafka.producer import (
+    publish_workflow_triggered,
     start_producer,
     stop_producer,
-    publish_workflow_triggered,
 )
 from app.models.workflow_schedule import WorkflowSchedule
 from app.schemas.events import WorkflowTriggeredEvent
@@ -38,9 +38,7 @@ async def find_due_schedules():
             {
                 "id": str(schedule.id),
                 "workflow_id": str(schedule.workflow_id),
-                "workflow_version_id": str(
-                    schedule.workflow_version_id
-                ),
+                "workflow_version_id": str(schedule.workflow_version_id),
                 "workspace_id": str(schedule.workspace_id),
                 "schedule_type": schedule.schedule_type,
                 "next_run_at": schedule.next_run_at.isoformat(),
@@ -63,11 +61,7 @@ async def advance_due_schedules():
                 UUID(item["id"]),
             )
 
-            if (
-                schedule is None
-                or not schedule.enabled
-                or schedule.next_run_at is None
-            ):
+            if schedule is None or not schedule.enabled or schedule.next_run_at is None:
                 continue
 
             due_at = schedule.next_run_at
@@ -118,15 +112,9 @@ async def publish_scheduled_events(
         for schedule in schedules:
             event = WorkflowTriggeredEvent(
                 event_id=uuid4(),
-                workspace_id=UUID(
-                    schedule["workspace_id"]
-                ),
-                workflow_id=UUID(
-                    schedule["workflow_id"]
-                ),
-                workflow_version_id=UUID(
-                    schedule["workflow_version_id"]
-                ),
+                workspace_id=UUID(schedule["workspace_id"]),
+                workflow_id=UUID(schedule["workflow_id"]),
+                workflow_version_id=UUID(schedule["workflow_version_id"]),
                 trigger_type="schedule",
                 payload=schedule.get("input_data", {}),
             )
@@ -148,9 +136,7 @@ async def process_due_schedules() -> int:
     return await publish_scheduled_events(schedules)
 
 
-@celery_app.task(
-    name="integration.check_due_schedules"
-)
+@celery_app.task(name="integration.check_due_schedules")
 def check_due_schedules():
     """Periodic Celery task for scheduled workflows."""
 

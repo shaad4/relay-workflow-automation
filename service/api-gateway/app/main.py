@@ -1,26 +1,24 @@
-from app.routes.dashboard.overview import router as dashboard_router
 import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from app.routes.auth.authenticated import router as auth_router
-from app.routes.auth.public import router as public_auth_router
-from app.routes.workflows.workflows import router as workflows_router
-
-from app.routes.integrations.webhooks import router as integration_router
-from app.routes.integrations.public_webhooks import router as public_webhooks_router
-
-from app.routes.integrations.connections import router as connections_router
-from app.routes.executions.approvals import router as approvals_router
 from app.routes.ai.knowledge_bases import router as knowledge_base_router
 from app.routes.ai.provider_connections import router as ai_provider_connections_router
+from app.routes.auth.authenticated import router as auth_router
+from app.routes.auth.public import router as public_auth_router
+from app.routes.dashboard.overview import router as dashboard_router
+from app.routes.executions.approvals import router as approvals_router
+from app.routes.executions.dead_letter import router as dead_letter_router
+from app.routes.executions.executions import router as executions_router
+from app.routes.integrations.connections import router as connections_router
+from app.routes.integrations.public_webhooks import router as public_webhooks_router
+from app.routes.integrations.webhooks import router as integration_router
 from app.routes.workflows.manual_triggers import router as manual_triggers_router
 from app.routes.workflows.schedules import router as schedules_router
-from app.routes.executions.executions import router as executions_router
-from app.routes.executions.dead_letter import router as dead_letter_router
+from app.routes.workflows.workflows import router as workflows_router
 
 load_dotenv()
 
@@ -47,12 +45,8 @@ app.add_middleware(
 
 @app.middleware("http")
 async def enforce_cookie_origin(request: Request, call_next):
-    if (
-        request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"}
-        and (
-            request.cookies.get("relay_access_token")
-            or request.cookies.get("relay_refresh_token")
-        )
+    if request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"} and (
+        request.cookies.get("relay_access_token") or request.cookies.get("relay_refresh_token")
     ):
         origin = request.headers.get("origin")
         fetch_site = request.headers.get("sec-fetch-site")
@@ -66,6 +60,7 @@ async def enforce_cookie_origin(request: Request, call_next):
                 content={"detail": "Untrusted request origin"},
             )
     return await call_next(request)
+
 
 app.include_router(auth_router)
 app.include_router(public_auth_router)
@@ -81,11 +76,13 @@ app.include_router(schedules_router)
 app.include_router(executions_router)
 app.include_router(dead_letter_router)
 
+
 @app.get("/health")
 async def health():
     return {
         "status": "ok",
         "service": "api-gateway",
     }
+
 
 app.include_router(dashboard_router)

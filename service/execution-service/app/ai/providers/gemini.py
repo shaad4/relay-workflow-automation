@@ -1,14 +1,11 @@
-
 from google import genai
 from google.genai import types
 
 from app.ai.base import AIProvider, AIResponse
-
 from app.ai.config import AI_REQUEST_TIMEOUT_SECONDS
 
 
 class GeminiProvider(AIProvider):
-
     async def generate(
         self,
         api_key: str,
@@ -47,23 +44,15 @@ class GeminiProvider(AIProvider):
             content = response.text
 
             if not content or not content.strip():
-                raise RuntimeError(
-                    "Gemini returned an empty response"
-                )
+                raise RuntimeError("Gemini returned an empty response")
 
             usage = response.usage_metadata
 
             return AIResponse(
                 content=content,
                 model=model,
-                input_tokens=(
-                    usage.prompt_token_count or 0
-                    if usage else 0
-                ),
-                output_tokens=(
-                    usage.candidates_token_count or 0
-                    if usage else 0
-                ),
+                input_tokens=(usage.prompt_token_count or 0 if usage else 0),
+                output_tokens=(usage.candidates_token_count or 0 if usage else 0),
             )
 
         finally:

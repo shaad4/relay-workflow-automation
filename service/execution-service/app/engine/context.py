@@ -1,8 +1,6 @@
 import re
-
 from copy import deepcopy
 from typing import Any
-
 
 PATH_PATTERN = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_]*"

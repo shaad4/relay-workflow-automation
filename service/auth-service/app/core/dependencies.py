@@ -27,7 +27,9 @@ async def get_current_token(
     token = (
         credentials.credentials
         if isinstance(credentials, HTTPAuthorizationCredentials)
-        else access_cookie if isinstance(access_cookie, str) else None
+        else access_cookie
+        if isinstance(access_cookie, str)
+        else None
     )
     if not token:
         raise HTTPException(
@@ -89,6 +91,7 @@ async def get_current_token(
 
     return payload
 
+
 async def get_current_user(
     payload: dict = Depends(get_current_token),
     session: AsyncSession = Depends(get_db),
@@ -102,9 +105,7 @@ async def get_current_user(
             detail="Invalid access token",
         )
 
-    result = await session.execute(
-        select(User).where(User.id == user_id)
-    )
+    result = await session.execute(select(User).where(User.id == user_id))
 
     user = result.scalar_one_or_none()
 

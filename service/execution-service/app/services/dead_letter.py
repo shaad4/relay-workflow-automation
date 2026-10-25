@@ -1,18 +1,20 @@
 import json
-
 from uuid import UUID, uuid4
+
 from sqlalchemy import select
 
-from app.repositories.dead_letter import DeadLetterRepository
 from app.engine.graph import ExecutionGraph
 from app.engine.status import ExecutionStatus
 from app.grpc.workflow_client import WorkflowClient
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
+from app.repositories.dead_letter import DeadLetterRepository
 from app.services.replay_validator import (
-    validate_replay_path,
     get_downstream_node_ids,
+    validate_replay_path,
 )
+
+
 class DeadLetterService:
     def __init__(self, repository: DeadLetterRepository):
         self.repository = repository
@@ -34,7 +36,8 @@ class DeadLetterService:
         )
 
         workflows = await self.repository.get_execution_workflows(
-            workspace_id, [event.execution_id for event in events],
+            workspace_id,
+            [event.execution_id for event in events],
         )
         return {
             "items": [
@@ -57,7 +60,6 @@ class DeadLetterService:
             "offset": offset,
         }
 
-    
     async def get_event(
         self,
         event_id: UUID,
@@ -74,10 +76,13 @@ class DeadLetterService:
             return None
 
         workflows = await self.repository.get_execution_workflows(
-            workspace_id, [event.execution_id],
+            workspace_id,
+            [event.execution_id],
         )
         failed_node = await self.repository.get_failed_node(
-            workspace_id, event.execution_id, event.execution_step_id,
+            workspace_id,
+            event.execution_id,
+            event.execution_step_id,
         )
         return {
             "id": event.id,
@@ -92,7 +97,6 @@ class DeadLetterService:
             "created_at": event.created_at,
             "resolved_at": event.resolved_at,
         }
-
 
     async def resolve_event(
         self,
@@ -115,8 +119,6 @@ class DeadLetterService:
             "resolved_at": event.resolved_at,
         }
 
-
-    
     async def replay_event(
         self,
         event_id: UUID,
@@ -161,11 +163,12 @@ class DeadLetterService:
         if failed_step is None:
             raise ValueError("invalid_failed_step")
 
-        context = json.loads(original.context) if isinstance(original.context, str) else original.context
+        context = (
+            json.loads(original.context) if isinstance(original.context, str) else original.context
+        )
 
         if not isinstance(context, dict) or not all(
-            isinstance(context.get(key), dict)
-            for key in ("trigger", "variables", "nodes")
+            isinstance(context.get(key), dict) for key in ("trigger", "variables", "nodes")
         ):
             raise ValueError("invalid_context")
 
@@ -246,10 +249,7 @@ class DeadLetterService:
             if original is None:
                 raise ValueError("invalid_execution")
 
-            if (
-                original.workflow_id != workflow_id
-                or original.workflow_version_id != version_id
-            ):
+            if original.workflow_id != workflow_id or original.workflow_version_id != version_id:
                 raise ValueError("workflow_changed")
 
             failed_step = await session.scalar(
@@ -264,11 +264,14 @@ class DeadLetterService:
             if failed_step is None:
                 raise ValueError("invalid_failed_step")
 
-            context = json.loads(original.context) if isinstance(original.context, str) else original.context
+            context = (
+                json.loads(original.context)
+                if isinstance(original.context, str)
+                else original.context
+            )
 
             if not isinstance(context, dict) or not all(
-                isinstance(context.get(key), dict)
-                for key in ("trigger", "variables", "nodes")
+                isinstance(context.get(key), dict) for key in ("trigger", "variables", "nodes")
             ):
                 raise ValueError("invalid_context")
 

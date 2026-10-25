@@ -1,20 +1,17 @@
-
 import json
 
-from app.ai.service import AIService
+from pydantic import ValidationError
+
+from app.ai.exceptions import AIDecisionValidationError
 from app.ai.schemas import (
     AIDecisionInput,
     AIDecisionOutput,
     validate_ai_decision,
 )
-
-from pydantic import ValidationError
-
-from app.ai.exceptions import AIDecisionValidationError
+from app.ai.service import AIService
 
 
 class StructuredAIGeneration:
-
     def __init__(self):
         self.ai_service = AIService()
 
@@ -65,9 +62,7 @@ class StructuredAIGeneration:
         try:
             output_data = json.loads(response.content)
 
-            output = AIDecisionOutput.model_validate(
-                output_data
-            )
+            output = AIDecisionOutput.model_validate(output_data)
 
             output = validate_ai_decision(
                 output=output,
@@ -75,13 +70,9 @@ class StructuredAIGeneration:
             )
 
         except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            raise AIDecisionValidationError(
-                "AI returned an invalid decision"
-            ) from exc
+            raise AIDecisionValidationError("AI returned an invalid decision") from exc
 
-        output = AIDecisionOutput.model_validate(
-            output_data
-        )
+        output = AIDecisionOutput.model_validate(output_data)
 
         output = validate_ai_decision(
             output=output,

@@ -5,16 +5,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
-from sqlalchemy import delete, select
-from sqlalchemy.engine import make_url
 import pytest
-
 from app.ai.exceptions import AIDecisionValidationError
-from app.db.database import AsyncSessionLocal, DATABASE_URL, engine
+from app.db.database import DATABASE_URL, AsyncSessionLocal, engine
 from app.engine.runner import run_execution
 from app.engine.status import ExecutionStatus
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
+from sqlalchemy import delete, select
+from sqlalchemy.engine import make_url
 
 
 async def run_case(should_fail: bool):
@@ -39,9 +38,7 @@ async def run_case(should_fail: bool):
                 "connection_id": str(uuid4()),
                 "model": "test-model",
                 "instructions": "Classify the request.",
-                "input_mappings": {
-                    "message": "{{trigger.data.message}}"
-                },
+                "input_mappings": {"message": "{{trigger.data.message}}"},
                 "allowed_decisions": [
                     "TECHNICAL",
                     "BILLING",
@@ -103,21 +100,15 @@ async def run_case(should_fail: bool):
 
     try:
         with (
-            patch(
-                "app.engine.runner.WorkflowClient"
-            ) as workflow_class,
-            patch(
-                "app.engine.runner.ActionClient"
-            ) as action_class,
+            patch("app.engine.runner.WorkflowClient") as workflow_class,
+            patch("app.engine.runner.ActionClient") as action_class,
             patch(
                 "app.engine.runner.execute_ai_decision",
                 new_callable=AsyncMock,
             ) as ai_mock,
         ):
             workflow_client = workflow_class.return_value
-            workflow_client.get_workflow_definition = AsyncMock(
-                return_value=definition
-            )
+            workflow_client.get_workflow_definition = AsyncMock(return_value=definition)
             workflow_client.close = AsyncMock()
 
             action_client = action_class.return_value
@@ -131,9 +122,7 @@ async def run_case(should_fail: bool):
             action_client.close = AsyncMock()
 
             if should_fail:
-                ai_mock.side_effect = AIDecisionValidationError(
-                    "Invalid decision"
-                )
+                ai_mock.side_effect = AIDecisionValidationError("Invalid decision")
             else:
                 ai_mock.return_value = ai_result
 
@@ -149,9 +138,7 @@ async def run_case(should_fail: bool):
                 except AIDecisionValidationError:
                     pass
                 else:
-                    raise AssertionError(
-                        "Expected AI validation failure"
-                    )
+                    raise AssertionError("Expected AI validation failure")
             else:
                 result = await run_execution(
                     execution_id=execution_id,
@@ -161,30 +148,18 @@ async def run_case(should_fail: bool):
                     trigger_data={"message": "App crashes"},
                 )
 
-                assert (
-                    result["context"]["nodes"]
-                    ["ai_decision_test"]["decision"]
-                    == "TECHNICAL"
-                )
+                assert result["context"]["nodes"]["ai_decision_test"]["decision"] == "TECHNICAL"
 
             async with AsyncSessionLocal() as session:
                 statement = (
                     select(ExecutionStep)
-                    .where(
-                        ExecutionStep.execution_id
-                        == execution_id
-                    )
+                    .where(ExecutionStep.execution_id == execution_id)
                     .order_by(ExecutionStep.sequence)
                 )
 
-                steps = (
-                    await session.execute(statement)
-                ).scalars().all()
+                steps = (await session.execute(statement)).scalars().all()
 
-                ai_step = next(
-                    step for step in steps
-                    if step.node_id == "ai_decision_test"
-                )
+                ai_step = next(step for step in steps if step.node_id == "ai_decision_test")
 
                 if should_fail:
                     assert ai_step.status == "failed"
@@ -192,14 +167,9 @@ async def run_case(should_fail: bool):
 
                     action_client.execute_action.assert_not_awaited()
 
-                    assert not any(
-                        step.node_id == "http_test"
-                        for step in steps
-                    )
+                    assert not any(step.node_id == "http_test" for step in steps)
 
-                    print(
-                        "Invalid AI decision blocked downstream action: PASSED"
-                    )
+                    print("Invalid AI decision blocked downstream action: PASSED")
 
                 else:
                     assert ai_step.status == "completed"
@@ -209,25 +179,15 @@ async def run_case(should_fail: bool):
 
                     action_client.execute_action.assert_awaited_once()
 
-                    print(
-                        "AI Decision PostgreSQL persistence: PASSED"
-                    )
-                    print(
-                        "Downstream action execution: PASSED"
-                    )
+                    print("AI Decision PostgreSQL persistence: PASSED")
+                    print("Downstream action execution: PASSED")
 
     finally:
         async with AsyncSessionLocal() as session:
             await session.execute(
-                delete(ExecutionStep).where(
-                    ExecutionStep.execution_id == execution_id
-                )
+                delete(ExecutionStep).where(ExecutionStep.execution_id == execution_id)
             )
-            await session.execute(
-                delete(Execution).where(
-                    Execution.id == execution_id
-                )
-            )
+            await session.execute(delete(Execution).where(Execution.id == execution_id))
             await session.commit()
         await engine.dispose()
 

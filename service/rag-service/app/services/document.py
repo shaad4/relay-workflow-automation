@@ -1,4 +1,3 @@
-
 import uuid
 from pathlib import Path
 
@@ -17,7 +16,6 @@ from app.storage.supabase_storage import SupabaseStorage
 
 
 class DocumentService:
-
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repository = DocumentRepository(db)
@@ -121,7 +119,6 @@ class DocumentService:
 
         return document
 
-
     async def list_documents(
         self,
         workspace_id: uuid.UUID,
@@ -141,8 +138,6 @@ class DocumentService:
             knowledge_base_id=knowledge_base_id,
         )
 
-
-    
     async def delete_document(
         self,
         document_id: uuid.UUID,
@@ -163,10 +158,7 @@ class DocumentService:
             workspace_id=workspace_id,
         )
 
-        if (
-            document is None
-            or document.knowledge_base_id != knowledge_base_id
-        ):
+        if document is None or document.knowledge_base_id != knowledge_base_id:
             return False
 
         # 3. Prevent deletion during active ingestion
@@ -212,7 +204,6 @@ class DocumentService:
             await self.db.rollback()
             raise
 
-    
     async def retry_document(
         self,
         document_id: uuid.UUID,
@@ -233,10 +224,7 @@ class DocumentService:
             workspace_id=workspace_id,
         )
 
-        if (
-            document is None
-            or document.knowledge_base_id != knowledge_base_id
-        ):
+        if document is None or document.knowledge_base_id != knowledge_base_id:
             raise HTTPException(
                 status_code=404,
                 detail="Document not found",
@@ -270,4 +258,3 @@ class DocumentService:
         except Exception:
             await self.db.rollback()
             raise
-

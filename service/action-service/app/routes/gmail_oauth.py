@@ -14,7 +14,6 @@ from app.dependencies import get_current_identity
 from app.models.connection import Connection
 from app.models.oauth_state import OAuthState
 
-
 router = APIRouter(
     prefix="/connections/gmail/oauth",
     tags=["gmail-oauth"],
@@ -23,9 +22,7 @@ router = APIRouter(
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-GOOGLE_USERINFO_URL = (
-    "https://openidconnect.googleapis.com/v1/userinfo"
-)
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
 
 async def exchange_google_code(code: str) -> dict:
@@ -34,19 +31,13 @@ async def exchange_google_code(code: str) -> dict:
     redirect_uri = os.getenv("GOOGLE_GMAIL_REDIRECT_URI")
 
     if not client_id:
-        raise RuntimeError(
-            "GOOGLE_CLIENT_ID is not configured"
-        )
+        raise RuntimeError("GOOGLE_CLIENT_ID is not configured")
 
     if not client_secret:
-        raise RuntimeError(
-            "GOOGLE_CLIENT_SECRET is not configured"
-        )
+        raise RuntimeError("GOOGLE_CLIENT_SECRET is not configured")
 
     if not redirect_uri:
-        raise RuntimeError(
-            "GOOGLE_GMAIL_REDIRECT_URI is not configured"
-        )
+        raise RuntimeError("GOOGLE_GMAIL_REDIRECT_URI is not configured")
 
     data = {
         "code": code,
@@ -63,9 +54,7 @@ async def exchange_google_code(code: str) -> dict:
         )
 
     if response.status_code != 200:
-        raise RuntimeError(
-            "Google token exchange failed"
-        )
+        raise RuntimeError("Google token exchange failed")
 
     return response.json()
 
@@ -80,17 +69,13 @@ async def get_google_user_email(access_token: str) -> str:
         )
 
     if response.status_code != 200:
-        raise RuntimeError(
-            "Google user info request failed"
-        )
+        raise RuntimeError("Google user info request failed")
 
     data = response.json()
     email = data.get("email")
 
     if not email:
-        raise RuntimeError(
-            "Google account email was not returned"
-        )
+        raise RuntimeError("Google account email was not returned")
 
     return email
 
@@ -103,21 +88,14 @@ async def start_gmail_oauth(
     redirect_uri = os.getenv("GOOGLE_GMAIL_REDIRECT_URI")
 
     if not client_id:
-        raise RuntimeError(
-            "GOOGLE_CLIENT_ID is not configured"
-        )
+        raise RuntimeError("GOOGLE_CLIENT_ID is not configured")
 
     if not redirect_uri:
-        raise RuntimeError(
-            "GOOGLE_GMAIL_REDIRECT_URI is not configured"
-        )
+        raise RuntimeError("GOOGLE_GMAIL_REDIRECT_URI is not configured")
 
     state = secrets.token_urlsafe(32)
 
-    expires_at = (
-        datetime.now(timezone.utc)
-        + timedelta(minutes=10)
-    )
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
     async with AsyncSessionLocal() as session:
         oauth_state = OAuthState(
@@ -150,9 +128,7 @@ async def start_gmail_oauth(
         "state": state,
     }
 
-    authorization_url = (
-        f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
-    )
+    authorization_url = f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
     return RedirectResponse(
         url=authorization_url,
@@ -200,9 +176,7 @@ async def gmail_oauth_callback(
                 detail="Invalid OAuth state",
             )
 
-        if oauth_state.expires_at <= datetime.now(
-            timezone.utc
-        ):
+        if oauth_state.expires_at <= datetime.now(timezone.utc):
             try:
                 await session.delete(oauth_state)
                 await session.commit()
@@ -235,16 +209,12 @@ async def gmail_oauth_callback(
                 detail="Google refresh token was not returned",
             )
 
-        email = await get_google_user_email(
-            access_token
-        )
+        email = await get_google_user_email(access_token)
 
         # Encrypt the Gmail refresh token before storage.
         encryption = CredentialEncryption()
 
-        encrypted_refresh_token = encryption.encrypt(
-            refresh_token
-        )
+        encrypted_refresh_token = encryption.encrypt(refresh_token)
 
         connection = Connection(
             workspace_id=workspace_id,

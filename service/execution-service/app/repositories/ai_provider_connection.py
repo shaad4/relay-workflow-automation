@@ -7,7 +7,6 @@ from app.models.ai_provider_connection import AIProviderConnection
 
 
 class AIProviderConnectionRepository:
-
     def __init__(self, db: AsyncSession):
         self.db = db
 

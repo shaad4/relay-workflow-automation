@@ -11,9 +11,11 @@ INTEGRATION_SERVICE_URL = "http://integration-service:8000"
 async def create_webhook(request: Request):
     return await proxy_integration_request(request, "")
 
+
 @router.get("/")
 async def list_webhooks(request: Request):
     return await proxy_integration_request(request, "")
+
 
 @router.get("/{webhook_id}/")
 async def get_webhook(request: Request, webhook_id: str):
@@ -22,26 +24,30 @@ async def get_webhook(request: Request, webhook_id: str):
         webhook_id,
     )
 
+
 @router.patch("/{webhook_id}/")
 async def update_webhook(request: Request, webhook_id: str):
     return await proxy_integration_request(request, webhook_id)
+
 
 @router.delete("/{webhook_id}/")
 async def delete_webhook(request: Request, webhook_id: str):
     return await proxy_integration_request(request, webhook_id)
 
+
 @router.post("/{webhook_id}/regenerate-token/")
 async def regenerate_webhook_token(request: Request, webhook_id: str):
     return await proxy_integration_request(request, f"{webhook_id}/regenerate-token")
+
 
 @router.post("/{webhook_id}/test-sessions/")
 async def start_webhook_test_session(request: Request, webhook_id: str):
     return await proxy_integration_request(request, f"{webhook_id}/test-sessions")
 
+
 @router.get("/{webhook_id}/test-sessions/{session_id}/")
 async def get_webhook_test_session(request: Request, webhook_id: str, session_id: str):
     return await proxy_integration_request(request, f"{webhook_id}/test-sessions/{session_id}")
-
 
 
 async def proxy_integration_request(
@@ -70,11 +76,7 @@ async def proxy_integration_request(
             method=request.method,
             url=url,
             content=body,
-            headers={
-                key: value
-                for key, value in request.headers.items()
-                if key.lower() != "host"
-            },
+            headers={key: value for key, value in request.headers.items() if key.lower() != "host"},
             params=request.query_params,
         )
 
@@ -83,4 +85,3 @@ async def proxy_integration_request(
         status_code=response.status_code,
         headers=dict(response.headers),
     )
-

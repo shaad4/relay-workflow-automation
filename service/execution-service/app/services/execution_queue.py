@@ -1,36 +1,31 @@
-import grpc
 import asyncio
 import json
-from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update, func, case, literal
+import grpc
+from sqlalchemy import case, func, literal, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 
-from app.engine.error_classifier import classify_error
-from app.grpc.workflow_client import WorkflowClient
-
 from app.db.database import AsyncSessionLocal
+from app.engine.approval_status import HumanApprovalStatus
+from app.engine.error_classifier import classify_error
 from app.engine.exceptions import (
-    HumanApprovalRequired,
     ActionExecutionFailed,
     ExecutionCancellationRequested,
+    HumanApprovalRequired,
 )
 from app.engine.runner import run_execution
 from app.engine.status import ExecutionStatus
-from app.models.execution import Execution
-from app.repositories.execution_queue import ExecutionQueueRepository
-from app.kafka.lifecycle_producer import publish_lifecycle_event
-from app.schemas.lifecycle_events import WorkflowLifecycleEvent
-
-from app.models.dead_letter_event import DeadLetterEvent
-from app.models.execution_step import ExecutionStep
 from app.engine.step_status import ExecutionStepStatus
-
+from app.grpc.workflow_client import WorkflowClient
+from app.kafka.lifecycle_producer import publish_lifecycle_event
+from app.models.dead_letter_event import DeadLetterEvent
+from app.models.execution import Execution
+from app.models.execution_step import ExecutionStep
 from app.models.human_approval import HumanApproval
-from app.engine.approval_status import HumanApprovalStatus
-
+from app.repositories.execution_queue import ExecutionQueueRepository
+from app.schemas.lifecycle_events import WorkflowLifecycleEvent
 
 LEASE_SECONDS = 120
 HEARTBEAT_INTERVAL_SECONDS = 30
@@ -73,13 +68,9 @@ async def create_pending_execution(event: dict) -> UUID:
         event_id = UUID(str(event["event_id"]))
         workspace_id = UUID(str(event["workspace_id"]))
         workflow_id = UUID(str(event["workflow_id"]))
-        workflow_version_id = UUID(
-            str(event["workflow_version_id"])
-        )
+        workflow_version_id = UUID(str(event["workflow_version_id"]))
     except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(
-            "Invalid workflow event identifiers"
-        ) from exc
+        raise ValueError("Invalid workflow event identifiers") from exc
 
     trigger_type = event.get("trigger_type")
 
@@ -88,16 +79,12 @@ async def create_pending_execution(event: dict) -> UUID:
         "manual",
         "schedule",
     }:
-        raise ValueError(
-            "Invalid workflow trigger type"
-        )
+        raise ValueError("Invalid workflow trigger type")
 
     trigger_data = event.get("payload", {})
 
     if not isinstance(trigger_data, dict):
-        raise ValueError(
-            "Workflow event payload must be an object"
-        )
+        raise ValueError("Workflow event payload must be an object")
 
     event_key = f"workflow.triggered:{event_id}"
 
@@ -112,28 +99,19 @@ async def create_pending_execution(event: dict) -> UUID:
         )
 
     except grpc.aio.AioRpcError as exc:
-        raise RuntimeError(
-            "Unable to validate workflow version"
-        ) from exc
+        raise RuntimeError("Unable to validate workflow version") from exc
 
     finally:
         await workflow_client.close()
 
     if not validation.valid:
-        raise ValueError(
-            "Workflow or workflow version not found"
-        )
+        raise ValueError("Workflow or workflow version not found")
 
     if validation.status.lower() != "published":
-        raise ValueError(
-            "Workflow version is not published"
-        )
+        raise ValueError("Workflow version is not published")
 
     if validation.workflow_status.lower() != "active":
-        raise ValueError(
-            "Workflow is inactive"
-        )
-
+        raise ValueError("Workflow is inactive")
 
     async with AsyncSessionLocal() as session:
         repository = ExecutionQueueRepository(session)
@@ -188,9 +166,7 @@ async def claim_pending_execution(
         raise ValueError("Invalid worker ID")
 
     if not 1 <= lease_seconds <= 3600:
-        raise ValueError(
-            "lease_seconds must be between 1 and 3600"
-        )
+        raise ValueError("lease_seconds must be between 1 and 3600")
 
     async with AsyncSessionLocal() as session:
         repository = ExecutionQueueRepository(session)
@@ -258,9 +234,7 @@ async def execution_heartbeat(
     """
 
     if not 1 <= interval_seconds < lease_seconds:
-        raise ValueError(
-            "Invalid heartbeat interval"
-        )
+        raise ValueError("Invalid heartbeat interval")
 
     try:
         while True:
@@ -282,7 +256,6 @@ async def execution_heartbeat(
 
     except asyncio.CancelledError:
         raise
-
 
 
 async def finalize_execution(
@@ -386,11 +359,13 @@ async def finalize_execution(
                     update(ExecutionStep)
                     .where(
                         ExecutionStep.execution_id == execution_id,
-                        ExecutionStep.status.in_([
-                            ExecutionStepStatus.PENDING,
-                            ExecutionStepStatus.RUNNING,
-                            ExecutionStepStatus.WAITING_FOR_APPROVAL,
-                        ]),
+                        ExecutionStep.status.in_(
+                            [
+                                ExecutionStepStatus.PENDING,
+                                ExecutionStepStatus.RUNNING,
+                                ExecutionStepStatus.WAITING_FOR_APPROVAL,
+                            ]
+                        ),
                     )
                     .values(
                         status=ExecutionStepStatus.CANCELLED,
@@ -414,17 +389,11 @@ async def finalize_execution(
                 dead_letter = DeadLetterEvent(
                     workspace_id=row.workspace_id,
                     execution_id=execution_id,
-                    execution_step_id=(
-                        failed_step.id if failed_step else None
-                    ),
+                    execution_step_id=(failed_step.id if failed_step else None),
                     event_type="workflow.failed",
                     payload=None,
-                    error=error or {
-                        "message": "Workflow execution failed"
-                    },
-                    attempts=(
-                        failed_step.attempt if failed_step else 1
-                    ),
+                    error=error or {"message": "Workflow execution failed"},
+                    attempts=(failed_step.attempt if failed_step else 1),
                     status="pending",
                 )
 
@@ -436,7 +405,6 @@ async def finalize_execution(
         except Exception:
             await session.rollback()
             raise
-
 
 
 async def execute_pending_execution(
@@ -471,25 +439,19 @@ async def execute_pending_execution(
         execution = result.scalar_one_or_none()
 
         if execution is None:
-            raise RuntimeError(
-                "Claimed execution not found"
-            )
+            raise RuntimeError("Claimed execution not found")
 
         workflow_id = str(execution.workflow_id)
-        workflow_version_id = str(
-            execution.workflow_version_id
-        )
+        workflow_version_id = str(execution.workflow_version_id)
         workspace_id = str(execution.workspace_id)
         trigger_data = execution.trigger_data
-        
-        
+
         # Check for an approval resume checkpoint.
         saved_context = execution.context or {}
         if isinstance(saved_context, str):
             saved_context = json.loads(saved_context)
         resume_data = saved_context.get("_resume")
 
-        
         if "_resume" in saved_context:
             if (
                 not isinstance(resume_data, dict)
@@ -498,9 +460,7 @@ async def execute_pending_execution(
                 or (
                     resume_data["start_node_id"] is not None
                     and (
-                        not isinstance(
-                            resume_data["start_node_id"], str
-                        )
+                        not isinstance(resume_data["start_node_id"], str)
                         or not resume_data["start_node_id"].strip()
                     )
                 )
@@ -517,13 +477,9 @@ async def execute_pending_execution(
                 )
 
                 if persisted_status is None:
-                    raise RuntimeError(
-                        "Unable to finalize invalid resume checkpoint"
-                    )
+                    raise RuntimeError("Unable to finalize invalid resume checkpoint")
 
                 return True
-
-
 
         if resume_data is not None:
             # Resume after the human approval node.
@@ -546,13 +502,10 @@ async def execute_pending_execution(
             start_node_id = None
             execution_context = None
 
-
     owner_task = asyncio.current_task()
 
     if owner_task is None:
-        raise RuntimeError(
-            "Execution must run inside an asyncio task"
-        )
+        raise RuntimeError("Execution must run inside an asyncio task")
 
     heartbeat_task = asyncio.create_task(
         execution_heartbeat(
@@ -571,7 +524,6 @@ async def execute_pending_execution(
             workflow_version_id=UUID(workflow_version_id),
         )
 
-    
         try:
             if resume_data is not None and start_node_id is None:
                 # Approval was the final workflow node.
@@ -598,7 +550,6 @@ async def execute_pending_execution(
             final_status = ExecutionStatus.CANCELLED
             final_context = None
             final_error = None
-
 
         except HumanApprovalRequired:
             # The runner committed the approval, waiting step, and execution
@@ -629,11 +580,8 @@ async def execute_pending_execution(
             error=final_error,
         )
 
-        
         if persisted_status is None:
-            raise RuntimeError(
-                "Execution lease expired or ownership was lost"
-            )
+            raise RuntimeError("Execution lease expired or ownership was lost")
 
         if persisted_status == ExecutionStatus.COMPLETED:
             await publish_execution_lifecycle(
@@ -655,7 +603,6 @@ async def execute_pending_execution(
 
         return True
 
-
     finally:
         heartbeat_task.cancel()
 
@@ -663,7 +610,6 @@ async def execute_pending_execution(
             await heartbeat_task
         except asyncio.CancelledError:
             pass
-
 
 
 async def cleanup_expired_executions(
@@ -677,9 +623,7 @@ async def cleanup_expired_executions(
     """
 
     if not 1 <= limit <= 100:
-        raise ValueError(
-            "Limit must be between 1 and 100"
-        )
+        raise ValueError("Limit must be between 1 and 100")
 
     cleaned_count = 0
 
@@ -709,20 +653,19 @@ async def cleanup_expired_executions(
                     update(ExecutionStep)
                     .where(
                         ExecutionStep.execution_id == execution_id,
-                        ExecutionStep.status.in_([
-                            ExecutionStepStatus.PENDING,
-                            ExecutionStepStatus.RUNNING,
-                        ]),
+                        ExecutionStep.status.in_(
+                            [
+                                ExecutionStepStatus.PENDING,
+                                ExecutionStepStatus.RUNNING,
+                            ]
+                        ),
                     )
                     .values(
                         status=ExecutionStepStatus.FAILED,
                         completed_at=func.now(),
                         error={
                             "error_code": "WORKER_INTERRUPTED",
-                            "message": (
-                                "Step interrupted because "
-                                "the worker lease expired"
-                            ),
+                            "message": ("Step interrupted because the worker lease expired"),
                             "requires_review": True,
                         },
                     )
@@ -740,8 +683,6 @@ async def cleanup_expired_executions(
                 raise
 
     return cleaned_count
-
-
 
 
 async def inspect_recoverable_executions(
@@ -780,9 +721,7 @@ async def inspect_recoverable_executions(
                     "status": item.status,
                     "claimed_by": item.claimed_by,
                     "lease_expires_at": (
-                        item.lease_expires_at.isoformat()
-                        if item.lease_expires_at
-                        else None
+                        item.lease_expires_at.isoformat() if item.lease_expires_at else None
                     ),
                     "recovery_status": "requires_review",
                 }

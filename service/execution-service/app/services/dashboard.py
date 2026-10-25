@@ -6,9 +6,9 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.dead_letter_event import DeadLetterEvent
 from app.models.execution import Execution
 from app.models.human_approval import HumanApproval
-from app.models.dead_letter_event import DeadLetterEvent
 from app.schemas.dashboard import DashboardRange
 
 
@@ -41,9 +41,7 @@ async def get_dashboard_summary(
     counts = dict(
         (
             await session.execute(
-                select(Execution.status, func.count())
-                .where(*scope)
-                .group_by(Execution.status)
+                select(Execution.status, func.count()).where(*scope).group_by(Execution.status)
             )
         ).all()
     )
@@ -73,9 +71,7 @@ async def get_dashboard_summary(
     ).all()
 
     def label(value):
-        return value.strftime(
-            "%Y-%m-%dT%H:00:00Z" if hourly else "%Y-%m-%d"
-        )
+        return value.strftime("%Y-%m-%dT%H:00:00Z" if hourly else "%Y-%m-%d")
 
     # Fill empty periods so the chart always has a complete time axis.
     buckets = {
@@ -143,10 +139,7 @@ async def get_dashboard_summary(
         item["duration_ms"] = (
             max(
                 0,
-                int(
-                    (row["completed_at"] - row["started_at"]).total_seconds()
-                    * 1000
-                ),
+                int((row["completed_at"] - row["started_at"]).total_seconds() * 1000),
             )
             if row["completed_at"] and row["started_at"]
             else None
@@ -160,11 +153,7 @@ async def get_dashboard_summary(
         window_end=now,
         total_executions=sum(counts.values()),
         **states,
-        success_rate=(
-            round(states["completed"] / denominator * 100, 2)
-            if denominator
-            else None
-        ),
+        success_rate=(round(states["completed"] / denominator * 100, 2) if denominator else None),
         pending_approvals=approvals,
         pending_dlq=dlq,
         execution_activity=list(buckets.values()),

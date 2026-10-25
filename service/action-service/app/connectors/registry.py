@@ -1,6 +1,6 @@
 from app.connectors.base import Connector
-from app.connectors.http import HTTPConnector
 from app.connectors.gmail import GmailConnector
+from app.connectors.http import HTTPConnector
 from app.connectors.mock_payment import MockPaymentConnector
 from app.connectors.stripe import StripeConnector
 

@@ -5,7 +5,6 @@ from pydantic import BaseModel
 
 from app.schemas.executions import ExecutionListItem
 
-
 DashboardRange = Literal["24h", "7d", "30d"]
 
 

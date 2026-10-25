@@ -31,7 +31,6 @@ class WebhookResponse(BaseModel):
     updated_at: datetime
 
 
-
 class WebhookUpdate(BaseModel):
     workflow_id: UUID | None = None
     workflow_version_id: UUID | None = None
@@ -56,7 +55,7 @@ class WebhookUpdate(BaseModel):
         max_length=100,
     )
     is_active: bool | None = None
-    
+
 
 class WebhookCreateResponse(WebhookResponse):
     secret: str | None = None

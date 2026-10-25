@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-
 from app.embeddings.provider import EmbeddingProvider
 
 
@@ -14,10 +13,14 @@ def provider(monkeypatch):
 
 
 def test_batch_embeddings_are_ordered_by_provider_index(provider):
-    provider.client.embeddings.create = AsyncMock(return_value=SimpleNamespace(data=[
-        SimpleNamespace(index=1, embedding=[2.0] * 1536),
-        SimpleNamespace(index=0, embedding=[1.0] * 1536),
-    ]))
+    provider.client.embeddings.create = AsyncMock(
+        return_value=SimpleNamespace(
+            data=[
+                SimpleNamespace(index=1, embedding=[2.0] * 1536),
+                SimpleNamespace(index=0, embedding=[1.0] * 1536),
+            ]
+        )
+    )
     result = asyncio.run(provider.generate_embeddings(["first", "second"]))
     assert len(result) == 2
     assert result[0][0] == 1.0 and result[1][0] == 2.0

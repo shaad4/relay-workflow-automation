@@ -1,10 +1,8 @@
 """Keep database integration tests independent across asyncio event loops."""
 
+from app.db.database import DATABASE_URL, engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
-
-from app.db.database import DATABASE_URL, engine
-
 
 database = make_url(DATABASE_URL)
 if database.database == "ci_test" and database.host in {"localhost", "127.0.0.1"}:

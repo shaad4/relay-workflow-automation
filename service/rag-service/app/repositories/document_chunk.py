@@ -2,12 +2,12 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 
 
 class DocumentChunkRepository:
-
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -20,9 +20,7 @@ class DocumentChunkRepository:
     ) -> list[DocumentChunk]:
 
         if not chunks or len(chunks) != len(embeddings):
-            raise ValueError(
-                "Chunks and embeddings must be non-empty and match"
-            )
+            raise ValueError("Chunks and embeddings must be non-empty and match")
 
         if any(not chunk.strip() for chunk in chunks):
             raise ValueError("Chunks cannot contain empty text")
@@ -38,9 +36,7 @@ class DocumentChunkRepository:
                 content=chunk,
                 embedding=embedding,
             )
-            for index, (chunk, embedding) in enumerate(
-                zip(chunks, embeddings)
-            )
+            for index, (chunk, embedding) in enumerate(zip(chunks, embeddings))
         ]
 
         self.db.add_all(records)
@@ -62,9 +58,7 @@ class DocumentChunkRepository:
         if not 1 <= top_k <= 20:
             raise ValueError("top_k must be between 1 and 20")
 
-        distance = DocumentChunk.embedding.cosine_distance(
-            query_embedding
-        )
+        distance = DocumentChunk.embedding.cosine_distance(query_embedding)
 
         statement = (
             select(DocumentChunk, distance.label("distance"))
@@ -84,7 +78,4 @@ class DocumentChunkRepository:
 
         result = await self.db.execute(statement)
 
-        return [
-            (chunk, float(distance_value))
-            for chunk, distance_value in result.all()
-        ]
+        return [(chunk, float(distance_value)) for chunk, distance_value in result.all()]

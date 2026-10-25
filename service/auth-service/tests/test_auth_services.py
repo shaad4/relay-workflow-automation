@@ -10,12 +10,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.core import dependencies, jwt as jwt_service, security
+from app.core import dependencies, security
+from app.core import jwt as jwt_service
 from app.core.exceptions import EmailVerificationRequired
 from app.schemas.auth import LoginRequest, RegisterRequest
-from app.services import auth_service, token_sessions, email_verification_service as verification
+from app.services import auth_service, google_login, google_oauth, google_signup, token_sessions
+from app.services import email_verification_service as verification
 from app.services import password_reset_service as password_reset
-from app.services import google_login, google_oauth, google_signup
 
 
 class Result:
@@ -101,25 +102,40 @@ def test_register_user_creates_workspace_user_and_verification(monkeypatch):
 
 def test_login_user_validates_credentials_and_verification(monkeypatch):
     unverified = SimpleNamespace(
-        id=uuid4(), workspace_id=uuid4(), email="user@example.com", name="User",
-        password_hash="stored", email_verified_at=None,
+        id=uuid4(),
+        workspace_id=uuid4(),
+        email="user@example.com",
+        name="User",
+        password_hash="stored",
+        email_verified_at=None,
     )
     monkeypatch.setattr(auth_service, "verify_password", lambda password, hashed: True)
+
     async def create_verification_token(user_id, session):
         return SimpleNamespace(token="verify-token")
+
     monkeypatch.setattr(auth_service, "create_verification_token", create_verification_token)
     session = FakeSession([Result(unverified)])
     with pytest.raises(EmailVerificationRequired):
-        asyncio.run(auth_service.login_user(LoginRequest(email=unverified.email, password="Secure123!"), session))
+        asyncio.run(
+            auth_service.login_user(
+                LoginRequest(email=unverified.email, password="Secure123!"), session
+            )
+        )
     assert session.commits == 1
 
-    verified = SimpleNamespace(**{**vars(unverified), "email_verified_at": datetime.now(timezone.utc)})
+    verified = SimpleNamespace(
+        **{**vars(unverified), "email_verified_at": datetime.now(timezone.utc)}
+    )
+
     async def create_refresh_session(user_id, workspace_id, session):
         return "access", "refresh"
 
     monkeypatch.setattr(auth_service, "create_refresh_session", create_refresh_session)
     session = FakeSession([Result(verified)])
-    assert asyncio.run(auth_service.login_user(LoginRequest(email=verified.email, password="Secure123!"), session)) == ("access", "refresh")
+    assert asyncio.run(
+        auth_service.login_user(LoginRequest(email=verified.email, password="Secure123!"), session)
+    ) == ("access", "refresh")
 
 
 @pytest.mark.parametrize("user", [None, SimpleNamespace(password_hash="stored")])
@@ -127,7 +143,9 @@ def test_login_user_rejects_missing_user_or_bad_password(monkeypatch, user):
     monkeypatch.setattr(auth_service, "verify_password", lambda password, hashed: False)
     session = FakeSession([Result(user)])
     with pytest.raises(ValueError, match="Invalid email or password"):
-        asyncio.run(auth_service.login_user(LoginRequest(email="u@example.com", password="bad"), session))
+        asyncio.run(
+            auth_service.login_user(LoginRequest(email="u@example.com", password="bad"), session)
+        )
 
 
 def test_refresh_access_token_checks_token_type(monkeypatch):
@@ -148,12 +166,14 @@ def test_refresh_access_token_checks_token_type(monkeypatch):
 
 def test_create_refresh_session_uses_fixed_session_expiry(monkeypatch):
     monkeypatch.setattr(token_sessions, "create_access_token", lambda claims: ("access", claims))
-    monkeypatch.setattr(token_sessions, "create_refresh_token", lambda claims, expires_at: ("refresh", claims, expires_at))
+    monkeypatch.setattr(
+        token_sessions,
+        "create_refresh_token",
+        lambda claims, expires_at: ("refresh", claims, expires_at),
+    )
     session = FakeSession()
 
-    access, refresh = asyncio.run(
-        token_sessions.create_refresh_session(uuid4(), uuid4(), session)
-    )
+    access, refresh = asyncio.run(token_sessions.create_refresh_session(uuid4(), uuid4(), session))
 
     assert access[0] == "access"
     assert refresh[0] == "refresh"
@@ -192,7 +212,11 @@ def test_rotate_refresh_token_rotates_jti_without_extending_session(monkeypatch)
     )
     monkeypatch.setattr(token_sessions.uuid, "uuid4", lambda: next_id)
     monkeypatch.setattr(token_sessions, "create_access_token", lambda claims: ("access", claims))
-    monkeypatch.setattr(token_sessions, "create_refresh_token", lambda claims, expires_at: ("refresh", claims, expires_at))
+    monkeypatch.setattr(
+        token_sessions,
+        "create_refresh_token",
+        lambda claims, expires_at: ("refresh", claims, expires_at),
+    )
     session = FakeSession([Result(row)])
 
     access, refresh = asyncio.run(token_sessions.rotate_refresh_token("current", session))
@@ -235,7 +259,9 @@ def test_rotate_refresh_token_reuse_revokes_session(monkeypatch):
 
 def test_verification_token_success_and_failure_paths(monkeypatch):
     user = SimpleNamespace(id=uuid4(), email_verified_at=None)
-    token = SimpleNamespace(user_id=user.id, used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=5))
+    token = SimpleNamespace(
+        user_id=user.id, used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
+    )
     session = FakeSession([Result(token), Result(user)])
     asyncio.run(verification.verify_email_token("token", session))
     assert user.email_verified_at is not None
@@ -245,7 +271,12 @@ def test_verification_token_success_and_failure_paths(monkeypatch):
     for token_row, message in [
         (None, "Invalid verification token"),
         (SimpleNamespace(used_at=datetime.now(timezone.utc)), "already been used"),
-        (SimpleNamespace(used_at=None, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)), "expired"),
+        (
+            SimpleNamespace(
+                used_at=None, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)
+            ),
+            "expired",
+        ),
     ]:
         with pytest.raises(ValueError, match=message):
             asyncio.run(verification.verify_email_token("bad", FakeSession([Result(token_row)])))
@@ -253,7 +284,12 @@ def test_verification_token_success_and_failure_paths(monkeypatch):
 
 def test_resend_verification_skips_unknown_or_verified_user(monkeypatch):
     for user in (None, SimpleNamespace(email_verified_at=datetime.now(timezone.utc))):
-        assert asyncio.run(verification.resend_verification_email("u@example.com", FakeSession([Result(user)]))) is None
+        assert (
+            asyncio.run(
+                verification.resend_verification_email("u@example.com", FakeSession([Result(user)]))
+            )
+            is None
+        )
 
 
 def test_create_and_resend_verification_tokens():
@@ -275,7 +311,9 @@ def test_create_and_resend_verification_tokens():
 
 def test_password_reset_validation_and_success(monkeypatch):
     user = SimpleNamespace(id=uuid4(), password_hash="old")
-    token = SimpleNamespace(user_id=user.id, used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=5))
+    token = SimpleNamespace(
+        user_id=user.id, used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
+    )
     session = FakeSession([Result(token), Result(user), Result()])
     monkeypatch.setattr(password_reset, "hash_password", lambda password: "new-hash")
     asyncio.run(password_reset.reset_password("token", "Secure123!", session))
@@ -286,8 +324,22 @@ def test_password_reset_validation_and_success(monkeypatch):
     bad_cases = [
         (None, None, "Invalid password reset token"),
         (SimpleNamespace(used_at=datetime.now(timezone.utc)), None, "already been used"),
-        (SimpleNamespace(used_at=None, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)), None, "expired"),
-        (SimpleNamespace(user_id=uuid4(), used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)), None, "User not found"),
+        (
+            SimpleNamespace(
+                used_at=None, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)
+            ),
+            None,
+            "expired",
+        ),
+        (
+            SimpleNamespace(
+                user_id=uuid4(),
+                used_at=None,
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=1),
+            ),
+            None,
+            "User not found",
+        ),
     ]
     for token_row, reset_user, message in bad_cases:
         results = [Result(token_row)]
@@ -310,21 +362,29 @@ def test_create_password_reset_token_for_existing_user():
     assert session.commits == 1
     assert session.refreshes == 1
 
-    assert asyncio.run(
-        password_reset.create_password_reset_token("missing@example.com", FakeSession([Result()]))
-    ) is None
+    assert (
+        asyncio.run(
+            password_reset.create_password_reset_token(
+                "missing@example.com", FakeSession([Result()])
+            )
+        )
+        is None
+    )
 
 
 def test_current_token_and_current_user_dependency(monkeypatch):
     from fastapi import HTTPException
     from fastapi.security import HTTPAuthorizationCredentials
 
-    monkeypatch.setattr(dependencies, "decode_token", lambda token: {"type": "access", "sub": str(uuid4())})
+    monkeypatch.setattr(
+        dependencies, "decode_token", lambda token: {"type": "access", "sub": str(uuid4())}
+    )
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="token")
     assert asyncio.run(dependencies.get_current_token(credentials))["type"] == "access"
-    assert asyncio.run(
-        dependencies.get_current_token(None, access_cookie="cookie-token")
-    )["type"] == "access"
+    assert (
+        asyncio.run(dependencies.get_current_token(None, access_cookie="cookie-token"))["type"]
+        == "access"
+    )
 
     for decode, message in [
         (lambda token: (_ for _ in ()).throw(jwt.ExpiredSignatureError()), "expired"),
@@ -350,6 +410,7 @@ def test_current_token_and_current_user_dependency(monkeypatch):
 def test_google_login_session_create_consume_and_invalid(monkeypatch):
     user_id = uuid4()
     user = SimpleNamespace(id=user_id, workspace_id=uuid4())
+
     async def create_refresh_session(user_id, workspace_id, session):
         return "access", "refresh"
 
@@ -360,17 +421,29 @@ def test_google_login_session_create_consume_and_invalid(monkeypatch):
     assert login_session.user_id == user_id
     assert created_session.commits == 1
 
-    consumed = SimpleNamespace(id=login_session.id, user_id=user_id, used_at=None,
-                               expires_at=datetime.now(timezone.utc) + timedelta(minutes=2))
+    consumed = SimpleNamespace(
+        id=login_session.id,
+        user_id=user_id,
+        used_at=None,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=2),
+    )
     session = FakeSession([Result(consumed), Result(user)])
-    assert asyncio.run(google_login.consume_google_login_session(login_session.id, session)) == ("access", "refresh")
+    assert asyncio.run(google_login.consume_google_login_session(login_session.id, session)) == (
+        "access",
+        "refresh",
+    )
     assert consumed.used_at is not None
     assert session.commits == 1
 
     for row, expected in [
         (None, "Invalid Google login session"),
         (SimpleNamespace(used_at=datetime.now(timezone.utc)), "already been used"),
-        (SimpleNamespace(used_at=None, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)), "expired"),
+        (
+            SimpleNamespace(
+                used_at=None, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)
+            ),
+            "expired",
+        ),
     ]:
         invalid_session = FakeSession([Result(row)])
         with pytest.raises(ValueError, match=expected):
@@ -380,10 +453,15 @@ def test_google_login_session_create_consume_and_invalid(monkeypatch):
 
 def test_google_signup_session_complete_and_rejections(monkeypatch):
     session_row = SimpleNamespace(
-        id=uuid4(), google_id="google-1", email="new@example.com", name="New User",
-        used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=2),
+        id=uuid4(),
+        google_id="google-1",
+        email="new@example.com",
+        name="New User",
+        used_at=None,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=2),
     )
     monkeypatch.setattr(google_signup, "hash_password", lambda password: "hashed")
+
     async def create_refresh_session(user_id, workspace_id, session):
         return "access", "refresh"
 
@@ -414,19 +492,49 @@ def test_create_google_signup_session():
     for row, name, expected in [
         (None, "Workspace", "Invalid Google signup session"),
         (SimpleNamespace(used_at=datetime.now(timezone.utc)), "Workspace", "already been used"),
-        (SimpleNamespace(used_at=None, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)), "Workspace", "expired"),
-        (SimpleNamespace(used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)), " ", "Workspace name is required"),
-        (SimpleNamespace(used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)), "A", "at least 2 characters"),
-        (SimpleNamespace(used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)), "x" * 101, "100 characters or fewer"),
+        (
+            SimpleNamespace(
+                used_at=None, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)
+            ),
+            "Workspace",
+            "expired",
+        ),
+        (
+            SimpleNamespace(
+                used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)
+            ),
+            " ",
+            "Workspace name is required",
+        ),
+        (
+            SimpleNamespace(
+                used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)
+            ),
+            "A",
+            "at least 2 characters",
+        ),
+        (
+            SimpleNamespace(
+                used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)
+            ),
+            "x" * 101,
+            "100 characters or fewer",
+        ),
     ]:
         with pytest.raises(ValueError, match=expected):
-            asyncio.run(google_signup.complete_google_signup(uuid4(), name, FakeSession([Result(row)])))
+            asyncio.run(
+                google_signup.complete_google_signup(uuid4(), name, FakeSession([Result(row)]))
+            )
 
 
 def test_google_signup_rejects_existing_account():
     session_row = SimpleNamespace(
-        id=uuid4(), google_id="google-1", email="new@example.com", name="New",
-        used_at=None, expires_at=datetime.now(timezone.utc) + timedelta(minutes=2),
+        id=uuid4(),
+        google_id="google-1",
+        email="new@example.com",
+        name="New",
+        used_at=None,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=2),
     )
     session = FakeSession([Result(session_row), Result(SimpleNamespace(id=uuid4()))])
     with pytest.raises(ValueError, match="already registered"):
@@ -445,9 +553,19 @@ def test_google_oauth_url_find_user_and_missing_settings(monkeypatch):
         google_oauth.create_google_authorization_url()
 
     linked_user = SimpleNamespace(id=uuid4())
-    assert asyncio.run(google_oauth.find_google_user("gid", "email", FakeSession([Result(linked_user)]))) is linked_user
+    assert (
+        asyncio.run(
+            google_oauth.find_google_user("gid", "email", FakeSession([Result(linked_user)]))
+        )
+        is linked_user
+    )
     by_email = SimpleNamespace(id=uuid4())
-    assert asyncio.run(google_oauth.find_google_user("gid", "email", FakeSession([Result(), Result(by_email)]))) is by_email
+    assert (
+        asyncio.run(
+            google_oauth.find_google_user("gid", "email", FakeSession([Result(), Result(by_email)]))
+        )
+        is by_email
+    )
 
 
 def test_email_sending_renders_template_and_sends(monkeypatch):
@@ -485,8 +603,12 @@ def test_email_sending_renders_template_and_sends(monkeypatch):
     email_service.send_verification_email("u@example.com", "User", "verify", 30)
     email_service.send_password_reset_email("u@example.com", "User", "reset", 30)
     assert len(sent) == 2
-    assert "https://frontend.test/verify-email?token=verify" in sent[0].get_body("html").get_content()
-    assert "https://frontend.test/reset-password?token=reset" in sent[1].get_body("html").get_content()
+    assert (
+        "https://frontend.test/verify-email?token=verify" in sent[0].get_body("html").get_content()
+    )
+    assert (
+        "https://frontend.test/reset-password?token=reset" in sent[1].get_body("html").get_content()
+    )
 
 
 def test_email_send_reraises_smtp_error(monkeypatch):
@@ -586,16 +708,34 @@ def test_grpc_auth_server_validates_tokens_and_resolves_workspace(monkeypatch):
     from app.grpc.generated.auth import auth_pb2
 
     service = auth_server.AuthInternalService()
-    monkeypatch.setattr(auth_server, "decode_token", lambda token: {"type": "access", "sub": "u", "workspace_id": "w"})
-    valid = asyncio.run(service.ValidateToken(auth_pb2.ValidateTokenRequest(access_token="good"), None))
+    monkeypatch.setattr(
+        auth_server,
+        "decode_token",
+        lambda token: {"type": "access", "sub": "u", "workspace_id": "w"},
+    )
+    valid = asyncio.run(
+        service.ValidateToken(auth_pb2.ValidateTokenRequest(access_token="good"), None)
+    )
     assert valid.valid and valid.user_id == "u" and valid.workspace_id == "w"
 
-    monkeypatch.setattr(auth_server, "decode_token", lambda token: {"type": "refresh", "sub": "u", "workspace_id": "w"})
-    assert not asyncio.run(service.ValidateToken(auth_pb2.ValidateTokenRequest(access_token="refresh"), None)).valid
+    monkeypatch.setattr(
+        auth_server,
+        "decode_token",
+        lambda token: {"type": "refresh", "sub": "u", "workspace_id": "w"},
+    )
+    assert not asyncio.run(
+        service.ValidateToken(auth_pb2.ValidateTokenRequest(access_token="refresh"), None)
+    ).valid
     monkeypatch.setattr(auth_server, "decode_token", lambda token: {"type": "access", "sub": "u"})
-    assert not asyncio.run(service.ValidateToken(auth_pb2.ValidateTokenRequest(access_token="missing-workspace"), None)).valid
-    monkeypatch.setattr(auth_server, "decode_token", lambda token: (_ for _ in ()).throw(jwt.InvalidTokenError()))
-    assert not asyncio.run(service.ValidateToken(auth_pb2.ValidateTokenRequest(access_token="bad"), None)).valid
+    assert not asyncio.run(
+        service.ValidateToken(auth_pb2.ValidateTokenRequest(access_token="missing-workspace"), None)
+    ).valid
+    monkeypatch.setattr(
+        auth_server, "decode_token", lambda token: (_ for _ in ()).throw(jwt.InvalidTokenError())
+    )
+    assert not asyncio.run(
+        service.ValidateToken(auth_pb2.ValidateTokenRequest(access_token="bad"), None)
+    ).valid
 
     class SessionContext:
         async def __aenter__(self):
@@ -605,7 +745,9 @@ def test_grpc_auth_server_validates_tokens_and_resolves_workspace(monkeypatch):
             return False
 
     monkeypatch.setattr(auth_server, "AsyncSessionLocal", SessionContext)
-    found = asyncio.run(service.ResolveWorkspace(auth_pb2.ResolveWorkspaceRequest(user_id="u"), None))
+    found = asyncio.run(
+        service.ResolveWorkspace(auth_pb2.ResolveWorkspaceRequest(user_id="u"), None)
+    )
     assert found.found
 
     class MissingSessionContext:
@@ -616,7 +758,9 @@ def test_grpc_auth_server_validates_tokens_and_resolves_workspace(monkeypatch):
             return False
 
     monkeypatch.setattr(auth_server, "AsyncSessionLocal", MissingSessionContext)
-    missing = asyncio.run(service.ResolveWorkspace(auth_pb2.ResolveWorkspaceRequest(user_id="missing"), None))
+    missing = asyncio.run(
+        service.ResolveWorkspace(auth_pb2.ResolveWorkspaceRequest(user_id="missing"), None)
+    )
     assert not missing.found
 
 
@@ -637,7 +781,9 @@ def test_grpc_server_startup(monkeypatch):
     monkeypatch.setattr(
         grpc_server.auth_pb2_grpc,
         "add_AuthInternalServiceServicer_to_server",
-        lambda service, server: calls.append(("register", isinstance(service, grpc_server.AuthInternalService))),
+        lambda service, server: calls.append(
+            ("register", isinstance(service, grpc_server.AuthInternalService))
+        ),
     )
     result = asyncio.run(grpc_server.start_grpc_server())
     assert result is fake_server

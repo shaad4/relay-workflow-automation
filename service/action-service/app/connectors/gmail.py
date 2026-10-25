@@ -28,9 +28,7 @@ async def refresh_access_token(refresh_token: str) -> str:
         )
 
     if response.status_code != 200:
-        raise ValueError(
-            f"Failed to refresh Google access token: {response.text}"
-        )
+        raise ValueError(f"Failed to refresh Google access token: {response.text}")
 
     token_data = response.json()
 
@@ -43,7 +41,6 @@ async def refresh_access_token(refresh_token: str) -> str:
 
 
 class GmailConnector(Connector):
-
     async def execute(
         self,
         action: str,
@@ -83,9 +80,7 @@ class GmailConnector(Connector):
         message["Subject"] = subject
         message.set_content(body, subtype=body_format, charset="utf-8")
 
-        raw_message = base64.urlsafe_b64encode(
-            message.as_bytes()
-        ).decode()
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
 
         payload = {
             "raw": raw_message,
@@ -104,9 +99,7 @@ class GmailConnector(Connector):
             )
 
         if response.status_code not in (200, 202):
-            raise ValueError(
-                f"Failed to send Gmail message: {response.text}"
-            )
+            raise ValueError(f"Failed to send Gmail message: {response.text}")
 
         response_data = response.json()
 

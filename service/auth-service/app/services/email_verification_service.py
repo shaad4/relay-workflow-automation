@@ -11,9 +11,7 @@ from app.models import EmailVerificationToken, User
 load_dotenv()
 
 
-VERIFICATION_TOKEN_EXPIRE_MINUTES = int(
-    os.getenv("VERIFICATION_TOKEN_EXPIRE_MINUTES", "30")
-)
+VERIFICATION_TOKEN_EXPIRE_MINUTES = int(os.getenv("VERIFICATION_TOKEN_EXPIRE_MINUTES", "30"))
 
 
 def generate_verification_token() -> str:
@@ -45,12 +43,7 @@ async def create_verification_token(
         verification_token = EmailVerificationToken(
             user_id=user_id,
             token=token,
-            expires_at=(
-                now
-                + timedelta(
-                    minutes=VERIFICATION_TOKEN_EXPIRE_MINUTES
-                )
-            ),
+            expires_at=(now + timedelta(minutes=VERIFICATION_TOKEN_EXPIRE_MINUTES)),
         )
 
         session.add(verification_token)
@@ -65,9 +58,7 @@ async def resend_verification_email(
     email: str,
     session: AsyncSession,
 ):
-    result = await session.execute(
-        select(User).where(User.email == email)
-    )
+    result = await session.execute(select(User).where(User.email == email))
 
     user = result.scalar_one_or_none()
 
@@ -99,9 +90,7 @@ async def verify_email_token(
     now = datetime.now(timezone.utc)
 
     result = await session.execute(
-        select(EmailVerificationToken).where(
-            EmailVerificationToken.token == token
-        )
+        select(EmailVerificationToken).where(EmailVerificationToken.token == token)
     )
 
     verification_token = result.scalar_one_or_none()
@@ -110,20 +99,12 @@ async def verify_email_token(
         raise ValueError("Invalid verification token")
 
     if verification_token.used_at is not None:
-        raise ValueError(
-            "Verification token has already been used"
-        )
+        raise ValueError("Verification token has already been used")
 
     if verification_token.expires_at <= now:
-        raise ValueError(
-            "Verification token has expired"
-        )
+        raise ValueError("Verification token has expired")
 
-    result = await session.execute(
-        select(User).where(
-            User.id == verification_token.user_id
-        )
-    )
+    result = await session.execute(select(User).where(User.id == verification_token.user_id))
 
     user = result.scalar_one_or_none()
 

@@ -7,13 +7,10 @@ from app.db.database import AsyncSessionLocal
 from app.grpc.generated.rag import rag_pb2, rag_pb2_grpc
 from app.services.retrieval import RetrievalService
 
-
 logger = logging.getLogger(__name__)
 
 
-class RagInternalServicer(
-    rag_pb2_grpc.RagInternalServiceServicer
-):
+class RagInternalServicer(rag_pb2_grpc.RagInternalServiceServicer):
     async def Retrieve(
         self,
         request: rag_pb2.RetrieveRequest,
@@ -24,9 +21,7 @@ class RagInternalServicer(
         # 1. Validate UUIDs
         try:
             workspace_id = UUID(request.workspace_id)
-            knowledge_base_id = UUID(
-                request.knowledge_base_id
-            )
+            knowledge_base_id = UUID(request.knowledge_base_id)
         except ValueError:
             await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT,

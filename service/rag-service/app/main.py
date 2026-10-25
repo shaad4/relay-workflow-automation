@@ -1,13 +1,12 @@
-
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes.knowledge_bases import (
-    router as knowledge_base_router,
-)
 from app.api.routes.documents import (
     router as document_router,
+)
+from app.api.routes.knowledge_bases import (
+    router as knowledge_base_router,
 )
 from app.grpc.rag_server import start_rag_grpc_server
 

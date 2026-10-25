@@ -8,12 +8,9 @@ load_dotenv()
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(
-    os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
-)
-REFRESH_TOKEN_EXPIRE_DAYS = int(
-    os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7")
-)
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
 
 def create_token(
     data: dict,
@@ -23,9 +20,7 @@ def create_token(
 ) -> str:
     payload = data.copy()
 
-    expire = expires_at or datetime.now(timezone.utc) + timedelta(
-        minutes=expires_minutes
-    )
+    expire = expires_at or datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
 
     payload["exp"] = expire
     payload["type"] = token_type
@@ -35,6 +30,7 @@ def create_token(
         JWT_SECRET_KEY,
         algorithm=JWT_ALGORITHM,
     )
+
 
 def create_access_token(data: dict) -> str:
     return create_token(
@@ -55,9 +51,6 @@ def create_refresh_token(
         expires_at=expires_at,
     )
 
+
 def decode_token(token: str) -> dict:
-    return jwt.decode(
-        token,
-        JWT_SECRET_KEY,
-        algorithms=[JWT_ALGORITHM]
-    )
+    return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])

@@ -1,11 +1,9 @@
-
 import os
 from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
-
 
 router = APIRouter(prefix="/knowledge-bases")
 
@@ -31,6 +29,7 @@ HOP_BY_HOP_HEADERS = {
 # Knowledge Base Routes
 # --------------------------------------------------
 
+
 @router.post("/")
 async def create_knowledge_base(request: Request):
     return await proxy_rag_request(request)
@@ -50,6 +49,7 @@ async def get_knowledge_base(
         request,
         path=str(knowledge_base_id),
     )
+
 
 @router.delete("/{knowledge_base_id}/")
 async def delete_knowledge_base(
@@ -72,6 +72,7 @@ async def upload_document(
         path=f"{knowledge_base_id}/documents",
     )
 
+
 @router.post("/{knowledge_base_id}/search/")
 async def search_knowledge_base(
     request: Request,
@@ -81,6 +82,7 @@ async def search_knowledge_base(
         request,
         path=f"{knowledge_base_id}/search",
     )
+
 
 @router.get("/{knowledge_base_id}/documents/")
 async def list_documents(
@@ -92,9 +94,8 @@ async def list_documents(
         path=f"{knowledge_base_id}/documents",
     )
 
-@router.delete(
-    "/{knowledge_base_id}/documents/{document_id}/"
-)
+
+@router.delete("/{knowledge_base_id}/documents/{document_id}/")
 async def delete_document(
     request: Request,
     knowledge_base_id: UUID,
@@ -105,9 +106,8 @@ async def delete_document(
         path=f"{knowledge_base_id}/documents/{document_id}",
     )
 
-@router.post(
-    "/{knowledge_base_id}/documents/{document_id}/retry/"
-)
+
+@router.post("/{knowledge_base_id}/documents/{document_id}/retry/")
 async def retry_document(
     request: Request,
     knowledge_base_id: UUID,
@@ -122,6 +122,7 @@ async def retry_document(
 # --------------------------------------------------
 # RAG Service Proxy
 # --------------------------------------------------
+
 
 async def proxy_rag_request(
     request: Request,
@@ -138,18 +139,11 @@ async def proxy_rag_request(
 
     from urllib.parse import quote
 
-    encoded_path = "/".join(
-        quote(segment, safe="")
-        for segment in path_segments
-    )
+    encoded_path = "/".join(quote(segment, safe="") for segment in path_segments)
 
     base_url = f"{RAG_SERVICE_URL}/knowledge-bases"
 
-    url = (
-        f"{base_url}/{encoded_path}/"
-        if encoded_path
-        else f"{base_url}/"
-    )
+    url = f"{base_url}/{encoded_path}/" if encoded_path else f"{base_url}/"
 
     # Forward request headers
     excluded_request_headers = HOP_BY_HOP_HEADERS | {
@@ -167,8 +161,7 @@ async def proxy_rag_request(
     headers = {
         key: value
         for key, value in request.headers.items()
-        if key.lower()
-        not in excluded_request_headers | connection_headers
+        if key.lower() not in excluded_request_headers | connection_headers
     }
 
     try:
@@ -205,8 +198,7 @@ async def proxy_rag_request(
     response_headers = {
         key: value
         for key, value in response.headers.items()
-        if key.lower()
-        not in excluded_response_headers | response_connection_headers
+        if key.lower() not in excluded_response_headers | response_connection_headers
     }
 
     return Response(

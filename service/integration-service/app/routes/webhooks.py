@@ -1,32 +1,30 @@
-import grpc
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Header, Request
+import grpc
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
-from app.schemas.webhook import WebhookCreate, WebhookResponse, WebhookUpdate, WebhookCreateResponse
+from app.schemas.webhook import WebhookCreate, WebhookCreateResponse, WebhookResponse, WebhookUpdate
 from app.services.webhook_service import (
     InactiveWorkflowError,
     UnpublishedWorkflowVersionError,
     WorkflowVersionNotFoundError,
     create_webhook,
-    list_webhooks,
-    get_webhook,
-    update_webhook,
     delete_webhook,
+    get_webhook,
+    list_webhooks,
     regenerate_webhook_token,
-    get_webhook_by_public_token,
-    verify_webhook_secret,
+    update_webhook,
 )
 from app.services.webhook_test_sessions import create_session, get_session
-
 
 router = APIRouter(
     prefix="/webhooks",
     tags=["webhooks"],
 )
+
 
 async def get_db():
     async with AsyncSessionLocal() as session:
@@ -166,7 +164,9 @@ async def start_webhook_test_session(
     try:
         workspace_id = uuid.UUID(identity["workspace_id"])
     except (ValueError, TypeError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid workspace identity")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid workspace identity"
+        )
     webhook = await get_webhook(webhook_id=webhook_id, workspace_id=workspace_id, session=session)
     if webhook is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
@@ -182,10 +182,14 @@ async def get_webhook_test_session(
     try:
         workspace_id = str(uuid.UUID(identity["workspace_id"]))
     except (ValueError, TypeError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid workspace identity")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid workspace identity"
+        )
     result = await get_session(str(session_id), str(webhook_id), workspace_id)
     if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook test session expired")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Webhook test session expired"
+        )
     return result
 
 
@@ -220,12 +224,23 @@ async def update_webhook_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except grpc.aio.AioRpcError as exc:
         if exc.code() == grpc.StatusCode.NOT_FOUND:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow or workflow version not found") from exc
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workflow or workflow version not found",
+            ) from exc
         if exc.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
-            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Workflow Service request timed out") from exc
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Workflow Service request timed out",
+            ) from exc
         if exc.code() == grpc.StatusCode.UNAVAILABLE:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Workflow Service is unavailable") from exc
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to validate workflow") from exc
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Workflow Service is unavailable",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to validate workflow"
+        ) from exc
 
     if webhook is None:
         raise HTTPException(

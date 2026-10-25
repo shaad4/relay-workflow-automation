@@ -1,15 +1,13 @@
 from uuid import UUID
 
+from app.dependencies import get_current_identity
+from app.models.workflow import Workflow
+from app.routes.workflows import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.dependencies import get_current_identity
-from app.models.workflow import Workflow
-from app.routes.workflows import get_db
-
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -30,9 +28,7 @@ async def summary(
                 select(
                     func.count(Workflow.id),
                     func.count(Workflow.id).filter(Workflow.status == "active"),
-                ).where(
-                    Workflow.workspace_id == UUID(identity["workspace_id"])
-                )
+                ).where(Workflow.workspace_id == UUID(identity["workspace_id"]))
             )
         ).one()
 

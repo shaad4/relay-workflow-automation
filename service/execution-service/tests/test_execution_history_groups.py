@@ -1,4 +1,5 @@
 """Exercise grouping queries against a real SQL database, without external services."""
+
 import asyncio
 import os
 import sys
@@ -29,6 +30,7 @@ def sqlite_jsonb(_type, _compiler, **_kwargs):
 
 class SessionAdapter:
     """Use the production SQL queries with an in-memory synchronous driver."""
+
     def __init__(self, session):
         self.session = session
 
@@ -41,7 +43,9 @@ class SessionAdapter:
 
 @pytest.fixture
 def history():
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
     Execution.__table__.create(engine)
     DeadLetterEvent.__table__.create(engine)
     with Session(engine) as session:
@@ -50,12 +54,19 @@ def history():
 
         def run(minute, status="failed", parent=None, workspace_id=None):
             item = Execution(
-                id=uuid4(), workspace_id=workspace_id or workspace, workflow_id=workflow,
-                workflow_version_id=version, workflow_name="Order processing", status=status,
-                trigger_type="manual", created_at=start + timedelta(minutes=minute),
-                started_at=start + timedelta(minutes=minute), completed_at=start + timedelta(minutes=minute, seconds=2),
+                id=uuid4(),
+                workspace_id=workspace_id or workspace,
+                workflow_id=workflow,
+                workflow_version_id=version,
+                workflow_name="Order processing",
+                status=status,
+                trigger_type="manual",
+                created_at=start + timedelta(minutes=minute),
+                started_at=start + timedelta(minutes=minute),
+                completed_at=start + timedelta(minutes=minute, seconds=2),
                 replay_of_execution_id=parent.id if parent else None,
-                context={"secret": "never returned"}, trigger_data={"password": "hidden"},
+                context={"secret": "never returned"},
+                trigger_data={"password": "hidden"},
             )
             session.add(item)
             session.commit()
@@ -73,7 +84,9 @@ def history():
 
 
 def query(history, **kwargs):
-    return asyncio.run(history["service"].list_executions(workspace_id=history["workspace"], **kwargs))
+    return asyncio.run(
+        history["service"].list_executions(workspace_id=history["workspace"], **kwargs)
+    )
 
 
 def test_replays_of_replays_form_one_group_and_totals_count_groups(history):
@@ -115,7 +128,10 @@ def test_attempts_resolve_any_member_and_are_paginated_oldest_first(history):
         first = query(history, group_id=history[member].id, page_size=2)
         second = query(history, group_id=history[member].id, page_size=2, page=2)
         assert first["total"] == second["total"] == 3
-        assert [row["id"] for row in first["items"]] == [history["original"].id, history["replay"].id]
+        assert [row["id"] for row in first["items"]] == [
+            history["original"].id,
+            history["replay"].id,
+        ]
         assert [row["id"] for row in second["items"]] == [history["latest"].id]
 
 
@@ -138,22 +154,31 @@ def test_flat_history_remains_backward_compatible(history):
 
 
 def test_http_contract_validation_and_authorized_workspace(history):
+    from app.routes import executions
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from app.routes import executions
 
     app = FastAPI()
     app.include_router(executions.router)
-    app.dependency_overrides[executions.get_current_identity] = lambda: {"workspace_id": str(history["workspace"])}
+    app.dependency_overrides[executions.get_current_identity] = lambda: {
+        "workspace_id": str(history["workspace"])
+    }
     app.dependency_overrides[executions.get_db] = lambda: history["adapter"]
     with TestClient(app) as client:
         response = client.get("/executions/?group_replays=true&page_size=1")
         assert response.status_code == 200
         assert response.json()["items"][0]["attempt_count"] == 3
         assert response.json()["total"] == 2
-        for suffix in ["page_size=101", "group_id=bad-id", f"group_id={history['original'].id}&status=failed", f"group_id={history['original'].id}&group_replays=true"]:
+        for suffix in [
+            "page_size=101",
+            "group_id=bad-id",
+            f"group_id={history['original'].id}&status=failed",
+            f"group_id={history['original'].id}&group_replays=true",
+        ]:
             assert client.get(f"/executions/?{suffix}").status_code == 422
         assert client.get(f"/executions/?group_id={history['foreign'].id}").status_code == 404
         assert client.get(f"/executions/?group_id={history['latest'].id}").json()["total"] == 3
-        assert client.get(f"/executions/{history['latest'].id}/").json()["replay_of_execution_id"] == str(history["replay"].id)
+        assert client.get(f"/executions/{history['latest'].id}/").json()[
+            "replay_of_execution_id"
+        ] == str(history["replay"].id)
         assert client.get("/executions/").json()["total"] == 4

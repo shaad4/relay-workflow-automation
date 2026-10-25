@@ -6,4 +6,12 @@ from app.models.refresh_session import RefreshSession
 from app.models.user import User
 from app.models.workspace import Workspace
 
-__all__ = ["EmailVerificationToken", "GoogleLoginSession", "GoogleSignupSession", "PasswordResetToken", "RefreshSession", "User", "Workspace"]
+__all__ = [
+    "EmailVerificationToken",
+    "GoogleLoginSession",
+    "GoogleSignupSession",
+    "PasswordResetToken",
+    "RefreshSession",
+    "User",
+    "Workspace",
+]

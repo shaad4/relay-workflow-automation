@@ -1,11 +1,10 @@
 from openai import AsyncOpenAI
 
 from app.ai.base import AIProvider, AIResponse
-
 from app.ai.config import AI_REQUEST_TIMEOUT_SECONDS
 
-class OpenAIProvider(AIProvider):
 
+class OpenAIProvider(AIProvider):
     async def generate(
         self,
         api_key: str,
@@ -38,28 +37,20 @@ class OpenAIProvider(AIProvider):
             )
 
             if response.status != "completed":
-                raise RuntimeError(
-                    "OpenAI response was not completed"
-                )
+                raise RuntimeError("OpenAI response was not completed")
 
             content = response.output_text
 
             if not content or not content.strip():
-                raise RuntimeError(
-                    "OpenAI returned an empty response"
-                )
+                raise RuntimeError("OpenAI returned an empty response")
 
             usage = response.usage
 
             return AIResponse(
                 content=content,
                 model=response.model,
-                input_tokens=(
-                    usage.input_tokens if usage else 0
-                ),
-                output_tokens=(
-                    usage.output_tokens if usage else 0
-                ),
+                input_tokens=(usage.input_tokens if usage else 0),
+                output_tokens=(usage.output_tokens if usage else 0),
             )
 
         finally:

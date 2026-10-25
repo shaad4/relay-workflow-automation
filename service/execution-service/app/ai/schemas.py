@@ -1,4 +1,3 @@
-
 from typing import Any
 
 from pydantic import (
@@ -32,9 +31,7 @@ class AIDecisionInput(BaseModel):
         value = value.strip()
 
         if not value:
-            raise ValueError(
-                "AI instructions cannot be empty"
-            )
+            raise ValueError("AI instructions cannot be empty")
 
         return value
 
@@ -44,20 +41,13 @@ class AIDecisionInput(BaseModel):
         cls,
         values: list[str],
     ) -> list[str]:
-        normalized = [
-            value.strip().upper()
-            for value in values
-        ]
+        normalized = [value.strip().upper() for value in values]
 
         if any(not value for value in normalized):
-            raise ValueError(
-                "Decision values cannot be empty"
-            )
+            raise ValueError("Decision values cannot be empty")
 
         if len(normalized) != len(set(normalized)):
-            raise ValueError(
-                "Duplicate decision values are not allowed"
-            )
+            raise ValueError("Duplicate decision values are not allowed")
 
         return normalized
 
@@ -85,9 +75,7 @@ class AIDecisionOutput(BaseModel):
         value = value.strip().upper()
 
         if not value:
-            raise ValueError(
-                "AI decision cannot be empty"
-            )
+            raise ValueError("AI decision cannot be empty")
 
         return value
 
@@ -97,9 +85,7 @@ class AIDecisionOutput(BaseModel):
         value = value.strip()
 
         if not value:
-            raise ValueError(
-                "AI decision reason cannot be empty"
-            )
+            raise ValueError("AI decision reason cannot be empty")
 
         return value
 
@@ -110,14 +96,9 @@ def validate_ai_decision(
 ) -> AIDecisionOutput:
     """Validate an AI decision against configured outcomes."""
 
-    allowed = {
-        decision.strip().upper()
-        for decision in allowed_decisions
-    }
+    allowed = {decision.strip().upper() for decision in allowed_decisions}
 
     if output.decision not in allowed:
-        raise ValueError(
-            "AI returned a decision that is not allowed"
-        )
+        raise ValueError("AI returned a decision that is not allowed")
 
     return output

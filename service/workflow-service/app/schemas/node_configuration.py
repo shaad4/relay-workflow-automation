@@ -69,7 +69,8 @@ class HttpRequestConfig(BaseModel):
     def validate_method(cls, value: str) -> str:
         # HTTPX also accepts HEAD, OPTIONS and extension methods.
         if not is_expression(value) and not re.fullmatch(
-            r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", value,
+            r"[!#$%&'*+.^_`|~0-9A-Za-z-]+",
+            value,
         ):
             raise ValueError("HTTP method must be a valid HTTP token")
         return value
@@ -82,9 +83,9 @@ class EmailConfig(BaseModel):
     to: RequiredText
     subject: RequiredText
     body: RequiredText
-    body_format: Annotated[
-        Literal["plain", "html"], WrapValidator(validate_runtime_value)
-    ] = "plain"
+    body_format: Annotated[Literal["plain", "html"], WrapValidator(validate_runtime_value)] = (
+        "plain"
+    )
 
 
 class RefundConfig(BaseModel):
@@ -178,13 +179,9 @@ class RagSearchConfig(BaseModel):
         value = value.strip()
 
         if not value:
-            raise ValueError(
-                "RAG query cannot be empty"
-            )
+            raise ValueError("RAG query cannot be empty")
 
         return value
-
-
 
 
 class AIDecisionConfig(BaseModel):
@@ -246,22 +243,15 @@ class AIDecisionConfig(BaseModel):
                 r"[A-Z][A-Z0-9_]*",
                 decision,
             ):
-                raise ValueError(
-                    "Decision must contain only letters, "
-                    "numbers, and underscores"
-                )
+                raise ValueError("Decision must contain only letters, numbers, and underscores")
 
             if len(decision) > 100:
-                raise ValueError(
-                    "Decision cannot exceed 100 characters"
-                )
+                raise ValueError("Decision cannot exceed 100 characters")
 
             normalized.append(decision)
 
         if len(normalized) != len(set(normalized)):
-            raise ValueError(
-                "Duplicate decisions are not allowed"
-            )
+            raise ValueError("Duplicate decisions are not allowed")
 
         return normalized
 
@@ -273,18 +263,14 @@ class AIDecisionConfig(BaseModel):
     ) -> dict[str, Any]:
         for key in values:
             if not key.strip():
-                raise ValueError(
-                    "Input mapping names cannot be empty"
-                )
+                raise ValueError("Input mapping names cannot be empty")
 
         return values
-
 
     @field_validator("input_mappings", "allowed_decisions", mode="wrap")
     @classmethod
     def validate_runtime_inputs(cls, value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
         return validate_runtime_value(value, handler)
-
 
 
 class AIGenerateConfig(BaseModel):
@@ -330,12 +316,9 @@ class AIGenerateConfig(BaseModel):
     @classmethod
     def validate_required_text(cls, value: str) -> str:
         if not value:
-            raise ValueError(
-                "Field cannot be empty"
-            )
+            raise ValueError("Field cannot be empty")
 
         return value
-
 
 
 class ConditionConfig(BaseModel):
@@ -354,9 +337,7 @@ class ConditionConfig(BaseModel):
         value = value.strip()
 
         if not value:
-            raise ValueError(
-                "Condition value cannot be empty"
-            )
+            raise ValueError("Condition value cannot be empty")
 
         return value
 
@@ -371,9 +352,7 @@ class ManualTriggerConfig(BaseModel):
         max_length=500,
     )
 
-    input_schema: dict[str, Any] = Field(
-        default_factory=lambda: {"type": "object"}
-    )
+    input_schema: dict[str, Any] = Field(default_factory=lambda: {"type": "object"})
 
     @field_validator("input_schema")
     @classmethod
@@ -383,13 +362,9 @@ class ManualTriggerConfig(BaseModel):
     ) -> dict[str, Any]:
 
         if value != {"type": "object"}:
-            raise ValueError(
-                "Manual Trigger MVP supports only "
-                "an unrestricted JSON object schema"
-            )
+            raise ValueError("Manual Trigger MVP supports only an unrestricted JSON object schema")
 
         return value
-    
 
 
 class ScheduledTriggerConfig(BaseModel):
@@ -428,29 +403,19 @@ class ScheduledTriggerConfig(BaseModel):
 
         if self.schedule_type == "interval":
             if self.interval_minutes is None:
-                raise ValueError(
-                    "interval_minutes is required"
-                )
+                raise ValueError("interval_minutes is required")
 
             if self.cron_expression is not None:
-                raise ValueError(
-                    "cron_expression is not allowed for interval"
-                )
+                raise ValueError("cron_expression is not allowed for interval")
 
         if self.schedule_type == "cron":
             if self.interval_minutes is not None:
-                raise ValueError(
-                    "interval_minutes is not allowed for cron"
-                )
+                raise ValueError("interval_minutes is not allowed for cron")
 
             if not self.cron_expression:
-                raise ValueError(
-                    "cron_expression is required"
-                )
+                raise ValueError("cron_expression is required")
 
             if not croniter.is_valid(self.cron_expression):
-                raise ValueError(
-                    "Invalid cron expression"
-                )
+                raise ValueError("Invalid cron expression")
 
         return self

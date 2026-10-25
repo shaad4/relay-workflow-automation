@@ -1,12 +1,12 @@
 import asyncio
 import sys
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
-import pytest
 import httpx
+import pytest
 from fastapi import FastAPI
 
 # Make the service package importable when pytest is started from this folder.
@@ -55,6 +55,7 @@ def client(monkeypatch):
         yield object()
 
     app.dependency_overrides[auth.get_db] = fake_get_db
+
     async def fake_get_current_user():
         return test_user
 
@@ -135,8 +136,16 @@ def test_login(client, monkeypatch):
     assert response.json() == {"token_type": "bearer"}
     cookies = response.headers.get_list("set-cookie")
     assert len(cookies) == 2
-    assert any(cookie.startswith("relay_access_token=") and "httponly" in cookie.lower() for cookie in cookies)
-    assert any(cookie.startswith("relay_refresh_token=") and "httponly" in cookie.lower() and "path=/auth" in cookie.lower() for cookie in cookies)
+    assert any(
+        cookie.startswith("relay_access_token=") and "httponly" in cookie.lower()
+        for cookie in cookies
+    )
+    assert any(
+        cookie.startswith("relay_refresh_token=")
+        and "httponly" in cookie.lower()
+        and "path=/auth" in cookie.lower()
+        for cookie in cookies
+    )
     assert "access-token" not in response.text
     assert "refresh-token" not in response.text
 
@@ -233,8 +242,14 @@ def test_logout_revokes_refresh_session_and_clears_both_cookies(client, monkeypa
     assert response.status_code == 200
     assert revoked == ["session-id"]
     cleared = response.headers.get_list("set-cookie")
-    assert any(cookie.startswith("relay_access_token=") and "max-age=0" in cookie.lower() for cookie in cleared)
-    assert any(cookie.startswith("relay_refresh_token=") and "max-age=0" in cookie.lower() for cookie in cleared)
+    assert any(
+        cookie.startswith("relay_access_token=") and "max-age=0" in cookie.lower()
+        for cookie in cleared
+    )
+    assert any(
+        cookie.startswith("relay_refresh_token=") and "max-age=0" in cookie.lower()
+        for cookie in cleared
+    )
 
 
 def test_verify_email(client, monkeypatch):
@@ -263,9 +278,7 @@ def test_resend_verification(client, monkeypatch):
         return None
 
     monkeypatch.setattr(auth, "resend_verification_email", resend_verification_email)
-    response = client.post(
-        "/auth/resend-verification", json={"email": test_user.email}
-    )
+    response = client.post("/auth/resend-verification", json={"email": test_user.email})
 
     assert response.status_code == 200
     assert "If an account" in response.json()["message"]
@@ -276,9 +289,7 @@ def test_forgot_password(client, monkeypatch):
         return None
 
     monkeypatch.setattr(auth, "create_password_reset_token", create_password_reset_token)
-    response = client.post(
-        "/auth/forgot-password", json={"email": test_user.email}
-    )
+    response = client.post("/auth/forgot-password", json={"email": test_user.email})
 
     assert response.status_code == 200
     assert "If an account" in response.json()["message"]
@@ -357,9 +368,7 @@ def test_google_callback_requires_code(client):
 
 
 @pytest.mark.parametrize("existing_user", [True, False])
-def test_google_callback_redirects_to_login_exchange_or_signup(
-    client, monkeypatch, existing_user
-):
+def test_google_callback_redirects_to_login_exchange_or_signup(client, monkeypatch, existing_user):
     user = test_user if existing_user else None
     login_session = SimpleNamespace(id=uuid4())
     signup_session = SimpleNamespace(id=uuid4())

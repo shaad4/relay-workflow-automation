@@ -3,7 +3,6 @@ from typing import Any
 
 from app.engine.context import ExecutionContext
 
-
 EXPRESSION_PATTERN = re.compile(r"\{\{\s*(.*?)\s*\}\}")
 
 
@@ -34,7 +33,7 @@ class ExpressionResolver:
         parts: list[str] = []
         cursor = 0
         for match in matches:
-            parts.append(value[cursor:match.start()])
+            parts.append(value[cursor : match.start()])
             resolved = self.context.get(match.group(1))
             parts.append(match.group(0) if resolved is None else str(resolved))
             cursor = match.end()

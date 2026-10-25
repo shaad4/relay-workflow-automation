@@ -12,13 +12,12 @@ from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
 from app.schemas.ai_provider_connection import (
     AIProviderConnectionCreate,
-    AIProviderConnectionUpdate,
     AIProviderConnectionResponse,
+    AIProviderConnectionUpdate,
 )
 from app.services.ai_provider_connection import (
     AIProviderConnectionService,
 )
-from app.ai.connection_test import test_ai_provider_connection
 
 router = APIRouter(
     prefix="/ai/connections",
@@ -56,9 +55,7 @@ async def create_ai_connection(
             detail=str(exc),
         ) from exc
 
-    return AIProviderConnectionResponse.model_validate(
-        connection
-    )
+    return AIProviderConnectionResponse.model_validate(connection)
 
 
 @router.get(
@@ -75,12 +72,7 @@ async def list_ai_connections(
         workspace_id=UUID(identity["workspace_id"]),
     )
 
-    return [
-        AIProviderConnectionResponse.model_validate(
-            connection
-        )
-        for connection in connections
-    ]
+    return [AIProviderConnectionResponse.model_validate(connection) for connection in connections]
 
 
 @router.get(
@@ -105,9 +97,7 @@ async def get_ai_connection(
             detail="AI connection not found",
         )
 
-    return AIProviderConnectionResponse.model_validate(
-        connection
-    )
+    return AIProviderConnectionResponse.model_validate(connection)
 
 
 @router.patch(
@@ -140,9 +130,7 @@ async def update_ai_connection(
             detail="AI connection not found",
         )
 
-    return AIProviderConnectionResponse.model_validate(
-        connection
-    )
+    return AIProviderConnectionResponse.model_validate(connection)
 
 
 @router.delete(
@@ -200,7 +188,6 @@ async def test_ai_connection(
         "success": success,
         "message": "AI provider connection verified",
     }
-
 
 
 @router.get("/{connection_id}/models/")

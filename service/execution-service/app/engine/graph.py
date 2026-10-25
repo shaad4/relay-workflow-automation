@@ -1,4 +1,3 @@
-
 from dataclasses import dataclass
 
 
@@ -14,10 +13,7 @@ class ExecutionGraph:
         nodes: list[dict],
         edges: list[dict],
     ):
-        self.nodes = {
-            node["node_id"]: node
-            for node in nodes
-        }
+        self.nodes = {node["node_id"]: node for node in nodes}
 
         self.edges: dict[str, list[GraphEdge]] = {}
 
@@ -56,18 +52,13 @@ class ExecutionGraph:
         if condition is None:
             if len(edges) != 1:
                 raise ValueError(
-                    f"Node {node_id} has multiple outgoing edges "
-                    "but no condition was provided"
+                    f"Node {node_id} has multiple outgoing edges but no condition was provided"
                 )
 
             selected_edge = edges[0]
 
         else:
-            matching_edges = [
-                edge
-                for edge in edges
-                if edge.condition == condition
-            ]
+            matching_edges = [edge for edge in edges if edge.condition == condition]
 
             if len(matching_edges) != 1:
                 raise ValueError(
@@ -78,15 +69,10 @@ class ExecutionGraph:
 
             selected_edge = matching_edges[0]
 
-        next_node = self.get_node(
-            selected_edge.target_node_id
-        )
+        next_node = self.get_node(selected_edge.target_node_id)
 
         if next_node is None:
-            raise ValueError(
-                f"Target node not found: "
-                f"{selected_edge.target_node_id}"
-            )
+            raise ValueError(f"Target node not found: {selected_edge.target_node_id}")
 
         return next_node
 

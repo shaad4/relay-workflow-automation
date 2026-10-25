@@ -1,4 +1,3 @@
-
 import asyncio
 import logging
 import os
@@ -12,7 +11,6 @@ from sqlalchemy.pool import NullPool
 
 from app.celery_app import celery_app
 from app.services.ingestion import IngestionService
-
 
 logger = logging.getLogger(__name__)
 

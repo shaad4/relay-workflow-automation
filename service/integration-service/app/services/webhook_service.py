@@ -2,7 +2,6 @@ import secrets
 import uuid
 
 from pwdlib import PasswordHash
-
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,8 +56,10 @@ async def validate_workflow_version(
 def generate_public_token() -> str:
     return secrets.token_urlsafe(32)
 
+
 def generate_webhook_secret() -> str:
     return f"rly_whsec_{secrets.token_urlsafe(32)}"
+
 
 def verify_webhook_secret(
     secret: str,
@@ -124,6 +125,7 @@ async def list_webhooks(
     )
 
     return list(result.scalars().all())
+
 
 async def get_webhook(
     webhook_id: uuid.UUID,
@@ -198,7 +200,6 @@ async def update_webhook(
         raise
 
     return webhook
-
 
 
 async def delete_webhook(

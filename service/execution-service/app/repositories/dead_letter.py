@@ -1,13 +1,12 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dead_letter_event import DeadLetterEvent
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
-from datetime import datetime, timezone
-from sqlalchemy import update
 
 
 class DeadLetterRepository:
@@ -21,16 +20,13 @@ class DeadLetterRepository:
         offset: int = 0,
         status: str | None = None,
     ):
-        filters = [
-            DeadLetterEvent.workspace_id == workspace_id
-        ]
+        filters = [DeadLetterEvent.workspace_id == workspace_id]
 
         if status is not None:
             filters.append(DeadLetterEvent.status == status)
 
         count_result = await self.session.execute(
-            select(func.count(DeadLetterEvent.id))
-            .where(*filters)
+            select(func.count(DeadLetterEvent.id)).where(*filters)
         )
         total = count_result.scalar_one()
 
@@ -47,7 +43,6 @@ class DeadLetterRepository:
 
         return result.scalars().all(), total
 
-    
     async def get_by_id(
         self,
         event_id: UUID,
@@ -64,14 +59,12 @@ class DeadLetterRepository:
 
         return result.scalar_one_or_none()
 
-    
     async def resolve_event(
         self,
         event_id: UUID,
         workspace_id: UUID,
     ) -> DeadLetterEvent | None:
         """Atomically resolve a pending DLQ event."""
-
 
         result = await self.session.execute(
             update(DeadLetterEvent)
@@ -89,7 +82,6 @@ class DeadLetterRepository:
 
         return result.scalar_one_or_none()
 
-    
     async def get_pending_for_replay(
         self,
         event_id: UUID,
@@ -109,7 +101,6 @@ class DeadLetterRepository:
 
         return result.scalar_one_or_none()
 
-    
     async def mark_replayed(
         self,
         event: DeadLetterEvent,
@@ -120,9 +111,6 @@ class DeadLetterRepository:
         event.resolved_at = datetime.now(timezone.utc)
 
         await self.session.flush()
-
-
-
 
     async def get_execution_workflows(self, workspace_id: UUID, execution_ids):
         """Load workflow snapshots for this page in one workspace-scoped query."""
@@ -145,11 +133,16 @@ class DeadLetterRepository:
         result = await self.session.execute(
             select(ExecutionStep.node_type, ExecutionStep.node_name)
             .join(Execution, Execution.id == ExecutionStep.execution_id)
-            .where(Execution.workspace_id == workspace_id,
-                   Execution.id == execution_id, ExecutionStep.id == step_id)
+            .where(
+                Execution.workspace_id == workspace_id,
+                Execution.id == execution_id,
+                ExecutionStep.id == step_id,
+            )
         )
         step = result.one_or_none()
-        return {"failed_node_type": step.node_type, "failed_node_name": step.node_name} if step else {}
+        return (
+            {"failed_node_type": step.node_type, "failed_node_name": step.node_name} if step else {}
+        )
 
     async def has_downstream_action_attempts(
         self,
@@ -190,4 +183,3 @@ class DeadLetterRepository:
         )
 
         return result.scalar_one_or_none() is not None
-

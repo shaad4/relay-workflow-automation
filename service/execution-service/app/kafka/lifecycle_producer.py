@@ -5,7 +5,6 @@ from aiokafka import AIOKafkaProducer
 
 from app.schemas.lifecycle_events import WorkflowLifecycleEvent
 
-
 KAFKA_BOOTSTRAP_SERVERS = os.getenv(
     "KAFKA_BOOTSTRAP_SERVERS",
     "kafka:9092",

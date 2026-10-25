@@ -1,4 +1,3 @@
-
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -7,14 +6,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.human_approval import HumanApproval
-from app.models.execution import Execution
-from app.models.execution_step import ExecutionStep
-
 from app.engine.approval_status import HumanApprovalStatus
 from app.engine.status import ExecutionStatus
 from app.engine.step_status import ExecutionStepStatus
-
+from app.models.execution import Execution
+from app.models.execution_step import ExecutionStep
+from app.models.human_approval import HumanApproval
 from app.services.approval_branch_service import resolve_approval_branch
 
 
@@ -60,8 +57,7 @@ async def get_approval(
 ) -> HumanApproval | None:
     try:
         result = await session.execute(
-            select(HumanApproval)
-            .where(
+            select(HumanApproval).where(
                 HumanApproval.id == approval_id,
                 HumanApproval.workspace_id == workspace_id,
                 HumanApproval.approver_user_id == approver_user_id,
@@ -98,9 +94,7 @@ async def approve_approval(
             raise ValueError("Approval not found")
 
         if approval.status != HumanApprovalStatus.PENDING:
-            raise ValueError(
-                f"Approval is already {approval.status}"
-            )
+            raise ValueError(f"Approval is already {approval.status}")
 
         approval.status = HumanApprovalStatus.APPROVED
         approval.decision = "approved"
@@ -139,9 +133,7 @@ async def reject_approval(
             raise ValueError("Approval not found")
 
         if approval.status != HumanApprovalStatus.PENDING:
-            raise ValueError(
-                f"Approval is already {approval.status}"
-            )
+            raise ValueError(f"Approval is already {approval.status}")
 
         approval.status = HumanApprovalStatus.REJECTED
         approval.decision = "rejected"
@@ -155,7 +147,6 @@ async def reject_approval(
     except Exception:
         await session.rollback()
         raise
-
 
 
 async def decide_approval(
@@ -174,9 +165,7 @@ async def decide_approval(
     try:
         # 1. Find the approval without locking it.
         result = await session.execute(
-            select(
-                HumanApproval.execution_id
-            ).where(
+            select(HumanApproval.execution_id).where(
                 HumanApproval.id == approval_id,
                 HumanApproval.workspace_id == workspace_uuid,
                 HumanApproval.approver_user_id == approver_uuid,
@@ -221,22 +210,13 @@ async def decide_approval(
             raise ValueError("Approval not found")
 
         if approval.status != HumanApprovalStatus.PENDING:
-            raise ValueError(
-                f"Approval is already {approval.status}"
-            )
+            raise ValueError(f"Approval is already {approval.status}")
 
-        if (
-            execution.status
-            != ExecutionStatus.WAITING_FOR_APPROVAL
-        ):
-            raise ValueError(
-                "Execution is not waiting for approval"
-            )
+        if execution.status != ExecutionStatus.WAITING_FOR_APPROVAL:
+            raise ValueError("Execution is not waiting for approval")
 
         if execution.cancel_requested_at is not None:
-            raise ValueError(
-                "Execution cancellation was requested"
-            )
+            raise ValueError("Execution cancellation was requested")
 
         # 4. Lock execution step THIRD.
         result = await session.execute(
@@ -252,19 +232,14 @@ async def decide_approval(
 
         if (
             execution_step is None
-            or execution_step.status
-            != ExecutionStepStatus.WAITING_FOR_APPROVAL
+            or execution_step.status != ExecutionStepStatus.WAITING_FOR_APPROVAL
         ):
-            raise ValueError(
-                "Approval execution step is not waiting"
-            )
+            raise ValueError("Approval execution step is not waiting")
 
         # 5. Resolve approval branch.
         start_node_id = await resolve_approval_branch(
             workflow_id=str(execution.workflow_id),
-            workflow_version_id=str(
-                execution.workflow_version_id
-            ),
+            workflow_version_id=str(execution.workflow_version_id),
             workspace_id=str(execution.workspace_id),
             approval_node_id=execution_step.node_id,
             decision=decision,
@@ -274,9 +249,7 @@ async def decide_approval(
 
         # 6. Record approval decision.
         approval.status = (
-            HumanApprovalStatus.APPROVED
-            if decision == "approved"
-            else HumanApprovalStatus.REJECTED
+            HumanApprovalStatus.APPROVED if decision == "approved" else HumanApprovalStatus.REJECTED
         )
 
         approval.decision = decision
@@ -287,14 +260,14 @@ async def decide_approval(
 
         if execution_step.started_at:
             execution_step.duration_ms = int(
-                (
-                    now - execution_step.started_at
-                ).total_seconds() * 1000
+                (now - execution_step.started_at).total_seconds() * 1000
             )
 
         # 7. Save resume checkpoint.
         stored_context = execution.context or {}
-        context_data = dict(json.loads(stored_context) if isinstance(stored_context, str) else stored_context)
+        context_data = dict(
+            json.loads(stored_context) if isinstance(stored_context, str) else stored_context
+        )
 
         context_data["_resume"] = {
             "approval_id": str(approval.id),

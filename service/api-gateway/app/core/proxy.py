@@ -73,9 +73,7 @@ async def proxy_request(
         if key.lower() not in REQUEST_EXCLUDED_HEADERS
     }
 
-    async with httpx.AsyncClient(
-        follow_redirects=follow_redirects
-    ) as client:
+    async with httpx.AsyncClient(follow_redirects=follow_redirects) as client:
         response = await client.request(
             method=request.method,
             url=target_url,

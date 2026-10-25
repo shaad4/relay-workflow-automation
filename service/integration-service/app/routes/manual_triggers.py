@@ -17,7 +17,6 @@ from app.kafka.producer import publish_workflow_triggered
 from app.schemas.events import WorkflowTriggeredEvent
 from app.schemas.manual_trigger import ManualRunRequest
 
-
 router = APIRouter(
     prefix="/workflows",
     tags=["manual-triggers"],
@@ -36,12 +35,7 @@ async def run_workflow_manually(
     identity: dict = Depends(get_current_identity),
 ):
     # 1. Validate Content-Type
-    content_type = (
-        request.headers.get("content-type", "")
-        .split(";", 1)[0]
-        .strip()
-        .lower()
-    )
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
 
     if content_type != "application/json":
         raise HTTPException(
@@ -177,14 +171,10 @@ async def run_workflow_manually(
     triggers = [
         node
         for node in nodes
-        if isinstance(node.get("node_type"), str)
-        and node["node_type"].startswith("trigger.")
+        if isinstance(node.get("node_type"), str) and node["node_type"].startswith("trigger.")
     ]
 
-    if (
-        len(triggers) != 1
-        or triggers[0]["node_type"] != "trigger.manual"
-    ):
+    if len(triggers) != 1 or triggers[0]["node_type"] != "trigger.manual":
         raise HTTPException(
             status_code=409,
             detail="Published workflow does not have a Manual Trigger",

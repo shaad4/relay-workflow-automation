@@ -1,5 +1,4 @@
 from fastapi import Cookie, Header, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
 from app.grpc.auth_client import AuthGrpcClient

@@ -1,23 +1,22 @@
 from uuid import UUID
-from datetime import datetime, timezone
 
+from app.grpc.integration_client import IntegrationGrpcClient
+from app.models import Workflow, WorkflowEdge, WorkflowNode, WorkflowVersion
+from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
+from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
+from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
+from app.services.workflow_validation import (
+    validate_branching,
+    validate_cycles,
+    validate_edges,
+    validate_node_configurations,
+    validate_node_ids,
+    validate_reachability,
+    validate_triggers,
+)
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Workflow, WorkflowVersion, WorkflowEdge, WorkflowNode
-from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
-from app.services.workflow_validation import (
-    validate_node_ids,
-    validate_node_configurations,
-    validate_triggers,
-    validate_edges,
-    validate_branching,
-    validate_cycles,
-    validate_reachability,
-)
-from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
-from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
-from app.grpc.integration_client import IntegrationGrpcClient
 
 class ScheduleSynchronizationError(RuntimeError):
     """Publication committed, but schedule lifecycle synchronization failed."""
@@ -39,10 +38,7 @@ async def create_workflow(
         await session.flush()
 
         version = WorkflowVersion(
-            workflow_id=workflow.id,
-            version=1,
-            status="draft",
-            description="Initial version"
+            workflow_id=workflow.id, version=1, status="draft", description="Initial version"
         )
 
         session.add(version)
@@ -68,10 +64,9 @@ async def list_workflows(
 
     return list(result.scalars().all())
 
+
 async def get_workflow(
-    workflow_id: UUID,
-    workspace_id: str,
-    session: AsyncSession
+    workflow_id: UUID, workspace_id: str, session: AsyncSession
 ) -> Workflow | None:
     result = await session.execute(
         select(Workflow).where(
@@ -134,30 +129,21 @@ async def delete_workflow(
 
     if str(workflow.status).lower() not in {"draft", "inactive"}:
         raise ValueError(
-            "Only draft or inactive workflows can be deleted. "
-            "Deactivate an active workflow first."
+            "Only draft or inactive workflows can be deleted. Deactivate an active workflow first."
         )
 
     try:
         workflow.published_version_id = None
         await session.flush()
-        version_ids = select(WorkflowVersion.id).where(
-            WorkflowVersion.workflow_id == workflow_id
+        version_ids = select(WorkflowVersion.id).where(WorkflowVersion.workflow_id == workflow_id)
+        await session.execute(
+            delete(WorkflowNode).where(WorkflowNode.workflow_version_id.in_(version_ids))
         )
         await session.execute(
-            delete(WorkflowNode).where(
-                WorkflowNode.workflow_version_id.in_(version_ids)
-            )
+            delete(WorkflowEdge).where(WorkflowEdge.workflow_version_id.in_(version_ids))
         )
         await session.execute(
-            delete(WorkflowEdge).where(
-                WorkflowEdge.workflow_version_id.in_(version_ids)
-            )
-        )
-        await session.execute(
-            delete(WorkflowVersion).where(
-                WorkflowVersion.workflow_id == workflow_id
-            )
+            delete(WorkflowVersion).where(WorkflowVersion.workflow_id == workflow_id)
         )
         await session.delete(workflow)
         await session.commit()
@@ -216,6 +202,7 @@ async def delete_workflow_version(
 
     return True
 
+
 async def list_workflow_versions(
     workflow_id: UUID,
     workspace_id: str,
@@ -240,6 +227,7 @@ async def list_workflow_versions(
     )
 
     return list(result.scalars().all())
+
 
 async def get_workflow_version(
     workflow_id: UUID,
@@ -550,6 +538,7 @@ async def update_workflow_node(
         raise
 
     return node
+
 
 async def delete_workflow_node(
     workflow_id: UUID,
@@ -871,7 +860,6 @@ async def delete_workflow_edge(
     return True
 
 
-
 async def validate_workflow(
     workflow_id: UUID,
     version_number: int,
@@ -939,10 +927,12 @@ async def _published_version_has_schedule_trigger(
     session: AsyncSession,
 ) -> bool:
     result = await session.execute(
-        select(WorkflowNode.id).where(
+        select(WorkflowNode.id)
+        .where(
             WorkflowNode.workflow_version_id == version_id,
             WorkflowNode.node_type == "trigger.schedule",
-        ).limit(1)
+        )
+        .limit(1)
     )
     return result.scalar_one_or_none() is not None
 
@@ -984,7 +974,9 @@ async def publish_workflow(
         version.status == "published" and workflow.published_version_id is None
     )
     if version.status != "draft" and not already_published and not restoring_deleted_publication:
-        raise ValueError("Only draft versions can be published unless restoring a workflow with no live version")
+        raise ValueError(
+            "Only draft versions can be published unless restoring a workflow with no live version"
+        )
 
     if not already_published:
         validation_result = await validate_workflow(
@@ -998,9 +990,7 @@ async def publish_workflow(
         if not validation_result["valid"]:
             raise ValueError("Workflow validation failed")
 
-    has_schedule_trigger = await _published_version_has_schedule_trigger(
-        version.id, session
-    )
+    has_schedule_trigger = await _published_version_has_schedule_trigger(version.id, session)
 
     if not already_published:
         version.status = "published"

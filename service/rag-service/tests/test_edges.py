@@ -16,7 +16,13 @@ from app.tasks import ingestion as task_module
 
 def test_storage_operations_use_scoped_bucket_and_path(monkeypatch):
     from app.storage import supabase_storage
-    bucket = SimpleNamespace(upload=Mock(), download=Mock(return_value=b"synthetic"), remove=Mock(), list=Mock(return_value=[{"name": "doc.txt"}]))
+
+    bucket = SimpleNamespace(
+        upload=Mock(),
+        download=Mock(return_value=b"synthetic"),
+        remove=Mock(),
+        list=Mock(return_value=[{"name": "doc.txt"}]),
+    )
     client = SimpleNamespace(storage=SimpleNamespace(from_=Mock(return_value=bucket)))
     monkeypatch.setenv("SUPABASE_STORAGE_BUCKET", "synthetic-test-bucket")
     monkeypatch.setenv("SUPABASE_URL", "https://example.invalid")
@@ -33,7 +39,9 @@ def test_storage_operations_use_scoped_bucket_and_path(monkeypatch):
     client.storage.from_.assert_called_with("synthetic-test-bucket")
 
 
-@pytest.mark.parametrize("authorization,cookie", [(None, None), ("Basic token", None), ("Bearer  ", None)])
+@pytest.mark.parametrize(
+    "authorization,cookie", [(None, None), ("Basic token", None), ("Bearer  ", None)]
+)
 def test_identity_rejects_missing_or_invalid_auth(authorization, cookie):
     with pytest.raises(HTTPException) as error:
         asyncio.run(get_current_identity(authorization, cookie))
@@ -42,9 +50,16 @@ def test_identity_rejects_missing_or_invalid_auth(authorization, cookie):
 
 def test_identity_accepts_cookie_and_rejects_invalid_jwt(monkeypatch):
     from app import dependencies
-    validate = AsyncMock(return_value=SimpleNamespace(valid=True, user_id="user", workspace_id=str(uuid.uuid4())))
+
+    validate = AsyncMock(
+        return_value=SimpleNamespace(valid=True, user_id="user", workspace_id=str(uuid.uuid4()))
+    )
     close = AsyncMock()
-    monkeypatch.setattr(dependencies, "AuthGrpcClient", lambda: SimpleNamespace(validate_token=validate, close=close))
+    monkeypatch.setattr(
+        dependencies,
+        "AuthGrpcClient",
+        lambda: SimpleNamespace(validate_token=validate, close=close),
+    )
     result = asyncio.run(get_current_identity(None, "synthetic-cookie"))
     assert result["user_id"] == "user"
     validate.assert_awaited_with("synthetic-cookie")

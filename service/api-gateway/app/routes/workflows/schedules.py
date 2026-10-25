@@ -4,7 +4,6 @@ from fastapi import APIRouter, Request
 
 from app.core.proxy import proxy_request
 
-
 router = APIRouter(
     prefix="/schedules",
     tags=["schedules"],
@@ -45,6 +44,7 @@ async def get_workflow_schedule(
         f"{INTEGRATION_SERVICE_URL}/schedules/{schedule_id}",
         follow_redirects=False,
     )
+
 
 @router.patch("/{schedule_id}")
 async def update_workflow_schedule(

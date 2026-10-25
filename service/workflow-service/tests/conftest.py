@@ -6,8 +6,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.services import workflow_service
 from app.grpc.integration_client import IntegrationGrpcClient
+from app.services import workflow_service
 
 
 @pytest.fixture

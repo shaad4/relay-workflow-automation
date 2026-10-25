@@ -19,10 +19,7 @@ async def create_google_login_session(
         id=uuid.uuid4(),
         user_id=user_id,
         expires_at=(
-            datetime.now(timezone.utc)
-            + timedelta(
-                minutes=GOOGLE_LOGIN_SESSION_EXPIRE_MINUTES
-            )
+            datetime.now(timezone.utc) + timedelta(minutes=GOOGLE_LOGIN_SESSION_EXPIRE_MINUTES)
         ),
     )
 
@@ -51,32 +48,20 @@ async def consume_google_login_session(
         login_session = result.scalar_one_or_none()
 
         if not login_session:
-            raise ValueError(
-                "Invalid Google login session"
-            )
+            raise ValueError("Invalid Google login session")
 
         if login_session.used_at is not None:
-            raise ValueError(
-                "Google login session has already been used"
-            )
+            raise ValueError("Google login session has already been used")
 
         if login_session.expires_at <= datetime.now(timezone.utc):
-            raise ValueError(
-                "Google login session has expired"
-            )
+            raise ValueError("Google login session has expired")
 
-        result = await session.execute(
-            select(User).where(
-                User.id == login_session.user_id
-            )
-        )
+        result = await session.execute(select(User).where(User.id == login_session.user_id))
 
         user = result.scalar_one_or_none()
 
         if not user:
-            raise ValueError(
-                "Relay user not found"
-            )
+            raise ValueError("Relay user not found")
 
         login_session.used_at = datetime.now(timezone.utc)
 
