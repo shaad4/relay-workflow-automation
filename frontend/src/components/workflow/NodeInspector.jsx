@@ -300,6 +300,23 @@ function ManualConfig({ config, onChange, isReadOnly }) {
 
 const connectionRowsOf = (data) => Array.isArray(data) ? data : data?.connections || data?.results || data?.data || [];
 
+// Keep legacy absolute URLs out of the path field, including after a connection
+// changes hosts. Avoid URL parsing so workflow expressions stay byte-for-byte intact.
+export function httpRequestPath(value, baseUrl = "") {
+  const url = (value || "").trim();
+  const base = baseUrl.trim().replace(/\/+$/, "");
+  if (base && url.startsWith(base) && (!url[base.length] || /[/?#]/.test(url[base.length]))) {
+    return url.slice(base.length) || "/";
+  }
+  if (!/^(?:https?:)?\/\//i.test(url)) return url;
+  let path = url.replace(/^(?:https?:)?\/\/[^/?#]+/i, "") || "/";
+  const basePath = base.replace(/^(?:https?:)?\/\/[^/?#]+/i, "");
+  if (basePath && path.startsWith(basePath) && (!path[basePath.length] || /[/?#]/.test(path[basePath.length]))) {
+    path = path.slice(basePath.length) || "/";
+  }
+  return path;
+}
+
 function HttpRequestConfig({ config, onChange, variableContext }) {
   const isReadOnly = useContext(InspectorReadOnly);
   const timeoutError = validateNodeConfiguration("action.http_request", config).find((error) => error.field === "timeout");
@@ -337,14 +354,12 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
   const httpConnections = connections.filter((connection) => connection.provider === "http");
   const selectedConnection = httpConnections.find((connection) => String(connection.id) === String(config.connection_id));
   const connectionBaseUrl = selectedConnection?.config?.base_url?.trim().replace(/\/+$/, "") || "";
-  const configuredUrl = config.url || "";
-  const requestPath = connectionBaseUrl && configuredUrl.startsWith(connectionBaseUrl)
-    ? configuredUrl.slice(connectionBaseUrl.length) || "/"
-    : configuredUrl;
+  const requestPath = httpRequestPath(config.url, connectionBaseUrl);
   const handlePathChange = (path) => {
-    const normalizedPath = path.trim();
+    if (isReadOnly) return;
+    const normalizedPath = httpRequestPath(path, connectionBaseUrl);
     const composedUrl = connectionBaseUrl
-      ? `${connectionBaseUrl}${normalizedPath ? (normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`) : ""}`
+      ? `${connectionBaseUrl}${normalizedPath ? (/^[/?#]/.test(normalizedPath) ? normalizedPath : `/${normalizedPath}`) : ""}`
       : path;
     onChange("url", composedUrl);
   };

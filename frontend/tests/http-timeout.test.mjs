@@ -30,8 +30,9 @@ test('HTTP timeout input saves numbers, restores them and prevents read-only cha
   const controls = await compile(await readFile(new URL('../src/components/workflow/InspectorControls.jsx', import.meta.url), 'utf8'), 'InspectorControls.jsx', require);
   const source = await readFile(new URL('../src/components/workflow/NodeInspector.jsx', import.meta.url), 'utf8');
   let isReadOnly = false;
+  let connections = [];
   const inspector = await compile(`${source}\nexport { HttpRequestConfig };`, 'NodeInspector.jsx', (name) => {
-    if (name === 'react') return { ...React, useState: (initial) => [initial, () => {}], useEffect: () => {}, useContext: () => isReadOnly };
+    if (name === 'react') return { ...React, useState: (initial) => [Array.isArray(initial) ? connections : initial, () => {}], useEffect: () => {}, useContext: () => isReadOnly };
     if (name === './InspectorControls') return controls;
     if (name === './configValidation') return { validateNodeConfiguration };
     if (name === 'react/jsx-runtime') return require(name);
@@ -41,6 +42,11 @@ test('HTTP timeout input saves numbers, restores them and prevents read-only cha
     if (!element || typeof element !== 'object') return [];
     return [element, ...React.Children.toArray(element.props?.children).flatMap(walk)];
   };
+  const { httpRequestPath } = inspector;
+  assert.equal(httpRequestPath('https://old.example/api/students?name={{trigger.name}}#report', 'https://new.example/api'), '/students?name={{trigger.name}}#report');
+  assert.equal(httpRequestPath('https://old.example/api', 'https://new.example/api'), '/');
+  assert.equal(httpRequestPath('https://new.example/apiary/students', 'https://new.example/api'), '/apiary/students');
+  assert.equal(httpRequestPath('/students?next=https://old.example', 'https://new.example/api'), '/students?next=https://old.example');
   let saved = { ...config };
   const render = () => inspector.HttpRequestConfig({ config: saved, onChange: (field, value) => { saved = { ...saved, [field]: value }; }, variableContext: {} });
   const input = () => walk(render()).find(e => e.props?.['aria-label'] === 'Timeout (seconds)');
@@ -59,6 +65,19 @@ test('HTTP timeout input saves numbers, restores them and prevents read-only cha
   input().props.onChange({ target: { value: '30', valueAsNumber: 30 } });
   assert.equal(saved.timeout, 20);
   assert.match(renderToStaticMarkup(React.createElement(controls.InspectorReadOnly.Provider, { value: true }, input())), /readonly/i);
+  connections = [{ id: 'existing', provider: 'http', config: { base_url: 'https://new.example/api/' } }];
+  saved.url = 'https://old.example/api/students?term={{trigger.term}}';
+  const pathInput = () => walk(render()).find(e => e.props?.['aria-label'] === 'HTTP request path');
+  assert.equal(pathInput().props.value, 'students?term={{trigger.term}}');
+  pathInput().props.onChange('students/42');
+  assert.equal(saved.url, 'https://old.example/api/students?term={{trigger.term}}');
+  isReadOnly = false;
+  pathInput().props.onChange('https://old.example/api/students/42');
+  assert.equal(saved.url, 'https://new.example/api/students/42');
+  connections[0].config.base_url = 'https://another.example/api';
+  assert.equal(pathInput().props.value, 'students/42');
+  pathInput().props.onChange('students/43');
+  assert.equal(saved.url, 'https://another.example/api/students/43');
   const builder = await readFile(new URL('../src/components/workflow/WorkflowBuilder.jsx', import.meta.url), 'utf8');
   assert.match(builder, /\["ai.rag_search", "ai.decision", "action.http_request"\]\.includes/);
   assert.match(builder, /configuration: node.data.config/);
