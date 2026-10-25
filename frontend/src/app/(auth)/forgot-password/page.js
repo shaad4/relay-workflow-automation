@@ -2,7 +2,7 @@ import AuthNavbar from "@/components/layout/AuthNavbar";
 import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
 
 export const metadata = {
-  title: "Forgot Password - Relay",
+  title: "Forgot Password",
   description: "Reset your Relay account password.",
 };
 

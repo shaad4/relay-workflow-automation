@@ -186,7 +186,7 @@ def test_runner_executes_only_the_matching_email_and_persists_condition(decision
         "next_node_id": expected_node,
     }
     assert steps["condition"].status == ExecutionStepStatus.COMPLETED
-    assert steps["condition"].output == result["context"]["nodes"]["condition"]
+    assert json.loads(steps["condition"].output) == result["context"]["nodes"]["condition"]
     assert steps[expected_node].status == ExecutionStepStatus.COMPLETED
     assert not (set(steps) & {f"email_{other.lower()}" for other in DECISIONS if other != decision})
     assert len(calls) == 1

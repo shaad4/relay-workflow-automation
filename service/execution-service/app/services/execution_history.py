@@ -66,6 +66,7 @@ class ExecutionHistoryService:
         recovery = await self.repository.get_recovery_events(workspace_id, [execution_id])
         return self.serialize_execution(execution) | lineage | recovery.get(execution_id, {}) | {
             "workspace_id": execution.workspace_id,
+            "cancel_requested_at": execution.cancel_requested_at,
             "error": sanitize_payload(execution.error),
         }
 

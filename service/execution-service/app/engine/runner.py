@@ -8,7 +8,7 @@ from app.engine.error_classifier import classify_error, action_failure
 from app.db.database import AsyncSessionLocal
 from app.engine.context import ExecutionContext
 from app.engine.executor import SequentialExecutor
-from app.engine.exceptions import HumanApprovalRequired, ActionExecutionFailed
+from app.engine.exceptions import HumanApprovalRequired, ActionExecutionFailed, ExecutionCancellationRequested
 from app.engine.graph import ExecutionGraph
 from app.engine.resolver import ExpressionResolver
 from app.engine.step_status import ExecutionStepStatus
@@ -23,6 +23,7 @@ from app.engine.handlers.rag_search import execute_rag_search
 from app.engine.handlers.ai_decision import execute_ai_decision
 from app.engine.handlers.condition import evaluate_condition
 from app.engine.handlers.ai_generate import execute_ai_generate
+from app.engine.status import ExecutionStatus
 
 from app.engine.retry import (
     execute_with_retry,
@@ -86,6 +87,21 @@ async def mark_step_failed(
 
         await _commit_session(session)
 
+async def check_execution_cancellation(execution_id):
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Execution.cancel_requested_at).where(
+                Execution.id == execution_id,
+                Execution.status == ExecutionStatus.RUNNING,
+            )
+        )
+
+        cancel_requested_at = result.scalar_one_or_none()
+
+        if cancel_requested_at is not None:
+            raise ExecutionCancellationRequested(
+                "Execution cancellation requested"
+            )
 
 async def run_execution(
     execution_id,
@@ -189,19 +205,12 @@ async def run_execution(
         visited: set[str] = set()
         execution_order: list[dict] = []
 
-        print(
-            "Action node definitions:",
-            json.dumps(action_nodes, indent=2),
-            flush=True,
-        )
 
-        print(
-            "Starting execution from:",
-            current_node["node_id"],
-            flush=True,
-        )
 
         while current_node is not None:
+
+            await check_execution_cancellation(execution_id)
+
             execution_step_id = None
             node = current_node
             node_id = node["node_id"]
@@ -286,12 +295,6 @@ async def run_execution(
                 await _commit_session(session)
 
 
-            print(
-                "Processing node:",
-                node["node_id"],
-                node_type,
-                flush=True,
-            )
 
             if node_type.startswith("trigger."):
                 # Trigger nodes do not execute an action.
@@ -581,10 +584,6 @@ async def run_execution(
 
             # Human Approval does not use Action Service or a connection.
             if node_type == "human.approval":
-                print(
-                    f"Human approval reached: {node['node_id']}",
-                    flush=True,
-                )
 
                 approver_user_id = configuration.get("approver_user_id")
                 message = resolver.resolve(
@@ -610,20 +609,26 @@ async def run_execution(
                     )
 
                 async with AsyncSessionLocal() as session:
-                    execution_step = await session.get(
-                        ExecutionStep,
-                        execution_step_id,
+                    # Publish the request and its waiting execution together.
+                    # Match cancellation/decision lock order: execution first.
+                    result = await session.execute(
+                        select(Execution).where(Execution.id == execution_id).with_for_update()
                     )
-
-                    execution = await session.get(
-                        Execution,
-                        execution_id,
-                    )
-
+                    execution = result.scalar_one_or_none()
                     if execution is None:
-                        raise ValueError(
-                            f"Execution {execution_id} not found"
-                        )
+                        raise ValueError(f"Execution {execution_id} not found")
+                    if execution.cancel_requested_at is not None or execution.status == ExecutionStatus.CANCELLED:
+                        raise ExecutionCancellationRequested("Execution cancellation requested")
+                    if execution.status != ExecutionStatus.RUNNING:
+                        raise ValueError("Execution is no longer running")
+                    if execution.lease_expires_at is not None and execution.lease_expires_at <= datetime.now(timezone.utc):
+                        raise ValueError("Execution lease expired before approval handoff")
+
+                    execution_step = await session.get(ExecutionStep, execution_step_id)
+                    execution.status = ExecutionStatus.WAITING_FOR_APPROVAL
+                    execution.claimed_by = None
+                    execution.heartbeat_at = None
+                    execution.lease_expires_at = None
 
                     execution_step.status = (
                         ExecutionStepStatus.WAITING_FOR_APPROVAL
@@ -648,17 +653,9 @@ async def run_execution(
                         add=approval,
                     )
 
-                    print(
-                        f"Created human approval: {approval.id}",
-                        flush=True,
-                    )
 
                 raise HumanApprovalRequired(node["node_id"])
 
-            print(
-                f"Executing action node: {node['node_id']}",
-                flush=True,
-            )
 
             connection_id = resolved_configuration.get("connection_id")
 
@@ -682,18 +679,13 @@ async def run_execution(
                     f"Unsupported action node type: {node_type}"
                 )
 
-            print(
-                "Action request:",
-                {
-                    "workspace_id": workspace_id,
-                    "connection_id": connection_id,
-                    "provider": provider,
-                    "action": action,
-                },
-                flush=True,
-            )
 
             action_config = {}
+            
+            if node_type == "action.refund":
+                resolved_configuration["idempotency_key"] = (
+                    f"relay:refund:{execution_id}:{node_id}"
+                )
 
             if node_type == "action.http_request":
                 timeout = resolved_configuration.get("timeout", 10)
@@ -767,15 +759,6 @@ async def run_execution(
                 attempts_used = 1
 
 
-            print(
-                "Action result:",
-                {
-                    "success": response.success,
-                    "result": response.result_json,
-                    "error": response.error,
-                },
-                flush=True,
-            )
 
             if response.success:
                 try:
@@ -807,10 +790,6 @@ async def run_execution(
                     result,
                 )
 
-                print(
-                    f"Stored output for node: {node['node_id']}",
-                    flush=True,
-                )
 
                 # Mark action step as completed
                 completed_at = datetime.now(timezone.utc)
@@ -876,18 +855,13 @@ async def run_execution(
             "context": context.to_dict(),
         }
 
+    except ExecutionCancellationRequested:
+        raise
+
     except HumanApprovalRequired:
         # The approval transaction already saved context and the waiting step.
         raise
     except Exception as exc:
-        print(
-            "\n========== WORKFLOW EXECUTION ERROR ==========",
-            flush=True,
-        )
-        print("Node ID:", node_id, flush=True)
-        print("Node Type:", node_type, flush=True)
-        print("Exception Type:", type(exc).__name__, flush=True)
-        print("==============================================\n", flush=True)
 
         # Attach only node context; finalization uses the same safe classifier.
         exc.node_id = node_id

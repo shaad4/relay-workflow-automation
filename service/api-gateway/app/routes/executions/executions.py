@@ -52,6 +52,11 @@ async def get_execution_steps(
     )
 
 
+@router.post("/{execution_id}/cancel/")
+async def cancel_execution(request: Request, execution_id: str):
+    return await proxy_execution_request(request, f"{execution_id}/cancel")
+
+
 async def proxy_execution_request(
     request: Request,
     path: str,

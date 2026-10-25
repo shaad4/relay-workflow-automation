@@ -1,3 +1,4 @@
+from app.routes.dashboard import router as dashboard_router
 import asyncio
 from contextlib import asynccontextmanager
 
@@ -210,3 +211,5 @@ async def health(request: Request):
         "status": "ok",
         "service": "execution-service",
     }
+
+app.include_router(dashboard_router)

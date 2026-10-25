@@ -1,14 +1,18 @@
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import aliased
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from datetime import datetime, timezone
 from app.models.dead_letter_event import DeadLetterEvent
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
+from app.engine.status import ExecutionStatus
 
+from app.models.human_approval import HumanApproval
+from app.engine.approval_status import HumanApprovalStatus
+from app.engine.step_status import ExecutionStepStatus
 
 class ExecutionRepository:
     def __init__(self, session: AsyncSession):
@@ -97,6 +101,111 @@ class ExecutionRepository:
             raise RuntimeError(
                 "Failed to retrieve execution details"
             ) from exc
+
+    
+ 
+    async def request_cancellation(
+        self,
+        execution_id: UUID,
+        workspace_id: UUID,
+    ) -> str | None:
+        """
+        Cancel pending or waiting executions immediately.
+        Request cooperative cancellation for running executions.
+        """
+
+        # Lock the execution first so cancellation and
+        # approval decisions cannot change it simultaneously.
+        result = await self.session.execute(
+            select(Execution)
+            .where(
+                Execution.id == execution_id,
+                Execution.workspace_id == workspace_id,
+            )
+            .with_for_update()
+        )
+
+        execution = result.scalar_one_or_none()
+
+        if execution is None:
+            return None
+
+        if execution.status == ExecutionStatus.CANCELLED:
+            return "already_cancelled"
+
+        if execution.status in {
+            ExecutionStatus.COMPLETED,
+            ExecutionStatus.FAILED,
+        }:
+            return "not_cancellable"
+
+        # Running workflows stop cooperatively.
+        # Do not terminate an external action in progress.
+        if execution.status == ExecutionStatus.RUNNING:
+            if execution.cancel_requested_at is None:
+                execution.cancel_requested_at = (
+                    datetime.now(timezone.utc)
+                )
+
+            return "cancellation_requested"
+
+        # Pending workflows have not started.
+        if execution.status == ExecutionStatus.PENDING:
+            execution.status = ExecutionStatus.CANCELLED
+            execution.cancel_requested_at = (
+                datetime.now(timezone.utc)
+            )
+            execution.completed_at = datetime.now(timezone.utc)
+
+            execution.claimed_by = None
+            execution.heartbeat_at = None
+            execution.lease_expires_at = None
+
+            return "cancelled"
+
+        # Cancel executions waiting for human approval.
+        if execution.status == ExecutionStatus.WAITING_FOR_APPROVAL:
+            now = datetime.now(timezone.utc)
+
+            execution.status = ExecutionStatus.CANCELLED
+            execution.cancel_requested_at = now
+            execution.completed_at = now
+
+            execution.claimed_by = None
+            execution.heartbeat_at = None
+            execution.lease_expires_at = None
+
+            # Invalidate pending human approvals.
+            await self.session.execute(
+                update(HumanApproval)
+                .where(
+                    HumanApproval.execution_id == execution_id,
+                    HumanApproval.workspace_id == workspace_id,
+                    HumanApproval.status == HumanApprovalStatus.PENDING,
+                )
+                .values(
+                    status=HumanApprovalStatus.CANCELLED,
+                )
+            )
+
+            # Mark waiting approval steps as cancelled.
+            await self.session.execute(
+                update(ExecutionStep)
+                .where(
+                    ExecutionStep.execution_id == execution_id,
+                    ExecutionStep.status
+                    == ExecutionStepStatus.WAITING_FOR_APPROVAL,
+                )
+                .values(
+                    status=ExecutionStepStatus.CANCELLED,
+                    completed_at=func.now(),
+                )
+            )
+
+            return "cancelled"
+
+        return "not_cancellable"
+
 
 
     async def list_execution_steps(

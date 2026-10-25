@@ -58,6 +58,16 @@ async def resolve_approval_branch(
                 f"Node {approval_node_id} is not a human approval node"
             )
 
+        branches = graph.get_next_nodes(approval_node_id)
+        conditions = [edge.condition for edge in branches]
+        if any(value not in {"approved", "rejected"} for value in conditions) or len(set(conditions)) != len(conditions):
+            raise ValueError("Invalid human approval branch configuration")
+
+        # Publishing permits either decision branch to be unconnected.
+        # That decision finishes this path instead of selecting another branch.
+        if decision not in conditions:
+            return None
+
         next_node = graph.get_next_node(
             node_id=approval_node_id,
             condition=decision,

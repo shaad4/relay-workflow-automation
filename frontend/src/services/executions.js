@@ -45,3 +45,7 @@ export async function getExecutionAttempts(executionId, { page = 1, signal } = {
   const query = new URLSearchParams({ page: String(page), page_size: "10", group_id: executionId });
   return validateExecutionList(await request(`/executions/?${query}`, signal));
 }
+
+export function cancelExecution(executionId) {
+  return apiRequest(`/executions/${encodeURIComponent(executionId)}/cancel/`, { method: "POST", signal: AbortSignal.timeout(15000) });
+}

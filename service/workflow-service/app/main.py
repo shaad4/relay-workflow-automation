@@ -1,3 +1,4 @@
+from app.routes.dashboard import router as dashboard_router
 from contextlib import asynccontextmanager
 
 import os
@@ -67,3 +68,5 @@ async def protected_test(
         "user_id": identity["user_id"],
         "workspace_id": identity["workspace_id"],
     }
+
+app.include_router(dashboard_router)

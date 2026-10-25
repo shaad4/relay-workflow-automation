@@ -5,6 +5,7 @@ from uuid import UUID
 from app.services.execution_queue import (
     execute_pending_execution,
     inspect_recoverable_executions,
+    cleanup_expired_executions,
 )
 
 
@@ -81,6 +82,7 @@ class ExecutionDispatcher:
                 )
 
                 self.active_tasks.add(task)
+
                 task.add_done_callback(
                     self._on_task_done
                 )
@@ -91,7 +93,10 @@ class ExecutionDispatcher:
                 raise
 
     async def run(self):
-        """Dispatch work periodically or when an execution finishes."""
+        """
+        Continuously dispatch pending executions
+        and clean up abandoned executions.
+        """
 
         self.running = True
 
@@ -99,16 +104,25 @@ class ExecutionDispatcher:
             while self.running:
                 self.wakeup_event.clear()
 
+                # 1. Finalize expired running executions.
+                await cleanup_expired_executions(
+                    limit=100
+                )
+
+                # 2. Dispatch new pending executions.
                 await self.dispatch_pending()
 
                 if not self.running:
                     break
 
+                # 3. Wake when a task finishes,
+                # otherwise poll after two seconds.
                 try:
                     await asyncio.wait_for(
                         self.wakeup_event.wait(),
                         timeout=DISPATCH_INTERVAL_SECONDS,
                     )
+
                 except asyncio.TimeoutError:
                     pass
 
@@ -119,7 +133,9 @@ class ExecutionDispatcher:
             self.running = False
 
     async def shutdown(self):
-        """Stop dispatching and wait for active executions."""
+        """
+        Stop dispatching and wait for active executions.
+        """
 
         self.running = False
         self.wakeup_event.set()

@@ -87,13 +87,14 @@ def test_step_execution_and_dlq_keep_same_failure(monkeypatch, kind):
     assert step.error == error and step.attempt == error['attempts_used']
     execution_id = uuid4()
     results = [MagicMock(), MagicMock(), MagicMock()]
-    results[0].scalar_one_or_none.return_value = execution_id
-    results[1].scalar_one.return_value = SimpleNamespace(workspace_id=uuid4())
-    results[2].scalar_one_or_none.return_value = step
+    results[0].one_or_none.return_value = SimpleNamespace(
+        status=ExecutionStatus.FAILED, workspace_id=uuid4()
+    )
+    results[1].scalar_one_or_none.return_value = step
     session.execute = AsyncMock(side_effect=results)
     monkeypatch.setattr(execution_queue, 'AsyncSessionLocal', lambda: session)
     assert asyncio.run(execution_queue.finalize_execution(execution_id, 'worker', ExecutionStatus.FAILED, error=classify_error(exc)))
-    assert session.execute.call_args_list[0].args[0].compile().params['error'] == error
+    assert error in session.execute.call_args_list[0].args[0].compile().params.values()
     dlq = session.add.call_args.args[0]
     assert dlq.error == error and dlq.attempts == error['attempts_used']
     assert session.commit.await_count == 2

@@ -52,7 +52,13 @@ def validate(nodes, edges):
 
 @pytest.mark.parametrize("type", ["ai.rag_search", "action.http_request", "action.email", "action.refund"])
 def test_supported_paths(type):
-    assert validate([node("t", "trigger.webhook"), node("a", type, VALID if type == "ai.rag_search" else {})], [edge("t", "a")])["valid"]
+    configs = {
+        "ai.rag_search": VALID,
+        "action.http_request": {"connection_id": KB, "url": "https://example.com"},
+        "action.email": {"connection_id": KB, "to": "user@example.com", "subject": "Hello", "body": "Hello"},
+        "action.refund": {"connection_id": KB, "payment_id": "pi_test", "amount": "5"},
+    }
+    assert validate([node("t", "trigger.webhook"), node("a", type, configs[type])], [edge("t", "a")])["valid"]
 
 @pytest.mark.parametrize("nodes,edges,code", [
     ([node("x", "ai.generate")], [], "INVALID_AI_GENERATE_CONFIGURATION"),
@@ -69,7 +75,12 @@ def test_publish_validation_errors(nodes, edges, code):
     assert code in {error["code"] for error in validate(nodes, edges)["errors"]}
 
 def test_approval_branching_preserved_and_ambiguous_branch_rejected():
-    nodes = [node("t", "trigger.webhook"), node("h", "human.approval"), node("a", "action.email"), node("r", "ai.rag_search", VALID)]
+    nodes = [
+        node("t", "trigger.webhook"),
+        node("h", "human.approval", {"approver_user_id": KB, "message": "Approve?"}),
+        node("a", "action.email", {"connection_id": KB, "to": "user@example.com", "subject": "Approved", "body": "Done"}),
+        node("r", "ai.rag_search", VALID),
+    ]
     edges = [edge("t", "h"), edge("h", "a", "approved"), edge("h", "r", "rejected")]
     assert validate(nodes, edges)["valid"]
     edges[-1].condition = "approved"

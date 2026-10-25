@@ -21,7 +21,7 @@ services:
       context: ./service/auth-service
     container_name: relay-auth-service
     ports:
-      - "${AUTH_SERVICE_PORT:-8000}:8000"
+      - "127.0.0.1:${AUTH_SERVICE_PORT:-8000}:8000"
     env_file:
       - ./service/auth-service/.env
     depends_on:
@@ -49,7 +49,7 @@ services:
       context: ./service/workflow-service
     container_name: relay-workflow-service
     ports:
-      - "${WORKFLOW_SERVICE_PORT:-8002}:8000"
+      - "127.0.0.1:${WORKFLOW_SERVICE_PORT:-8002}:8000"
     env_file:
       - ./service/workflow-service/.env
     depends_on:
@@ -79,7 +79,7 @@ services:
       context: ./service/integration-service
     container_name: relay-integration-service
     ports:
-      - "${INTEGRATION_SERVICE_PORT:-8003}:8000"
+      - "127.0.0.1:${INTEGRATION_SERVICE_PORT:-8003}:8000"
     env_file:
       - ./service/integration-service/.env
     environment:
@@ -155,7 +155,7 @@ services:
       context: ./service/action-service
     container_name: relay-action-service
     ports:
-      - "${ACTION_SERVICE_PORT:-8004}:8000"
+      - "127.0.0.1:${ACTION_SERVICE_PORT:-8004}:8000"
     env_file:
       - ./service/action-service/.env
     depends_on:
@@ -181,7 +181,7 @@ services:
       context: ./service/execution-service
     container_name: relay-execution-service
     ports:
-      - "${EXECUTION_SERVICE_PORT:-8005}:8000"
+      - "127.0.0.1:${EXECUTION_SERVICE_PORT:-8005}:8000"
     env_file:
       - ./service/execution-service/.env
     stop_signal: SIGTERM
@@ -301,7 +301,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
-  
+
   # KAFKA TOPIC INITIALIZER
   kafka-init:
     image: apache/kafka:4.0.1

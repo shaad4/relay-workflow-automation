@@ -170,7 +170,7 @@ export default function WorkflowBuilderPage({ params }) {
   }, [fetchWorkflowData, isInitializing]);
 
   useEffect(() => {
-    document.title = workflow?.name ? `${workflow.name} | Workflow Builder | Relay` : "Workflow Builder | Relay";
+    document.title = workflow?.name ? `${workflow.name} · Workflow Builder | Relay` : "Workflow Builder | Relay";
   }, [workflow?.name]);
 
   // ── Loading skeleton ───────────────────────────────────────────────────────

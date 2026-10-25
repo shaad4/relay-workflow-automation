@@ -12,6 +12,9 @@ from app.schemas.executions import (
     ExecutionStepsListResponse,
 )
 from app.services.execution_history import ExecutionHistoryService
+from app.services.execution_cancellation import (
+    ExecutionCancellationService,
+)
 
 
 router = APIRouter(
@@ -134,3 +137,39 @@ async def get_execution_steps(
             status_code=500,
             detail="Unable to retrieve execution steps",
         ) from exc
+
+
+
+@router.post("/{execution_id}/cancel/")
+async def cancel_execution(
+    execution_id: UUID,
+    identity: dict = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_db),
+):
+
+    workspace_id = UUID(identity["workspace_id"])
+
+    repository = ExecutionRepository(session)
+    service = ExecutionCancellationService(repository)
+
+    status = await service.cancel_execution(
+        execution_id=execution_id,
+        workspace_id=workspace_id,
+    )
+
+    if status is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Execution not found",
+        )
+
+    if status == "not_cancellable":
+        raise HTTPException(
+            status_code=409,
+            detail="Execution cannot be cancelled",
+        )
+
+    return {
+        "execution_id": execution_id,
+        "status": status,
+    }

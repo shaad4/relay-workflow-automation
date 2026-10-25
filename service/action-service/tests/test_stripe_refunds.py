@@ -18,7 +18,8 @@ def refund(monkeypatch, amount, currency="usd", charged=10000, refunded=0):
     monkeypatch.setattr(stripe.PaymentIntent, "retrieve", retrieve)
     monkeypatch.setattr(stripe.Refund, "create", create)
     result = asyncio.run(StripeConnector().execute(
-        "refund_payment", {"api_key": "sk_test"}, {"payment_id": "pi_test", "amount": amount},
+        "refund_payment", {"api_key": "sk_test"},
+        {"payment_id": "pi_test", "amount": amount, "idempotency_key": "refund-test"},
     ))
     retrieve.assert_called_once_with("pi_test", expand=["latest_charge"], api_key="sk_test")
     return result, create
@@ -43,6 +44,7 @@ def test_refund_uses_payment_currency_and_remaining_balance(monkeypatch, currenc
         "amount": float(amount), "status": "succeeded",
     }
     assert create.call_args.kwargs["amount"] == units
+    assert create.call_args.kwargs["idempotency_key"] == "refund-test"
 
 
 @pytest.mark.parametrize("amount,currency,charged,refunded,message", [
@@ -63,7 +65,8 @@ def test_invalid_refund_does_not_call_stripe_create(monkeypatch, amount, currenc
     monkeypatch.setattr(stripe.Refund, "create", create)
     with pytest.raises(ValueError, match=message):
         asyncio.run(StripeConnector().execute(
-            "refund_payment", {"api_key": "sk_test"}, {"payment_id": "pi_test", "amount": amount},
+            "refund_payment", {"api_key": "sk_test"},
+            {"payment_id": "pi_test", "amount": amount, "idempotency_key": "refund-test"},
         ))
     create.assert_not_called()
 
@@ -79,5 +82,23 @@ def test_stripe_api_failure(monkeypatch, operation):
     monkeypatch.setattr(target, method, Mock(side_effect=stripe.StripeError("API unavailable")))
     with pytest.raises(ValueError, match="API unavailable"):
         asyncio.run(StripeConnector().execute(
-            "refund_payment", {"api_key": "sk_test"}, {"payment_id": "pi_test", "amount": "1"},
+            "refund_payment", {"api_key": "sk_test"},
+            {"payment_id": "pi_test", "amount": "1", "idempotency_key": "refund-test"},
         ))
+
+
+@pytest.mark.parametrize("key", [None, "", " ", "x" * 256])
+def test_refund_rejects_missing_or_invalid_idempotency_key(monkeypatch, key):
+    retrieve = Mock()
+    create = Mock()
+    monkeypatch.setattr(stripe.PaymentIntent, "retrieve", retrieve)
+    monkeypatch.setattr(stripe.Refund, "create", create)
+
+    with pytest.raises(ValueError, match="idempotency key"):
+        asyncio.run(StripeConnector().execute(
+            "refund_payment", {"api_key": "sk_test"},
+            {"payment_id": "pi_test", "amount": "1", "idempotency_key": key},
+        ))
+
+    retrieve.assert_not_called()
+    create.assert_not_called()

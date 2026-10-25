@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: {
-    default: "Relay — Workflow Automation",
+    default: "Workflow Automation | Relay",
     template: "%s | Relay",
   },
   description: "Design, automate, and manage workflows with Relay.",

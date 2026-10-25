@@ -3,7 +3,7 @@ import AuthNavbar from "@/components/layout/AuthNavbar";
 import LoginForm from "@/components/auth/LoginForm";
 
 export const metadata = {
-  title: "Log In - Relay",
+  title: "Log In",
   description: "Sign in to your Relay account.",
 };
 

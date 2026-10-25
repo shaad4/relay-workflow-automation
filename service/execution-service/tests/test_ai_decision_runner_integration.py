@@ -203,8 +203,9 @@ async def run_case(should_fail: bool):
 
                 else:
                     assert ai_step.status == "completed"
-                    assert ai_step.output["decision"] == "TECHNICAL"
-                    assert ai_step.output["data"]["priority"] == "HIGH"
+                    output = json.loads(ai_step.output)
+                    assert output["decision"] == "TECHNICAL"
+                    assert output["data"]["priority"] == "HIGH"
 
                     action_client.execute_action.assert_awaited_once()
 

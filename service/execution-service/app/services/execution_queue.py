@@ -1,9 +1,11 @@
 import grpc
 import asyncio
+import json
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, case, literal
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 
 from app.engine.error_classifier import classify_error
@@ -13,6 +15,7 @@ from app.db.database import AsyncSessionLocal
 from app.engine.exceptions import (
     HumanApprovalRequired,
     ActionExecutionFailed,
+    ExecutionCancellationRequested,
 )
 from app.engine.runner import run_execution
 from app.engine.status import ExecutionStatus
@@ -24,6 +27,9 @@ from app.schemas.lifecycle_events import WorkflowLifecycleEvent
 from app.models.dead_letter_event import DeadLetterEvent
 from app.models.execution_step import ExecutionStep
 from app.engine.step_status import ExecutionStepStatus
+
+from app.models.human_approval import HumanApproval
+from app.engine.approval_status import HumanApprovalStatus
 
 
 LEASE_SECONDS = 120
@@ -278,6 +284,7 @@ async def execution_heartbeat(
         raise
 
 
+
 async def finalize_execution(
     execution_id: UUID,
     worker_id: str,
@@ -285,16 +292,26 @@ async def finalize_execution(
     *,
     context_data: dict | None = None,
     error: dict | None = None,
-) -> bool:
+) -> str | None:
     """
-    Persist final execution state only when the worker
-    still owns a valid lease.
+    Finalize only when this worker owns a valid lease.
+
+    Returns the actual persisted status, or None
+    if ownership was lost.
     """
 
     async with AsyncSessionLocal() as session:
         try:
+            actual_status = case(
+                (
+                    Execution.cancel_requested_at.is_not(None),
+                    ExecutionStatus.CANCELLED,
+                ),
+                else_=status,
+            )
+
             values = {
-                "status": status,
+                "status": actual_status,
                 "claimed_by": None,
                 "heartbeat_at": None,
                 "lease_expires_at": None,
@@ -303,15 +320,29 @@ async def finalize_execution(
             if context_data is not None:
                 values["context"] = context_data
 
-            if error is not None:
-                values["error"] = error
+            values["error"] = case(
+                (
+                    Execution.cancel_requested_at.is_not(None),
+                    None,
+                ),
+                # CASE values need their own type: dicts require JSON encoding,
+                # and an all-NULL CASE otherwise resolves to text in PostgreSQL.
+                else_=literal(error, type_=JSONB(none_as_null=True)),
+            )
 
             if status in {
                 ExecutionStatus.COMPLETED,
                 ExecutionStatus.FAILED,
+                ExecutionStatus.CANCELLED,
             }:
-                values["completed_at"] = datetime.now(
-                    timezone.utc
+                values["completed_at"] = func.now()
+            else:
+                values["completed_at"] = case(
+                    (
+                        Execution.cancel_requested_at.is_not(None),
+                        func.now(),
+                    ),
+                    else_=Execution.completed_at,
                 )
 
             statement = (
@@ -323,31 +354,51 @@ async def finalize_execution(
                     Execution.lease_expires_at > func.now(),
                 )
                 .values(**values)
-                .returning(Execution.id)
+                .returning(
+                    Execution.status,
+                    Execution.workspace_id,
+                )
             )
 
             result = await session.execute(statement)
+            row = result.one_or_none()
 
-            finalized = (
-                result.scalar_one_or_none() is not None
-            )
-
-            
-            if not finalized:
+            if row is None:
                 await session.rollback()
-                return False
+                return None
 
-            # Record terminal workflow failures in the DLQ.
-            if status == ExecutionStatus.FAILED:
+            persisted_status = row.status
 
-                execution_result = await session.execute(
-                    select(Execution).where(
-                        Execution.id == execution_id
+            if persisted_status == ExecutionStatus.CANCELLED:
+                await session.execute(
+                    update(HumanApproval)
+                    .where(
+                        HumanApproval.execution_id == execution_id,
+                        HumanApproval.workspace_id == row.workspace_id,
+                        HumanApproval.status == HumanApprovalStatus.PENDING,
+                    )
+                    .values(
+                        status=HumanApprovalStatus.CANCELLED,
                     )
                 )
-                execution = execution_result.scalar_one()
 
-                # Find the most recent failed execution step.
+                await session.execute(
+                    update(ExecutionStep)
+                    .where(
+                        ExecutionStep.execution_id == execution_id,
+                        ExecutionStep.status.in_([
+                            ExecutionStepStatus.PENDING,
+                            ExecutionStepStatus.RUNNING,
+                            ExecutionStepStatus.WAITING_FOR_APPROVAL,
+                        ]),
+                    )
+                    .values(
+                        status=ExecutionStepStatus.CANCELLED,
+                        completed_at=func.now(),
+                    )
+                )
+
+            if persisted_status == ExecutionStatus.FAILED:
                 step_result = await session.execute(
                     select(ExecutionStep)
                     .where(
@@ -361,7 +412,7 @@ async def finalize_execution(
                 failed_step = step_result.scalar_one_or_none()
 
                 dead_letter = DeadLetterEvent(
-                    workspace_id=execution.workspace_id,
+                    workspace_id=row.workspace_id,
                     execution_id=execution_id,
                     execution_step_id=(
                         failed_step.id if failed_step else None
@@ -380,12 +431,12 @@ async def finalize_execution(
                 session.add(dead_letter)
 
             await session.commit()
-            return True
-
+            return persisted_status
 
         except Exception:
             await session.rollback()
             raise
+
 
 
 async def execute_pending_execution(
@@ -430,13 +481,71 @@ async def execute_pending_execution(
         )
         workspace_id = str(execution.workspace_id)
         trigger_data = execution.trigger_data
-        replay_start_node_id = execution.replay_start_node_id
+        
+        
+        # Check for an approval resume checkpoint.
+        saved_context = execution.context or {}
+        if isinstance(saved_context, str):
+            saved_context = json.loads(saved_context)
+        resume_data = saved_context.get("_resume")
 
-        replay_context = (
-            execution.context
-            if replay_start_node_id is not None
-            else None
-        )
+        
+        if "_resume" in saved_context:
+            if (
+                not isinstance(resume_data, dict)
+                or resume_data.get("state") != "pending"
+                or "start_node_id" not in resume_data
+                or (
+                    resume_data["start_node_id"] is not None
+                    and (
+                        not isinstance(
+                            resume_data["start_node_id"], str
+                        )
+                        or not resume_data["start_node_id"].strip()
+                    )
+                )
+            ):
+                persisted_status = await finalize_execution(
+                    execution_id=execution_id,
+                    worker_id=worker_id,
+                    status=ExecutionStatus.FAILED,
+                    error={
+                        "error_code": "INVALID_RESUME_CHECKPOINT",
+                        "message": "Invalid approval resume checkpoint",
+                        "requires_review": True,
+                    },
+                )
+
+                if persisted_status is None:
+                    raise RuntimeError(
+                        "Unable to finalize invalid resume checkpoint"
+                    )
+
+                return True
+
+
+
+        if resume_data is not None:
+            # Resume after the human approval node.
+            start_node_id = resume_data.get("start_node_id")
+
+            # Keep the workflow's previous outputs,
+            # but remove the consumed resume checkpoint.
+            execution_context = {
+                **saved_context,
+            }
+            execution_context.pop("_resume", None)
+
+        elif execution.replay_start_node_id is not None:
+            # Resume a safe DLQ replay.
+            start_node_id = execution.replay_start_node_id
+            execution_context = saved_context
+
+        else:
+            # Normal workflow starts from its trigger.
+            start_node_id = None
+            execution_context = None
+
 
     owner_task = asyncio.current_task()
 
@@ -464,26 +573,38 @@ async def execute_pending_execution(
 
     
         try:
-            result = await run_execution(
-                execution_id=execution_id,
-                workflow_id=workflow_id,
-                workflow_version_id=workflow_version_id,
-                workspace_id=workspace_id,
-                trigger_data=trigger_data,
-                context_data=replay_context,
-                start_node_id=replay_start_node_id,
-            )
+            if resume_data is not None and start_node_id is None:
+                # Approval was the final workflow node.
+                # Nothing else needs to execute.
+                final_status = ExecutionStatus.COMPLETED
+                final_context = execution_context
+                final_error = None
 
-            final_status = ExecutionStatus.COMPLETED
-            final_context = result["context"]
-            final_error = None
+            else:
+                result = await run_execution(
+                    execution_id=execution_id,
+                    workflow_id=workflow_id,
+                    workflow_version_id=workflow_version_id,
+                    workspace_id=workspace_id,
+                    trigger_data=trigger_data,
+                    context_data=execution_context,
+                    start_node_id=start_node_id,
+                )
 
-        except HumanApprovalRequired:
-            final_status = (
-                ExecutionStatus.WAITING_FOR_APPROVAL
-            )
+                final_status = ExecutionStatus.COMPLETED
+                final_context = result["context"]
+                final_error = None
+        except ExecutionCancellationRequested:
+            final_status = ExecutionStatus.CANCELLED
             final_context = None
             final_error = None
+
+
+        except HumanApprovalRequired:
+            # The runner committed the approval, waiting step, and execution
+            # together and released its lease. Do not finalize again: a user
+            # may already have recorded a decision and queued the next branch.
+            return True
 
         except ActionExecutionFailed as exc:
             final_status = ExecutionStatus.FAILED
@@ -500,7 +621,7 @@ async def execute_pending_execution(
             final_context = None
             final_error = classify_error(exc)
 
-        finalized = await finalize_execution(
+        persisted_status = await finalize_execution(
             execution_id=execution_id,
             worker_id=worker_id,
             status=final_status,
@@ -509,12 +630,12 @@ async def execute_pending_execution(
         )
 
         
-        if not finalized:
+        if persisted_status is None:
             raise RuntimeError(
                 "Execution lease expired or ownership was lost"
             )
 
-        if final_status == ExecutionStatus.COMPLETED:
+        if persisted_status == ExecutionStatus.COMPLETED:
             await publish_execution_lifecycle(
                 event_type="workflow.completed",
                 execution_id=execution_id,
@@ -523,7 +644,7 @@ async def execute_pending_execution(
                 workflow_version_id=UUID(workflow_version_id),
             )
 
-        elif final_status == ExecutionStatus.FAILED:
+        elif persisted_status == ExecutionStatus.FAILED:
             await publish_execution_lifecycle(
                 event_type="workflow.failed",
                 execution_id=execution_id,
@@ -542,6 +663,84 @@ async def execute_pending_execution(
             await heartbeat_task
         except asyncio.CancelledError:
             pass
+
+
+
+async def cleanup_expired_executions(
+    limit: int = 100,
+) -> int:
+    """
+    Mark expired running executions and their unfinished
+    steps as failed.
+
+    Does not restart workflows or replay external actions.
+    """
+
+    if not 1 <= limit <= 100:
+        raise ValueError(
+            "Limit must be between 1 and 100"
+        )
+
+    cleaned_count = 0
+
+    async with AsyncSessionLocal() as session:
+        repository = ExecutionQueueRepository(session)
+
+        expired = await repository.list_expired_executions(
+            limit=limit,
+        )
+
+        for execution in expired:
+            try:
+                execution_id = execution.id
+                workspace_id = execution.workspace_id
+
+                claimed = await repository.mark_expired_as_failed(
+                    execution_id=execution_id,
+                    workspace_id=workspace_id,
+                )
+
+                if not claimed:
+                    await session.rollback()
+                    continue
+
+                # Mark only unfinished steps as interrupted.
+                statement = (
+                    update(ExecutionStep)
+                    .where(
+                        ExecutionStep.execution_id == execution_id,
+                        ExecutionStep.status.in_([
+                            ExecutionStepStatus.PENDING,
+                            ExecutionStepStatus.RUNNING,
+                        ]),
+                    )
+                    .values(
+                        status=ExecutionStepStatus.FAILED,
+                        completed_at=func.now(),
+                        error={
+                            "error_code": "WORKER_INTERRUPTED",
+                            "message": (
+                                "Step interrupted because "
+                                "the worker lease expired"
+                            ),
+                            "requires_review": True,
+                        },
+                    )
+                )
+
+                await session.execute(statement)
+
+                # Commit execution and step updates together.
+                await session.commit()
+
+                cleaned_count += 1
+
+            except Exception:
+                await session.rollback()
+                raise
+
+    return cleaned_count
+
 
 
 

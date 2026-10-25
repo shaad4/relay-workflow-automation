@@ -1,32 +1,22 @@
-import logging
 from uuid import UUID
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engine.approval_status import HumanApprovalStatus
 from app.dependencies import get_current_identity
 from app.db.database import AsyncSessionLocal
-from app.schemas.approvals import ApprovalListResponse, ApprovalResponse
 
-from app.engine.runner import run_execution
-from app.engine.status import ExecutionStatus
-from app.engine.exceptions import (
-    HumanApprovalRequired,
-    ActionExecutionFailed,
+from app.schemas.approvals import (
+    ApprovalListResponse,
+    ApprovalResponse,
 )
 
-from app.models.execution import Execution
-
 from app.services.approval_service import (
-    ApprovalDecisionResult,
     decide_approval,
     list_pending_approvals,
     get_approval,
 )
-
-
-logger = logging.getLogger(__name__)
 
 
 router = APIRouter(
@@ -35,28 +25,25 @@ router = APIRouter(
 )
 
 
-async def _commit_session(session: AsyncSession) -> None:
-    try:
-        await session.commit()
-    except Exception:
-        await session.rollback()
-        raise
-
-
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
 
 
-@router.get("/", response_model=ApprovalListResponse)
+@router.get(
+    "/",
+    response_model=ApprovalListResponse,
+)
 async def get_approvals(
     identity: dict = Depends(get_current_identity),
     session: AsyncSession = Depends(get_db),
+    status: HumanApprovalStatus = HumanApprovalStatus.PENDING,
 ):
     approvals = await list_pending_approvals(
         workspace_id=identity["workspace_id"],
         approver_user_id=identity["user_id"],
         session=session,
+        status=status,
     )
 
     return ApprovalListResponse(
@@ -67,7 +54,10 @@ async def get_approvals(
     )
 
 
-@router.get("/{approval_id}/", response_model=ApprovalResponse)
+@router.get(
+    "/{approval_id}/",
+    response_model=ApprovalResponse,
+)
 async def get_approval_details(
     approval_id: UUID,
     identity: dict = Depends(get_current_identity),
@@ -94,7 +84,6 @@ async def _handle_approval_decision(
     decision: str,
     identity: dict,
     session: AsyncSession,
-    background_tasks: BackgroundTasks | None = None,
 ) -> ApprovalResponse:
     try:
         result = await decide_approval(
@@ -120,133 +109,9 @@ async def _handle_approval_decision(
             detail=str(exc),
         ) from exc
 
-    approval = result.approval
-    approval_response = ApprovalResponse.model_validate(approval)
-
-    if background_tasks is not None and result.start_node_id is not None:
-        # The decision and resume checkpoint are already committed. Return the
-        # decision before running slow AI/provider actions (gateway timeout: 5s).
-        background_tasks.add_task(_resume_approval_in_background, result, approval_response)
-        return approval_response
-
-    return await _resume_approval(result, approval_response, session)
-
-
-async def _resume_approval_in_background(
-    result: ApprovalDecisionResult,
-    approval_response: ApprovalResponse,
-) -> None:
-    # Never retain the request's database session after sending its response.
-    async with AsyncSessionLocal() as session:
-        try:
-            await _resume_approval(result, approval_response, session)
-        except Exception:
-            # Resume failures are persisted by _resume_approval and belong to
-            # the execution; they must not turn a recorded decision into a 500.
-            logger.exception("Workflow resume failed after approval %s", approval_response.id)
-
-
-async def _resume_approval(
-    result: ApprovalDecisionResult,
-    approval_response: ApprovalResponse,
-    session: AsyncSession,
-) -> ApprovalResponse:
-    execution = await session.get(
-        Execution,
-        result.execution_id,
+    return ApprovalResponse.model_validate(
+        result.approval
     )
-
-    if execution is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Execution not found",
-        )
-
-
-    start_node_id = result.start_node_id
-
-    # No outgoing edge: the workflow ends here.
-    if start_node_id is None:
-        execution.status = ExecutionStatus.COMPLETED
-        execution.completed_at = datetime.now(timezone.utc)
-
-        await _commit_session(session)
-
-        return approval_response
-
-    runner_result = None
-    try:
-        runner_result = await run_execution(
-            execution_id=execution.id,
-            workflow_id=str(execution.workflow_id),
-            workflow_version_id=str(execution.workflow_version_id),
-            workspace_id=str(execution.workspace_id),
-            start_node_id=start_node_id,
-            context_data=result.context_data,
-        )
-
-        execution.context = runner_result["context"]
-        execution.status = ExecutionStatus.COMPLETED
-        execution.completed_at = datetime.now(timezone.utc)
-        await _commit_session(session)
-
-    except HumanApprovalRequired:
-        await session.rollback()
-        execution.status = ExecutionStatus.WAITING_FOR_APPROVAL
-
-        await _commit_session(session)
-
-        return approval_response
-
-    except ActionExecutionFailed as exc:
-        await session.rollback()
-        execution.status = ExecutionStatus.FAILED
-        execution.completed_at = datetime.now(timezone.utc)
-        execution.error = {
-            "node_id": exc.node_id,
-            "message": exc.error,
-        }
-
-        await _commit_session(session)
-
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "message": "Approval recorded, but workflow execution failed",
-                "approval_id": str(approval_response.id),
-                "execution_id": str(result.execution_id),
-                "execution_status": ExecutionStatus.FAILED,
-            },
-        ) from exc
-
-    except Exception as exc:
-        print(
-            "\n========== WORKFLOW RESUME ERROR ==========",
-            flush=True,
-        )
-        print("Execution ID:", execution.id, flush=True)
-        print("Exception Type:", type(exc).__name__, flush=True)
-        print("===========================================\n", flush=True)
-
-        await session.rollback()
-        if runner_result is not None:
-            execution.context = runner_result["context"]
-        execution.status = ExecutionStatus.FAILED
-        execution.completed_at = datetime.now(timezone.utc)
-        execution.error = {"message": "Workflow resume failed"}
-        await _commit_session(session)
-
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "message": "Approval recorded, but workflow execution failed",
-                "approval_id": str(approval_response.id),
-                "execution_id": str(result.execution_id),
-                "execution_status": ExecutionStatus.FAILED,
-            },
-        ) from exc
-
-    return approval_response
 
 
 @router.post(
@@ -257,14 +122,12 @@ async def approve(
     approval_id: UUID,
     identity: dict = Depends(get_current_identity),
     session: AsyncSession = Depends(get_db),
-    background_tasks: BackgroundTasks = None,
 ):
     return await _handle_approval_decision(
         approval_id=approval_id,
         decision="approved",
         identity=identity,
         session=session,
-        background_tasks=background_tasks,
     )
 
 
@@ -276,12 +139,10 @@ async def reject(
     approval_id: UUID,
     identity: dict = Depends(get_current_identity),
     session: AsyncSession = Depends(get_db),
-    background_tasks: BackgroundTasks = None,
 ):
     return await _handle_approval_decision(
         approval_id=approval_id,
         decision="rejected",
         identity=identity,
         session=session,
-        background_tasks=background_tasks,
     )
