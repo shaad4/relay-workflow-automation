@@ -1,5 +1,13 @@
+import re
+
 from copy import deepcopy
 from typing import Any
+
+
+PATH_PATTERN = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*"
+    r"(?:\.[A-Za-z_][A-Za-z0-9_]*|\.\d+|\[\d+\])*$"
+)
 
 
 class ExecutionContext:
@@ -25,15 +33,51 @@ class ExecutionContext:
         return context
 
     def get(self, path: str) -> Any:
+        """
+        Resolve nested dictionary and list paths.
+
+        Supported:
+            trigger.data.student_id
+            nodes.http_request_1.body.name
+            nodes.http_request_1.body.subjects[0].subject
+            nodes.http_request_1.body.subjects.0.subject
+
+        Returns None for missing or invalid paths.
+        """
+        if not isinstance(path, str) or not path:
+            return None
+
+        if not PATH_PATTERN.fullmatch(path):
+            return None
+
+        # Convert bracket indexes into dot-separated segments.
+        normalized_path = re.sub(
+            r"\[(\d+)\]",
+            r".\1",
+            path,
+        )
+
         current: Any = self.data
 
-        for part in path.split("."):
-            if not isinstance(current, dict):
-                return None
+        for part in normalized_path.split("."):
+            if isinstance(current, dict):
+                if part not in current:
+                    return None
 
-            current = current.get(part)
+                current = current[part]
 
-            if current is None:
+            elif isinstance(current, list):
+                if not part.isascii() or not part.isdigit():
+                    return None
+
+                index = int(part)
+
+                if index >= len(current):
+                    return None
+
+                current = current[index]
+
+            else:
                 return None
 
         return current
