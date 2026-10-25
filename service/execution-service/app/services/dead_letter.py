@@ -9,8 +9,10 @@ from app.engine.status import ExecutionStatus
 from app.grpc.workflow_client import WorkflowClient
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
-from app.services.replay_validator import validate_replay_path
-
+from app.services.replay_validator import (
+    validate_replay_path,
+    get_downstream_node_ids,
+)
 class DeadLetterService:
     def __init__(self, repository: DeadLetterRepository):
         self.repository = repository
@@ -193,10 +195,28 @@ class DeadLetterService:
             edges=json.loads(definition.edges_json),
         )
 
+        # Validate the failed node independently.
+        failed_node = graph.get_node(failed_node_id)
+
+        if failed_node is None:
+            raise ValueError("unsafe_replay")
+
         if not validate_replay_path(
-            graph,
+            ExecutionGraph(
+                nodes=[failed_node],
+                edges=[],
+            ),
             failed_node_id,
         ):
+            raise ValueError("unsafe_replay")
+
+        # Identify all downstream nodes and reject invalid paths.
+        downstream_node_ids = get_downstream_node_ids(
+            graph,
+            failed_node_id,
+        )
+
+        if downstream_node_ids is None:
             raise ValueError("unsafe_replay")
 
         # 3. Lock the DLQ event and recheck its state.
@@ -251,6 +271,15 @@ class DeadLetterService:
                 for key in ("trigger", "variables", "nodes")
             ):
                 raise ValueError("invalid_context")
+
+            # Reject replay if a downstream external action
+            # already has an execution-step record.
+            if await self.repository.has_downstream_action_attempts(
+                execution_id=original_id,
+                workspace_id=workspace_id,
+                downstream_node_ids=downstream_node_ids,
+            ):
+                raise ValueError("unsafe_replay")
 
             # 4. Create a new pending replay execution.
             replay = Execution(

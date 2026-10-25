@@ -63,3 +63,47 @@ def validate_replay_path(
         return True
 
     return visit(start_node_id)
+
+
+def get_downstream_node_ids(
+    graph: ExecutionGraph,
+    start_node_id: str,
+) -> set[str] | None:
+    """
+    Collect nodes reachable after the failed node.
+
+    Return None if the graph contains a missing node
+    or a cycle along the replay path.
+    """
+
+    visited: set[str] = set()
+    visiting: set[str] = set()
+    downstream: set[str] = set()
+
+    def visit(node_id: str) -> bool:
+        if node_id in visiting:
+            return False
+
+        if node_id in visited:
+            return True
+
+        if graph.get_node(node_id) is None:
+            return False
+
+        visiting.add(node_id)
+
+        for edge in graph.get_next_nodes(node_id):
+            if not visit(edge.target_node_id):
+                return False
+
+            downstream.add(edge.target_node_id)
+
+        visiting.remove(node_id)
+        visited.add(node_id)
+
+        return True
+
+    if not visit(start_node_id):
+        return None
+
+    return downstream

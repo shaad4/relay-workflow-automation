@@ -150,3 +150,44 @@ class DeadLetterRepository:
         )
         step = result.one_or_none()
         return {"failed_node_type": step.node_type, "failed_node_name": step.node_name} if step else {}
+
+    async def has_downstream_action_attempts(
+        self,
+        execution_id: UUID,
+        workspace_id: UUID,
+        downstream_node_ids: set[str],
+    ) -> bool:
+        """
+        Return True if any downstream external action
+        has an execution-step record.
+
+        Even a pending step is treated as an attempt
+        to keep replay validation conservative.
+        """
+
+        if not downstream_node_ids:
+            return False
+
+        result = await self.session.execute(
+            select(ExecutionStep.id)
+            .join(
+                Execution,
+                Execution.id == ExecutionStep.execution_id,
+            )
+            .where(
+                Execution.id == execution_id,
+                Execution.workspace_id == workspace_id,
+                ExecutionStep.node_id.in_(downstream_node_ids),
+                ExecutionStep.node_type.in_(
+                    (
+                        "action.http_request",
+                        "action.email",
+                        "action.refund",
+                    )
+                ),
+            )
+            .limit(1)
+        )
+
+        return result.scalar_one_or_none() is not None
+
