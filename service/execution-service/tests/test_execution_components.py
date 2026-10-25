@@ -231,11 +231,23 @@ def test_decide_approval_persists_branch_and_rolls_back_on_errors(monkeypatch):
         completed_at=None,
         duration_ms=None,
     )
+    execution.cancel_requested_at = None
+
     class Session(ApprovalSession):
         def __init__(self, result=None):
             super().__init__(result or QueryResult(one=approval))
             self.records = {Execution: execution, ExecutionStep: step}
-        async def get(self, model, _id, **_kwargs): return self.records.get(model)
+
+        async def execute(self, _statement):
+            index = self.calls % 4
+            self.calls += 1
+            if index == 0:
+                return QueryResult(one=approval.execution_id if self.result.one is not None else None)
+            if index == 1:
+                return QueryResult(one=self.records[Execution])
+            if index == 2:
+                return self.result
+            return QueryResult(one=self.records[ExecutionStep])
     session = Session()
     monkeypatch.setattr(approval_service, "resolve_approval_branch", _async_return("next-node"))
 
@@ -249,7 +261,7 @@ def test_decide_approval_persists_branch_and_rolls_back_on_errors(monkeypatch):
     }
     assert approval.status == HumanApprovalStatus.APPROVED
     assert step.status == ExecutionStepStatus.COMPLETED
-    assert step.duration_ms is not None and execution.status == ExecutionStatus.RUNNING
+    assert step.duration_ms is not None and execution.status == ExecutionStatus.PENDING
     assert session.commits == 1 and session.rollbacks == 0
 
     with pytest.raises(ValueError, match="Invalid approval decision"):
@@ -274,9 +286,9 @@ def test_decide_approval_persists_branch_and_rolls_back_on_errors(monkeypatch):
         assert broken.rollbacks == 1
 
     class FailingSession(Session):
-        async def get(self, model, _id, **_kwargs):
-            if model is Execution: return None
-            return self.records.get(model)
+        def __init__(self):
+            super().__init__()
+            self.records[Execution] = None
     approval.status = HumanApprovalStatus.PENDING
     broken = FailingSession()
     with pytest.raises(ValueError, match="Execution not found"):
@@ -435,7 +447,12 @@ class RunnerSession:
     async def rollback(self): pass
     async def execute(self, _statement):
         current_max = max((step.sequence for step in self.state.get("steps", []) if hasattr(step, "sequence")), default=0)
-        return SimpleNamespace(scalar_one=lambda: current_max)
+        if "FOR UPDATE" in str(_statement) and "FROM executions" in str(_statement):
+            return QueryResult(one=self.state["execution"])
+        return SimpleNamespace(
+            scalar_one=lambda: current_max,
+            scalar_one_or_none=lambda: None,
+        )
     async def refresh(self, item):
         item.id = item.id or uuid4()
         if item not in self.state.setdefault("steps", []):
@@ -458,6 +475,9 @@ def runner_setup(monkeypatch, nodes, edges, action_response=None, execution=None
     state = {"steps": [], "execution": execution or SimpleNamespace(id=uuid4(), context={})}
     state["execution"].workspace_id = UUID(RUNNER_WORKSPACE_ID)
     state["execution"].workflow_name = None
+    state["execution"].status = ExecutionStatus.RUNNING
+    state["execution"].cancel_requested_at = None
+    state["execution"].lease_expires_at = None
     class Workflow:
         async def get_workflow_definition(self, **_kwargs): return SimpleNamespace(workflow_name="Test workflow", nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
         async def close(self): pass
@@ -551,124 +571,47 @@ def test_approval_routes_lists_details_approves_rejects_and_maps_errors(monkeypa
         timeout_at=None, created_at=now, updated_at=now,
     )
     identity = {"workspace_id": str(uuid4()), "user_id": str(uuid4())}
+    calls = []
 
-    async def list_rows(**_kwargs): return [approval]
-    async def get_row(**_kwargs): return approval
-    async def decision_result(**kwargs):
+    async def list_rows(**_kwargs):
+        return [approval]
+
+    async def get_row(**_kwargs):
+        return approval
+
+    async def decide(**kwargs):
+        calls.append(kwargs["decision"])
         approval.decision = kwargs["decision"]
         approval.status = kwargs["decision"]
-        return approval_result(approval, execution, step, kwargs["decision"], "next")
+        return SimpleNamespace(approval=approval)
+
     monkeypatch.setattr(approval_routes, "list_pending_approvals", list_rows)
     monkeypatch.setattr(approval_routes, "get_approval", get_row)
-    monkeypatch.setattr(approval_routes, "decide_approval", decision_result)
+    monkeypatch.setattr(approval_routes, "decide_approval", decide)
 
-    session = SimpleNamespace(commits=0)
-    execution = SimpleNamespace(id=approval.execution_id, workflow_id=uuid4(), workflow_version_id=uuid4(), workspace_id=uuid4(), context={})
-    step = SimpleNamespace(id=approval.execution_step_id, sequence=2, node_id="approval", started_at=None)
-    async def db_get(model, _id):
-        if model is Execution:
-            return execution
-        return step
-    async def commit(): session.commits += 1
-    async def rollback(): pass
-    session.rollback = rollback
-    session.get, session.commit = db_get, commit
-
-    listed = asyncio.run(approval_routes.get_approvals(identity, session))
-    assert len(listed.approvals) == 1
+    session = object()
+    assert len(asyncio.run(approval_routes.get_approvals(identity, session)).approvals) == 1
     assert asyncio.run(approval_routes.get_approval_details(approval.id, identity, session)).id == approval.id
-    with pytest.raises(Exception) as caught:
-        async def no_row(**_kwargs): return None
-        monkeypatch.setattr(approval_routes, "get_approval", no_row)
-        awaitable = approval_routes.get_approval_details(approval.id, identity, session)
-        asyncio.run(awaitable)
-    assert getattr(caught.value, "status_code", None) == 404
-    monkeypatch.setattr(approval_routes, "get_approval", get_row)
+    assert asyncio.run(approval_routes.approve(approval.id, identity, session)).decision == "approved"
+    assert asyncio.run(approval_routes.reject(approval.id, identity, session)).decision == "rejected"
+    assert calls == ["approved", "rejected"]
 
-    async def run(**_kwargs): return {"context": {"nodes": {"rag": {"chunks": [], "context": "retrieved"}}}}
-    monkeypatch.setattr(approval_routes, "run_execution", run)
-    response = asyncio.run(approval_routes.approve(approval.id, identity, session))
-    assert response.id == approval.id
-    assert session.commits == 1
-    rejected = asyncio.run(approval_routes.reject(approval.id, identity, session))
-    assert rejected.id == approval.id
-    assert session.commits == 2
+    async def no_row(**_kwargs):
+        return None
+    monkeypatch.setattr(approval_routes, "get_approval", no_row)
+    with pytest.raises(HTTPException) as missing:
+        asyncio.run(approval_routes.get_approval_details(approval.id, identity, session))
+    assert missing.value.status_code == 404
 
-    async def missing_approval(**_kwargs): raise ValueError("Approval not found")
-    monkeypatch.setattr(approval_routes, "decide_approval", missing_approval)
-    with pytest.raises(Exception) as caught:
-        asyncio.run(approval_routes.approve(approval.id, identity, session))
-    assert getattr(caught.value, "status_code", None) == 404
-
-    async def conflict(**_kwargs): raise ValueError("Approval is already approved")
-    monkeypatch.setattr(approval_routes, "decide_approval", conflict)
-    with pytest.raises(Exception) as caught:
-        asyncio.run(approval_routes.reject(approval.id, identity, session))
-    assert getattr(caught.value, "status_code", None) == 409
-
-
-def test_approval_route_resume_outcomes_and_missing_records(monkeypatch):
-    identity = {"workspace_id": str(uuid4()), "user_id": str(uuid4())}
-    now = datetime.now(timezone.utc)
-    approval = SimpleNamespace(id=uuid4(), execution_id=uuid4(), execution_step_id=uuid4(), message="x", status="approved", decision="approved", timeout_at=None, created_at=now, updated_at=now)
-    execution = SimpleNamespace(id=approval.execution_id, workflow_id=uuid4(), workflow_version_id=uuid4(), workspace_id=uuid4(), context={})
-    step = SimpleNamespace(id=approval.execution_step_id, sequence=1, node_id="h", started_at=None)
-    session = SimpleNamespace(commits=0)
-    async def db_get(model, _id): return execution if model is Execution else step
-    async def commit(): session.commits += 1
-    async def rollback(): pass
-    session.rollback = rollback
-    session.get, session.commit = db_get, commit
-    async def approved(**kwargs): return approval_result(approval, execution, step, kwargs["decision"], "next")
-    async def run(**_kwargs): raise HumanApprovalRequired("h2")
-    monkeypatch.setattr(approval_routes, "decide_approval", approved)
-    monkeypatch.setattr(approval_routes, "run_execution", run)
-    asyncio.run(approval_routes.approve(approval.id, identity, session))
-    assert execution.status == ExecutionStatus.WAITING_FOR_APPROVAL
-    assert session.commits == 1
-
-    async def failed(**_kwargs): raise ActionExecutionFailed("a", "bad")
-    monkeypatch.setattr(approval_routes, "run_execution", failed)
-    with pytest.raises(HTTPException) as caught:
-        asyncio.run(approval_routes.approve(approval.id, identity, session))
-    assert caught.value.status_code == 500
-    assert caught.value.detail == {
-        "message": "Approval recorded, but workflow execution failed",
-        "approval_id": str(approval.id),
-        "execution_id": str(execution.id),
-        "execution_status": ExecutionStatus.FAILED,
-    }
-    assert execution.status == ExecutionStatus.FAILED and execution.error["node_id"] == "a"
-
-    async def rag_success(**kwargs):
-        assert kwargs["context_data"]["_resume"]["start_node_id"] == "next"
-        return {"context": {"nodes": {"rag": {"chunks": [], "context": "policy"}}}}
-    monkeypatch.setattr(approval_routes, "run_execution", rag_success)
-    asyncio.run(approval_routes.approve(approval.id, identity, session))
-    assert execution.status == ExecutionStatus.COMPLETED
-    assert execution.context["nodes"]["rag"]["context"] == "policy"
-
-    async def rag_failure(**kwargs): raise RuntimeError("private provider failure")
-    monkeypatch.setattr(approval_routes, "run_execution", rag_failure)
-    with pytest.raises(HTTPException) as caught:
-        asyncio.run(approval_routes.approve(approval.id, identity, session))
-    assert caught.value.status_code == 500
-    assert caught.value.detail["execution_status"] == ExecutionStatus.FAILED
-    assert "private provider failure" not in str(caught.value.detail)
-    assert execution.status == ExecutionStatus.FAILED and execution.completed_at is not None
-    assert execution.error == {"message": "Workflow resume failed"}
-
-
-    async def no_branch(**kwargs): return approval_result(approval, execution, step, kwargs["decision"], None)
-    monkeypatch.setattr(approval_routes, "decide_approval", no_branch)
-    response = asyncio.run(approval_routes.reject(approval.id, identity, session))
-    assert response.id == approval.id and execution.status == ExecutionStatus.COMPLETED
-
-    async def no_execution(_model, _id): return None
-    session.get = no_execution
-    with pytest.raises(Exception) as caught:
-        asyncio.run(approval_routes.approve(approval.id, identity, session))
-    assert getattr(caught.value, "status_code", None) == 404
+    for message, status in [("Approval not found", 404), ("Execution not found", 404),
+                            ("Approval is already approved", 409)]:
+        async def fail(**_kwargs):
+            raise ValueError(message)
+        monkeypatch.setattr(approval_routes, "decide_approval", fail)
+        with pytest.raises(HTTPException) as caught:
+            asyncio.run(approval_routes.approve(approval.id, identity, session))
+        assert caught.value.status_code == status
+        assert caught.value.detail == message
 
 
 def test_application_health_and_lifespan(monkeypatch):
@@ -709,67 +652,8 @@ def test_application_health_and_lifespan(monkeypatch):
     assert set(calls[1:]) == {"grpc_start", "cancelled", "stop", "grpc_stop"}
 
 
-@pytest.mark.parametrize("decision", ["approved", "rejected"])
-@pytest.mark.parametrize("resume_fails", [False, True])
-def test_approval_response_does_not_wait_for_workflow_resume(monkeypatch, decision, resume_fails):
-    from fastapi import BackgroundTasks
-    from contextlib import asynccontextmanager
-
-    now = datetime.now(timezone.utc)
-    approval = SimpleNamespace(
-        id=uuid4(), execution_id=uuid4(), execution_step_id=uuid4(),
-        message="Review", status=decision, decision=decision,
-        timeout_at=None, created_at=now, updated_at=now,
-    )
-    execution = SimpleNamespace(
-        id=approval.execution_id, workflow_id=uuid4(),
-        workflow_version_id=uuid4(), workspace_id=uuid4(), context={},
-    )
-    step = SimpleNamespace(node_id="approval")
-    calls = []
-
-    async def decide(**kwargs):
-        calls.append("decision committed")
-        return approval_result(approval, execution, step, kwargs["decision"], "next")
-
-    async def run(**kwargs):
-        calls.append("resume")
-        assert kwargs["start_node_id"] == "next"
-        if resume_fails:
-            raise ActionExecutionFailed("email", "Provider failed")
-        return {"context": {"nodes": {"email": {"sent": True}}}}
-
-    async def get(_model, _id): return execution
-    async def commit(): calls.append("execution committed")
-    async def rollback(): calls.append("execution rolled back")
-    worker_session = SimpleNamespace(get=get, commit=commit, rollback=rollback)
-
-    @asynccontextmanager
-    async def worker_sessions():
-        calls.append("new session")
-        yield worker_session
-
-    monkeypatch.setattr(approval_routes, "decide_approval", decide)
-    monkeypatch.setattr(approval_routes, "run_execution", run)
-    monkeypatch.setattr(approval_routes, "AsyncSessionLocal", worker_sessions)
-
-    async def scenario():
-        tasks = BackgroundTasks()
-        endpoint = approval_routes.approve if decision == "approved" else approval_routes.reject
-        response = await endpoint(approval.id, {"workspace_id": "w", "user_id": "u"}, object(), tasks)
-        assert response.id == approval.id and response.decision == decision
-        assert calls == ["decision committed"]
-        assert len(tasks.tasks) == 1
-        await tasks()
-        assert calls[1:3] == ["new session", "resume"]
-        assert execution.status == (ExecutionStatus.FAILED if resume_fails else ExecutionStatus.COMPLETED)
-        assert calls[-1] == "execution committed"
-
-    asyncio.run(scenario())
-
-
 @pytest.mark.parametrize("action,decision", [("approve", "approved"), ("reject", "rejected")])
-def test_approval_http_response_is_sent_before_resume(monkeypatch, action, decision):
+def test_approval_http_response_records_decision_for_dispatcher(monkeypatch, action, decision):
     from fastapi import FastAPI
     import httpx
 
@@ -779,40 +663,33 @@ def test_approval_http_response_is_sent_before_resume(monkeypatch, action, decis
         message="Review", status=decision, decision=decision,
         timeout_at=None, created_at=now, updated_at=now,
     )
-    result = SimpleNamespace(approval=approval, start_node_id="ai_generate")
     events = []
     app = FastAPI()
     app.include_router(approval_routes.router)
 
-    async def identity(): return {"workspace_id": "w", "user_id": "u"}
-    async def db(): yield object()
+    async def identity():
+        return {"workspace_id": "w", "user_id": "u"}
+
+    async def db():
+        yield object()
+
     async def decide(**kwargs):
         assert kwargs["decision"] == decision
-        events.append("committed")
-        return result
-    async def resume(_result, response):
-        assert response.decision == decision
-        assert events == ["committed", "response sent"]
-        events.append("resume")
+        events.append("decision committed")
+        return SimpleNamespace(approval=approval)
 
     app.dependency_overrides[approval_routes.get_current_identity] = identity
     app.dependency_overrides[approval_routes.get_db] = db
     monkeypatch.setattr(approval_routes, "decide_approval", decide)
-    monkeypatch.setattr(approval_routes, "_resume_approval_in_background", resume)
-
-    async def observed_app(scope, receive, send):
-        async def observed_send(message):
-            await send(message)
-            if message["type"] == "http.response.body" and not message.get("more_body", False):
-                events.append("response sent")
-        await app(scope, receive, observed_send)
 
     async def scenario():
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=observed_app), base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
             response = await client.post(f"/approvals/{approval.id}/{action}/")
         assert response.status_code == 200
         assert response.json()["decision"] == decision
-        assert events == ["committed", "response sent", "resume"]
+        assert events == ["decision committed"]
 
     asyncio.run(scenario())
 

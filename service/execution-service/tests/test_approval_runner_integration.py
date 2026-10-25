@@ -19,7 +19,9 @@ from app.engine.status import ExecutionStatus
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
 from app.models.human_approval import HumanApproval
+from app.models.dead_letter_event import DeadLetterEvent
 from app.routes.approvals import approve, reject
+from app.services import execution_queue
 
 
 def _assert_database_is_isolated():
@@ -140,15 +142,20 @@ async def run_review_case(decision, generate_fails=False):
                     HumanApproval.execution_id == execution_id,
                 ))).scalar_one()
                 identity = {"workspace_id": str(workspace_id), "user_id": str(approver_id)}
-                if generate_fails:
-                    with pytest.raises(HTTPException) as caught:
-                        await approve(approval.id, identity, session)
-                    assert caught.value.status_code == 500
-                    assert caught.value.detail["execution_status"] == ExecutionStatus.FAILED
-                    assert "private provider failure" not in str(caught.value.detail)
-                else:
-                    response = await (approve if decision == "approved" else reject)(approval.id, identity, session)
-                    assert response.decision == decision
+                response = await (approve if decision == "approved" else reject)(
+                    approval.id, identity, session
+                )
+                assert response.decision == decision
+                await session.refresh(execution)
+                assert execution.status == ExecutionStatus.PENDING
+                context = json.loads(execution.context) if isinstance(execution.context, str) else execution.context
+                assert context["nodes"]["refund"]["status"] == "succeeded"
+                await session.commit()
+
+                with patch.object(
+                    execution_queue, "publish_execution_lifecycle", new_callable=AsyncMock
+                ):
+                    assert await execution_queue.execute_pending_execution(execution_id)
                 await session.refresh(approval)
                 await session.refresh(execution)
                 steps = (await session.execute(select(ExecutionStep).where(
@@ -156,7 +163,8 @@ async def run_review_case(decision, generate_fails=False):
                 ))).scalars().all()
                 assert approval.decision == decision
                 assert execution.status == (ExecutionStatus.FAILED if generate_fails else ExecutionStatus.COMPLETED)
-                assert execution.context["nodes"]["refund"]["status"] == "succeeded"
+                context = json.loads(execution.context) if isinstance(execution.context, str) else execution.context
+                assert context["nodes"]["refund"]["status"] == "succeeded"
                 assert {step.node_id for step in steps} == {"webhook", "refund", "review", next_node}
                 with pytest.raises(HTTPException) as duplicate:
                     await (approve if decision == "approved" else reject)(approval.id, identity, session)
@@ -169,6 +177,7 @@ async def run_review_case(decision, generate_fails=False):
                     assert json.loads(action_class.return_value.execute_action.await_args.kwargs["input_data_json"])["body"] == "succeeded"
     finally:
         async with AsyncSessionLocal() as session:
+            await session.execute(delete(DeadLetterEvent).where(DeadLetterEvent.execution_id == execution_id))
             await session.execute(delete(HumanApproval).where(HumanApproval.execution_id == execution_id))
             await session.execute(delete(ExecutionStep).where(ExecutionStep.execution_id == execution_id))
             await session.execute(delete(Execution).where(Execution.id == execution_id))

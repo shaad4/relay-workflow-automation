@@ -1,4 +1,5 @@
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
@@ -292,7 +293,8 @@ async def decide_approval(
             )
 
         # 7. Save resume checkpoint.
-        context_data = dict(execution.context or {})
+        stored_context = execution.context or {}
+        context_data = dict(json.loads(stored_context) if isinstance(stored_context, str) else stored_context)
 
         context_data["_resume"] = {
             "approval_id": str(approval.id),

@@ -86,7 +86,7 @@ async def run_case(prompt="{{trigger.data.message}}", rag_context="", response=N
                     ExecutionStep.execution_id == execution_id,
                 ).order_by(ExecutionStep.sequence))).scalars().all()
                 saved_execution = await session.get(Execution, execution_id)
-                persisted_context = saved_execution.context
+                persisted_context = json.loads(saved_execution.context)
 
             return result, error, {step.node_id: step for step in steps}, action.execute_action.await_args_list, credentials.await_args_list, provider.await_args_list, persisted_context, workspace_id, connection_id
     finally:
@@ -104,7 +104,7 @@ def test_success_context_persistence_gmail_and_workspace_scope():
         "content": "Validated summary", "model": "test-model", "input_tokens": 5, "output_tokens": 2,
     }
     assert steps["generate_1"].status == ExecutionStepStatus.COMPLETED
-    assert steps["generate_1"].output == result["context"]["nodes"]["generate_1"]
+    assert json.loads(steps["generate_1"].output) == result["context"]["nodes"]["generate_1"]
     assert len(calls) == 1
     assert calls[0].kwargs["provider"] == "gmail"
     assert json.loads(calls[0].kwargs["input_data_json"])["body"] == "Validated summary"
@@ -144,7 +144,7 @@ def test_provider_failures_stop_gmail_without_persisting_secrets(provider_error,
     assert expected in str(error)
     assert API_KEY not in str(error)
     assert steps["generate_1"].status == ExecutionStepStatus.FAILED
-    assert steps["generate_1"].error["message"] == {
+    assert json.loads(steps["generate_1"].error)["message"] == {
         "AI provider request timed out": "The AI provider request timed out.",
         "AI provider authentication failed": "AI provider authentication failed.",
         "AI provider unavailable": "The AI provider is temporarily unavailable.",
@@ -164,7 +164,7 @@ def test_invalid_response_is_not_available_downstream(invalid_response):
     result, error, steps, calls, _, _, context, *_ = asyncio.run(run_case(response=invalid_response))
     assert result is None and isinstance(error, AIResponseError)
     assert steps["generate_1"].status == ExecutionStepStatus.FAILED
-    assert steps["generate_1"].error["message"] == "The AI provider returned an invalid response."
+    assert json.loads(steps["generate_1"].error)["message"] == "The AI provider returned an invalid response."
     assert steps["generate_1"].output is None
     assert "gmail" not in steps and not calls
     assert "generate_1" not in context.get("nodes", {})

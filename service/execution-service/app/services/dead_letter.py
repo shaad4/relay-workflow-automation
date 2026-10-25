@@ -159,7 +159,7 @@ class DeadLetterService:
         if failed_step is None:
             raise ValueError("invalid_failed_step")
 
-        context = original.context
+        context = json.loads(original.context) if isinstance(original.context, str) else original.context
 
         if not isinstance(context, dict) or not all(
             isinstance(context.get(key), dict)
@@ -244,7 +244,7 @@ class DeadLetterService:
             if failed_step is None:
                 raise ValueError("invalid_failed_step")
 
-            context = original.context
+            context = json.loads(original.context) if isinstance(original.context, str) else original.context
 
             if not isinstance(context, dict) or not all(
                 isinstance(context.get(key), dict)
@@ -283,4 +283,3 @@ class DeadLetterService:
         except Exception:
             await session.rollback()
             raise
-

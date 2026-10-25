@@ -141,14 +141,14 @@ async def test_terminal_finalization_persists_status_error_and_dlq(workspace, ou
         assert execution.completed_at is not None
         assert execution.claimed_by is None and execution.lease_expires_at is None
         assert execution.heartbeat_at is None
-        assert execution.error == (None if cancel_requested else error)
-        assert execution.context == context
+        assert (json.loads(execution.error) if execution.error else None) == (None if cancel_requested else error)
+        assert json.loads(execution.context) == context
         events = (await session.execute(select(DeadLetterEvent).where(
             DeadLetterEvent.execution_id == execution_id,
         ))).scalars().all()
         assert len(events) == (1 if expected == 'failed' else 0)
         if events:
-            assert events[0].error == error
+            assert (json.loads(events[0].error) if isinstance(events[0].error, str) else events[0].error) == error
             assert events[0].execution_step_id is not None
     # A stale worker cannot overwrite a terminal result or create another DLQ entry.
     assert await queue.finalize_execution(execution_id, 'owner', 'failed', error=error) is None

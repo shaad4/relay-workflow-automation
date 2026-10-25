@@ -1,5 +1,6 @@
 import grpc
 import asyncio
+import json
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -484,6 +485,8 @@ async def execute_pending_execution(
         
         # Check for an approval resume checkpoint.
         saved_context = execution.context or {}
+        if isinstance(saved_context, str):
+            saved_context = json.loads(saved_context)
         resume_data = saved_context.get("_resume")
 
         
