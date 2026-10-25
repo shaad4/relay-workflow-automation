@@ -112,7 +112,7 @@ export default function WebhooksPage() {
     const close = (event) => {
       if (event.key === "Escape") {
         setCredential(null);
-        refresh();
+        setReload((current) => current + 1);
       }
     };
     window.addEventListener("keydown", close);
