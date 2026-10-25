@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect, useCallback } from "react";
+import { use, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
@@ -67,6 +67,74 @@ function selectVersion(versions, workflow) {
   return sorted.find((version) => version.id === publishedId) ?? sorted[0];
 }
 
+// ── Loading skeleton ───────────────────────────────────────────────────────
+const LoadingSkeleton = () => (
+  <div className="w-full h-full flex flex-col bg-[var(--canvas)] select-none">
+    <div className="h-12 px-4 bg-[var(--surface)] border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
+      <div className="flex items-center gap-2">
+        <div className="h-4 w-20 bg-[var(--elevated)] rounded animate-pulse" />
+        <span className="text-[var(--text-tertiary)]">/</span>
+        <div className="h-4 w-36 bg-[var(--elevated)] rounded animate-pulse" />
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="h-8 w-16 bg-[var(--elevated)] rounded animate-pulse" />
+        <div className="h-8 w-20 bg-[var(--elevated)] rounded animate-pulse" />
+        <div className="h-8 w-20 bg-[#4F46E5]/40 rounded animate-pulse" />
+      </div>
+    </div>
+    <div className="flex-1 flex">
+      <div className="w-60 bg-[var(--surface)] border-r border-[var(--border-subtle)] p-4 space-y-3 shrink-0">
+        <div className="h-7 w-full bg-[var(--elevated)] rounded animate-pulse" />
+        <div className="h-16 w-full bg-[var(--elevated)] rounded animate-pulse" />
+        <div className="h-16 w-full bg-[var(--elevated)] rounded animate-pulse" />
+        <div className="h-16 w-full bg-[var(--elevated)] rounded animate-pulse" />
+      </div>
+      <div className="flex-1 flex items-center justify-center bg-[var(--canvas)]">
+        <div className="flex items-center gap-2.5 text-[var(--text-tertiary)] text-[14px]">
+          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          <span>Loading workflow canvas...</span>
+        </div>
+      </div>
+      <div className="w-72 bg-[var(--surface)] border-l border-[var(--border-subtle)] p-4 space-y-3 shrink-0">
+        <div className="h-6 w-28 bg-[var(--elevated)] rounded animate-pulse" />
+        <div className="h-24 w-full bg-[var(--elevated)] rounded animate-pulse" />
+        <div className="h-12 w-full bg-[var(--elevated)] rounded animate-pulse" />
+      </div>
+    </div>
+  </div>
+);
+
+// ── Error state ────────────────────────────────────────────────────────────
+const ErrorState = ({ error, onRetry }) => (
+  <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-[var(--canvas)] text-center">
+    <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 mb-4">
+      <AlertTriangleIcon className="w-6 h-6 stroke-[1.5]" />
+    </div>
+    <h3 className="text-[18px] font-semibold text-[var(--text-primary)] tracking-tight mb-1">
+      Unable to load workflow
+    </h3>
+    <p className="text-[14px] text-[var(--text-secondary)] max-w-sm mb-6 leading-relaxed">
+      {error ?? "We encountered an issue loading this workflow."}
+    </p>
+    <div className="flex items-center gap-3">
+      <Link
+        href="/workflows"
+        className="h-9 px-4 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--elevated)] text-[14px] font-medium text-[var(--text-primary)] transition-colors"
+      >
+        Back to Workflows
+      </Link>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="h-9 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] text-white text-[14px] font-medium transition-colors flex items-center gap-2 cursor-pointer"
+      >
+        <RefreshIcon className="w-4 h-4 stroke-[1.5]" />
+        <span>Retry</span>
+      </button>
+    </div>
+  </div>
+);
+
 export default function WorkflowBuilderPage({ params }) {
   const resolvedParams = use(params);
   const workflowId = resolvedParams?.workflowId ?? "";
@@ -82,29 +150,31 @@ export default function WorkflowBuilderPage({ params }) {
   // Key to force full remount of WorkflowBuilder when version changes
   const [builderKey, setBuilderKey] = useState(0);
 
-  const fetchWorkflowData = useCallback(
-    async (workflowPatch = null) => {
-      if (workflowPatch) {
-        setWorkflow((current) =>
-          current ? { ...current, ...workflowPatch } : current,
-        );
-        return;
-      }
-      if (!workflowId) {
-        setError("Missing workflow ID");
-        setIsLoading(false);
-        return;
-      }
+  const requestGeneration = useRef(0);
+  const [reload, setReload] = useState(0);
+  const fetchWorkflowData = useCallback((workflowPatch = null) => {
+    if (workflowPatch) {
+      setWorkflow((current) =>
+        current ? { ...current, ...workflowPatch } : current,
+      );
+    } else {
+      setReload((value) => value + 1);
+    }
+  }, []);
+  const [requestInputs, setRequestInputs] = useState(null);
+  const requestKey = JSON.stringify([workflowId, isInitializing, reload]);
+  if (requestInputs !== requestKey) {
+    setRequestInputs(requestKey);
+    setIsLoading(isInitializing || Boolean(workflowId));
+    setError(workflowId ? null : "Missing workflow ID");
+  }
 
-      // AuthProvider restores the cookie session asynchronously on page load.
-      if (isInitializing) {
-        setIsLoading(true);
-        return;
-      }
-
-      setIsLoading(true);
-      setError(null);
-
+  useEffect(() => {
+    if (isInitializing || !workflowId) return;
+    const generation = ++requestGeneration.current;
+    let mounted = true;
+    const active = () => mounted && requestGeneration.current === generation;
+    const load = async () => {
       try {
         // ── 1. Fetch workflow metadata ────────────────────────────────────────
         const rawWorkflow = await getWorkflow(workflowId);
@@ -134,6 +204,7 @@ export default function WorkflowBuilderPage({ params }) {
         const nodesData = normalizeList(nodesResponse, "nodes");
         const edgesData = normalizeList(edgesResponse, "edges");
 
+        if (!active()) return;
         setWorkflow(wfData);
         setVersion(selectedVersion);
         setVersions(versionsList);
@@ -142,16 +213,21 @@ export default function WorkflowBuilderPage({ params }) {
         // Force WorkflowBuilder to fully remount with fresh state
         setBuilderKey((k) => k + 1);
       } catch (err) {
+        if (!active()) return;
         console.error("Critical workflow load error:", err);
         setError(
           err?.message || "Unable to load this workflow. Please try again.",
         );
       } finally {
-        setIsLoading(false);
+        if (active()) setIsLoading(false);
       }
-    },
-    [workflowId, isInitializing],
-  );
+    };
+    load();
+    return () => {
+      mounted = false;
+      requestGeneration.current += 1;
+    };
+  }, [workflowId, isInitializing, reload]);
 
   const selectWorkflowVersion = useCallback(
     async (versionNumber) => {
@@ -161,6 +237,7 @@ export default function WorkflowBuilderPage({ params }) {
           Number(version?.version_number ?? version?.version)
       )
         return;
+      const generation = ++requestGeneration.current;
       setIsLoading(true);
       setError(null);
       try {
@@ -175,97 +252,26 @@ export default function WorkflowBuilderPage({ params }) {
           getWorkflowNodes(workflowId, versionNumber),
           getWorkflowEdges(workflowId, versionNumber),
         ]);
+        if (requestGeneration.current !== generation) return;
         setVersion(selectedVersion);
         setNodes(normalizeList(nodesResponse, "nodes"));
         setEdges(normalizeList(edgesResponse, "edges"));
         setBuilderKey((key) => key + 1);
       } catch (err) {
+        if (requestGeneration.current !== generation) return;
         setError(err?.message || "Unable to load this workflow version.");
       } finally {
-        setIsLoading(false);
+        if (requestGeneration.current === generation) setIsLoading(false);
       }
     },
     [workflowId, version, versions],
   );
 
   useEffect(() => {
-    if (isInitializing) return;
-    fetchWorkflowData();
-  }, [fetchWorkflowData, isInitializing]);
-
-  useEffect(() => {
     document.title = workflow?.name
       ? `${workflow.name} · Workflow Builder | Relay`
       : "Workflow Builder | Relay";
   }, [workflow?.name]);
-
-  // ── Loading skeleton ───────────────────────────────────────────────────────
-  const LoadingSkeleton = () => (
-    <div className="w-full h-full flex flex-col bg-[var(--canvas)] select-none">
-      <div className="h-12 px-4 bg-[var(--surface)] border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="h-4 w-20 bg-[var(--elevated)] rounded animate-pulse" />
-          <span className="text-[var(--text-tertiary)]">/</span>
-          <div className="h-4 w-36 bg-[var(--elevated)] rounded animate-pulse" />
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-16 bg-[var(--elevated)] rounded animate-pulse" />
-          <div className="h-8 w-20 bg-[var(--elevated)] rounded animate-pulse" />
-          <div className="h-8 w-20 bg-[#4F46E5]/40 rounded animate-pulse" />
-        </div>
-      </div>
-      <div className="flex-1 flex">
-        <div className="w-60 bg-[var(--surface)] border-r border-[var(--border-subtle)] p-4 space-y-3 shrink-0">
-          <div className="h-7 w-full bg-[var(--elevated)] rounded animate-pulse" />
-          <div className="h-16 w-full bg-[var(--elevated)] rounded animate-pulse" />
-          <div className="h-16 w-full bg-[var(--elevated)] rounded animate-pulse" />
-          <div className="h-16 w-full bg-[var(--elevated)] rounded animate-pulse" />
-        </div>
-        <div className="flex-1 flex items-center justify-center bg-[var(--canvas)]">
-          <div className="flex items-center gap-2.5 text-[var(--text-tertiary)] text-[14px]">
-            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            <span>Loading workflow canvas...</span>
-          </div>
-        </div>
-        <div className="w-72 bg-[var(--surface)] border-l border-[var(--border-subtle)] p-4 space-y-3 shrink-0">
-          <div className="h-6 w-28 bg-[var(--elevated)] rounded animate-pulse" />
-          <div className="h-24 w-full bg-[var(--elevated)] rounded animate-pulse" />
-          <div className="h-12 w-full bg-[var(--elevated)] rounded animate-pulse" />
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── Error state ────────────────────────────────────────────────────────────
-  const ErrorState = () => (
-    <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-[var(--canvas)] text-center">
-      <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 mb-4">
-        <AlertTriangleIcon className="w-6 h-6 stroke-[1.5]" />
-      </div>
-      <h3 className="text-[18px] font-semibold text-[var(--text-primary)] tracking-tight mb-1">
-        Unable to load workflow
-      </h3>
-      <p className="text-[14px] text-[var(--text-secondary)] max-w-sm mb-6 leading-relaxed">
-        {error ?? "We encountered an issue loading this workflow."}
-      </p>
-      <div className="flex items-center gap-3">
-        <Link
-          href="/workflows"
-          className="h-9 px-4 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--elevated)] text-[14px] font-medium text-[var(--text-primary)] transition-colors"
-        >
-          Back to Workflows
-        </Link>
-        <button
-          type="button"
-          onClick={fetchWorkflowData}
-          className="h-9 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] text-white text-[14px] font-medium transition-colors flex items-center gap-2 cursor-pointer"
-        >
-          <RefreshIcon className="w-4 h-4 stroke-[1.5]" />
-          <span>Retry</span>
-        </button>
-      </div>
-    </div>
-  );
 
   return (
     <ProtectedRoute>
@@ -276,7 +282,7 @@ export default function WorkflowBuilderPage({ params }) {
         {isLoading ? (
           <LoadingSkeleton />
         ) : error ? (
-          <ErrorState />
+          <ErrorState error={error} onRetry={() => fetchWorkflowData()} />
         ) : (
           <WorkflowBuilder
             key={builderKey}

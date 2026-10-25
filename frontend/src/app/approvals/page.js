@@ -289,11 +289,24 @@ export default function ApprovalsPage() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  const [requestInputs, setRequestInputs] = useState({
+    isInitializing,
+    reload,
+    status,
+  });
+  if (
+    requestInputs.isInitializing !== isInitializing ||
+    requestInputs.reload !== reload ||
+    requestInputs.status !== status
+  ) {
+    setRequestInputs({ isInitializing, reload, status });
+    setLoading(true);
+    setLoadError(false);
+  }
+
   useEffect(() => {
     if (isInitializing) return undefined;
     let active = true;
-    setLoading(true);
-    setLoadError(false);
     getApprovals(status)
       .then((response) => {
         if (!active) return;
@@ -374,9 +387,9 @@ export default function ApprovalsPage() {
     page * PAGE_SIZE,
   );
 
-  useEffect(() => {
-    setPage((current) => Math.min(current, pageCount));
-  }, [pageCount]);
+  if (page > pageCount) {
+    setPage(pageCount);
+  }
 
   const confirmDecision = async () => {
     if (!decision || decisionLocked.current) return;

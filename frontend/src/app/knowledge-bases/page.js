@@ -197,10 +197,23 @@ function KnowledgeBasesContent() {
   useEffect(() => {
     document.title = "Knowledge Bases | Relay";
   }, []);
+  const [requestInputs, setRequestInputs] = useState({
+    isInitializing,
+    reload,
+    retry,
+  });
+  if (
+    requestInputs.isInitializing !== isInitializing ||
+    requestInputs.reload !== reload ||
+    requestInputs.retry !== retry
+  ) {
+    setRequestInputs({ isInitializing, reload, retry });
+    setLoading(true);
+  }
+
   useEffect(() => {
     if (isInitializing) return;
     let active = true;
-    setLoading(true);
     listKnowledgeBases()
       .then((data) => {
         if (active) {

@@ -253,22 +253,40 @@ function ConnectionsContent() {
   useEffect(() => {
     document.title = "Connections | Relay";
   }, []);
-  useEffect(() => {
-    const gmailStatus = searchParams.get("gmail");
+  const gmailStatus = searchParams.get("gmail");
+  const [handledGmailStatus, setHandledGmailStatus] = useState(null);
+  if (gmailStatus !== handledGmailStatus) {
+    setHandledGmailStatus(gmailStatus);
     if (gmailStatus === "connected") {
-      flash("Gmail connected successfully.");
-      refresh();
-      window.history.replaceState({}, "", "/connections");
+      setNotice("Gmail connected successfully.");
+      setReload((value) => value + 1);
     } else if (gmailStatus === "error") {
       setNotice("Unable to connect Gmail. Please try again.");
-      window.setTimeout(() => setNotice(""), 3500);
-      window.history.replaceState({}, "", "/connections");
     }
-  }, [searchParams, flash, refresh]);
+  }
+  useEffect(() => {
+    if (gmailStatus !== "connected" && gmailStatus !== "error") return;
+    window.setTimeout(
+      () => setNotice(""),
+      gmailStatus === "connected" ? 2800 : 3500,
+    );
+    window.history.replaceState({}, "", "/connections");
+  }, [gmailStatus]);
+  const [requestInputs, setRequestInputs] = useState({
+    isInitializing,
+    reload,
+  });
+  if (
+    requestInputs.isInitializing !== isInitializing ||
+    requestInputs.reload !== reload
+  ) {
+    setRequestInputs({ isInitializing, reload });
+    setLoading(true);
+  }
+
   useEffect(() => {
     if (isInitializing) return;
     let alive = true;
-    setLoading(true);
     listConnections()
       .then((data) => {
         if (alive) {
@@ -305,9 +323,9 @@ function ConnectionsContent() {
     (page - 1) * PAGE_SIZE,
     page * PAGE_SIZE,
   );
-  useEffect(() => {
-    setPage((current) => Math.min(current, pageCount));
-  }, [pageCount]);
+  if (page > pageCount) {
+    setPage(pageCount);
+  }
 
   const closeModal = useCallback(() => {
     if (!saving && !deleting) {

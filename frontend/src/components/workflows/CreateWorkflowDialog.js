@@ -53,15 +53,20 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
 
   const nameInputRef = useRef(null);
 
-  // Reset form when dialog opens
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (open) {
       setName("");
       setDescription("");
       setValidationError("");
       setApiError("");
       setIsSubmitting(false);
+    }
+  }
 
+  useEffect(() => {
+    if (open) {
       const timer = setTimeout(() => {
         if (nameInputRef.current) {
           nameInputRef.current.focus();

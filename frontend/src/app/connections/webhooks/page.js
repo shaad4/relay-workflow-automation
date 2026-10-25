@@ -130,10 +130,21 @@ export default function WebhooksPage() {
   useEffect(() => {
     document.title = "Webhooks | Relay";
   }, []);
+  const [requestInputs, setRequestInputs] = useState({
+    isInitializing,
+    reload,
+  });
+  if (
+    requestInputs.isInitializing !== isInitializing ||
+    requestInputs.reload !== reload
+  ) {
+    setRequestInputs({ isInitializing, reload });
+    setLoading(true);
+  }
+
   useEffect(() => {
     if (isInitializing) return;
     let alive = true;
-    setLoading(true);
     Promise.all([listWebhooks(), getWorkflows()])
       .then(([wh, wf]) => {
         if (!alive) return;
@@ -147,11 +158,15 @@ export default function WebhooksPage() {
       alive = false;
     };
   }, [isInitializing, reload]);
+  const [versionsWorkflowId, setVersionsWorkflowId] = useState(
+    form.workflow_id,
+  );
+  if (versionsWorkflowId !== form.workflow_id) {
+    setVersionsWorkflowId(form.workflow_id);
+    setVersions([]);
+  }
   useEffect(() => {
-    if (!form.workflow_id) {
-      setVersions([]);
-      return;
-    }
+    if (!form.workflow_id) return;
     let alive = true;
     getWorkflowVersions(form.workflow_id)
       .then((res) => {
@@ -168,7 +183,9 @@ export default function WebhooksPage() {
         if (published)
           setForm((f) => ({ ...f, workflow_version_id: published.id }));
       })
-      .catch(() => setVersions([]));
+      .catch(() => {
+        if (alive) setVersions([]);
+      });
     return () => {
       alive = false;
     };
@@ -190,9 +207,9 @@ export default function WebhooksPage() {
     (page - 1) * PAGE_SIZE,
     page * PAGE_SIZE,
   );
-  useEffect(() => {
-    setPage((current) => Math.min(current, pageCount));
-  }, [pageCount]);
+  if (page > pageCount) {
+    setPage(pageCount);
+  }
   const refresh = () => setReload((n) => n + 1);
   const flash = (text) => {
     setNotice(text);

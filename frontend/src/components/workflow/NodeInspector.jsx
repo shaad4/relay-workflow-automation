@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useContext } from "react";
+import {
+  useState,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useMemo,
+  useContext,
+} from "react";
 import {
   InspectorReadOnly,
   InspectorInput,
@@ -290,65 +297,81 @@ function WebhookConfig({
     is_active: true,
   });
 
-  const load = async () => {
-    // The create response is the only source of plaintext credentials. A list
-    // reload deliberately omits them, so don't replace the live creation
-    // result while its one-time secret is being shown.
-    if (dialog === "secret" && oneTimeSecret) return;
-    if (!workflowId) {
-      setLoading(false);
-      setError("Workflow context is unavailable.");
-      return;
+  const loadScope = JSON.stringify([
+    workflowId,
+    workflowVersionId,
+    nodeId,
+    config.webhook_id,
+  ]);
+  const [loadedScope, setLoadedScope] = useState(null);
+  if (loadedScope !== loadScope) {
+    setLoadedScope(loadScope);
+    if (!(dialog === "secret" && oneTimeSecret)) {
+      setLoading(Boolean(workflowId));
+      setError(workflowId ? "" : "Workflow context is unavailable.");
+      setWebhook(null);
     }
-    setLoading(true);
-    setError("");
-    setWebhook(null);
-    try {
-      const [raw, versionsResult] = await Promise.all([
-        listWebhooks(),
-        getWorkflowVersions(workflowId),
-      ]);
-      const versions = Array.isArray(versionsResult)
-        ? versionsResult
-        : versionsResult?.versions ||
-          versionsResult?.results ||
-          versionsResult?.data ||
-          [];
-      const currentVersion = versions.find(
-        (item) => String(item.id) === String(workflowVersionId),
-      );
-      setVersionStatus(currentVersion?.status || "");
-      const records = Array.isArray(raw)
-        ? raw
-        : raw?.webhooks || raw?.results || raw?.data || [];
-      // A trigger is associated with one specific webhook resource. Do not
-      // fall back to another webhook from the same workflow/version: copied
-      // or stale node config must never inherit a different version's trigger.
-      const forVersion = records.filter(
-        (item) =>
-          String(item.workflow_id) === String(workflowId) &&
-          String(item.workflow_version_id) === String(workflowVersionId),
-      );
-      const linked = forVersion.find(
-        (item) => String(item.id) === String(config.webhook_id),
-      );
-      // Older nodes may not have persisted webhook_id even though their
-      // version already owns a webhook. Associate automatically only when
-      // there is exactly one candidate for this exact version; never guess
-      // between multiple endpoints or cross into another version.
-      const match = linked || (forVersion.length === 1 ? forVersion[0] : null);
-      setWebhook(match);
-      if (match && String(match.id) !== String(config.webhook_id))
-        onAssociate(match);
-      else if (!match && config.webhook_id) onAssociate(null);
-    } catch {
-      setError("Unable to load webhook configuration.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  }
+  const isShowingSecret = useEffectEvent(
+    () => dialog === "secret" && oneTimeSecret,
+  );
+  const associateWebhook = useEffectEvent((match) => onAssociate(match));
   useEffect(() => {
-    load(); // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Keep the creation response while its one-time secret is visible.
+    if (isShowingSecret() || !workflowId) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const [raw, versionsResult] = await Promise.all([
+          listWebhooks(),
+          getWorkflowVersions(workflowId),
+        ]);
+        const versions = Array.isArray(versionsResult)
+          ? versionsResult
+          : versionsResult?.versions ||
+            versionsResult?.results ||
+            versionsResult?.data ||
+            [];
+        if (!active) return;
+        const currentVersion = versions.find(
+          (item) => String(item.id) === String(workflowVersionId),
+        );
+        setVersionStatus(currentVersion?.status || "");
+        const records = Array.isArray(raw)
+          ? raw
+          : raw?.webhooks || raw?.results || raw?.data || [];
+        // A trigger is associated with one specific webhook resource. Do not
+        // fall back to another webhook from the same workflow/version: copied
+        // or stale node config must never inherit a different version's trigger.
+        const forVersion = records.filter(
+          (item) =>
+            String(item.workflow_id) === String(workflowId) &&
+            String(item.workflow_version_id) === String(workflowVersionId),
+        );
+        const linked = forVersion.find(
+          (item) => String(item.id) === String(config.webhook_id),
+        );
+        // Older nodes may not have persisted webhook_id even though their
+        // version already owns a webhook. Associate automatically only when
+        // there is exactly one candidate for this exact version; never guess
+        // between multiple endpoints or cross into another version.
+        const match =
+          linked || (forVersion.length === 1 ? forVersion[0] : null);
+        setWebhook(match);
+        if (match && String(match.id) !== String(config.webhook_id))
+          associateWebhook(match);
+        else if (!match && config.webhook_id) associateWebhook(null);
+      } catch {
+        if (!active) return;
+        setError("Unable to load webhook configuration.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
   }, [workflowId, workflowVersionId, nodeId, config.webhook_id]);
   useEffect(() => {
     if (!dialog) return undefined;
@@ -1272,8 +1295,6 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
 
   useEffect(() => {
     let active = true;
-    setConnectionsLoading(true);
-    setConnectionsError(false);
     listConnections()
       .then((result) => {
         if (active) setConnections(connectionRowsOf(result));
@@ -3301,7 +3322,14 @@ export default function NodeInspector({
   const [approvalErrors, setApprovalErrors] = useState({});
   const [configurationErrors, setConfigurationErrors] = useState([]);
 
-  useEffect(() => {
+  const [draftScope, setDraftScope] = useState(null);
+  const scopeKey = JSON.stringify([
+    selectedNode?.id,
+    workflowVersionId,
+    user?.id,
+  ]);
+  if (draftScope !== scopeKey) {
+    setDraftScope(scopeKey);
     if (selectedNode) {
       setNodeName(selectedNode.data?.label ?? selectedNode.data?.name ?? "");
       const selectedConfig =
@@ -3320,19 +3348,20 @@ export default function NodeInspector({
         selectedConfig.timeout === undefined
       )
         selectedConfig.timeout = 10;
-      formDataRef.current = selectedConfig;
       setFormData(selectedConfig);
       setHasLocalChanges(false);
       setApprovalErrors({});
       setConfigurationErrors([]);
     } else {
       setNodeName("");
-      formDataRef.current = {};
       setFormData({});
       setHasLocalChanges(false);
       setConfigurationErrors([]);
     }
-  }, [selectedNode?.id, workflowVersionId, user?.id]); // Same node ids are reused across workflow versions.
+  }
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
 
   // Empty state
   if (!selectedNode) {

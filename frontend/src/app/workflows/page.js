@@ -140,9 +140,9 @@ function WorkflowsContent() {
     (page - 1) * PAGE_SIZE,
     page * PAGE_SIZE,
   );
-  useEffect(() => {
-    setPage((current) => Math.min(current, pageCount));
-  }, [pageCount]);
+  if (page > pageCount) {
+    setPage(pageCount);
+  }
 
   return (
     <div className="w-full min-w-0 space-y-6 font-sans">

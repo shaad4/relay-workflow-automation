@@ -39,17 +39,32 @@ export default function WebhookTestDialog({ open, webhook, onClose }) {
       : baseEndpoint;
   const needsSecret = webhook?.authentication_type !== "none";
 
+  const [sessionInputs, setSessionInputs] = useState({
+    isOpen,
+    webhookId: webhook?.id,
+    attempt,
+  });
+  if (
+    sessionInputs.isOpen !== isOpen ||
+    sessionInputs.webhookId !== webhook?.id ||
+    sessionInputs.attempt !== attempt
+  ) {
+    setSessionInputs({ isOpen, webhookId: webhook?.id, attempt });
+    if (isOpen && webhook?.id) {
+      setCopied("");
+      setStage("starting");
+      setSessionId("");
+      setRemaining(TEST_TIMEOUT_SECONDS);
+      setResult(null);
+      setError("");
+    }
+  }
+
   useEffect(() => {
     if (!isOpen || !webhook?.id) return undefined;
     const run = ++generation.current;
     let cancelled = false;
     const active = () => !cancelled && generation.current === run;
-    setCopied("");
-    setStage("starting");
-    setSessionId("");
-    setRemaining(TEST_TIMEOUT_SECONDS);
-    setResult(null);
-    setError("");
 
     const watch = async () => {
       try {
