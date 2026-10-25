@@ -3,9 +3,7 @@ from uuid import UUID
 
 import grpc
 
-from app.grpc.generated.execution import approval_lifecycle_pb2
-from app.grpc.generated.execution import approval_lifecycle_pb2_grpc
-
+from app.grpc.generated.execution import approval_lifecycle_pb2, approval_lifecycle_pb2_grpc
 
 EXECUTION_GRPC_URL = os.getenv("EXECUTION_GRPC_URL", "execution-service:50055")
 
@@ -16,7 +14,9 @@ class ExecutionGrpcClient:
         self.stub = approval_lifecycle_pb2_grpc.ExecutionInternalServiceStub(self.channel)
 
     async def delete_workflow_approvals(
-        self, workflow_id: UUID, workspace_id: UUID | str,
+        self,
+        workflow_id: UUID,
+        workspace_id: UUID | str,
     ) -> int:
         response = await self.stub.DeleteWorkflowApprovals(
             approval_lifecycle_pb2.DeleteWorkflowApprovalsRequest(

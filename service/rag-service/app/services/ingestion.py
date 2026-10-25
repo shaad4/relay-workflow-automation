@@ -1,4 +1,3 @@
-
 import logging
 import uuid
 
@@ -10,7 +9,6 @@ from app.parsers.document_processor import process_document
 from app.repositories.document import DocumentRepository
 from app.repositories.document_chunk import DocumentChunkRepository
 from app.storage.supabase_storage import SupabaseStorage
-
 
 logger = logging.getLogger(__name__)
 
@@ -30,18 +28,12 @@ class IngestionService:
         """Generate and validate embeddings for document chunks."""
 
         if not chunks:
-            raise ValueError(
-                "No chunks available for embedding"
-            )
+            raise ValueError("No chunks available for embedding")
 
-        embeddings = await self.embedding_provider.generate_embeddings(
-            chunks
-        )
+        embeddings = await self.embedding_provider.generate_embeddings(chunks)
 
         if len(embeddings) != len(chunks):
-            raise ValueError(
-                "Embedding count does not match chunk count"
-            )
+            raise ValueError("Embedding count does not match chunk count")
 
         return embeddings
 
@@ -111,41 +103,31 @@ class IngestionService:
             )
 
             if not chunks:
-                raise ValueError(
-                    "Document produced no text chunks"
-                )
+                raise ValueError("Document produced no text chunks")
 
             # 5. Transition parsing -> chunking
-            transitioned = await (
-                self.document_repository.transition_ingestion_status(
-                    document_id=document_id,
-                    workspace_id=workspace_id,
-                    expected_status="parsing",
-                    new_status="chunking",
-                )
+            transitioned = await self.document_repository.transition_ingestion_status(
+                document_id=document_id,
+                workspace_id=workspace_id,
+                expected_status="parsing",
+                new_status="chunking",
             )
 
             if not transitioned:
-                raise RuntimeError(
-                    "Document ingestion state changed during chunking"
-                )
+                raise RuntimeError("Document ingestion state changed during chunking")
 
             await self.db.commit()
 
             # 6. Transition chunking -> embedding
-            transitioned = await (
-                self.document_repository.transition_ingestion_status(
-                    document_id=document_id,
-                    workspace_id=workspace_id,
-                    expected_status="chunking",
-                    new_status="embedding",
-                )
+            transitioned = await self.document_repository.transition_ingestion_status(
+                document_id=document_id,
+                workspace_id=workspace_id,
+                expected_status="chunking",
+                new_status="embedding",
             )
 
             if not transitioned:
-                raise RuntimeError(
-                    "Document ingestion state changed during embedding"
-                )
+                raise RuntimeError("Document ingestion state changed during embedding")
 
             await self.db.commit()
 
@@ -166,9 +148,7 @@ class IngestionService:
             )
 
             if not completed:
-                raise RuntimeError(
-                    "Document ingestion state changed during completion"
-                )
+                raise RuntimeError("Document ingestion state changed during completion")
 
             await self.db.commit()
 
@@ -200,8 +180,7 @@ class IngestionService:
 
                 if not failed:
                     logger.warning(
-                        "Document %s was not marked failed "
-                        "because its status already changed",
+                        "Document %s was not marked failed because its status already changed",
                         document_id,
                     )
 

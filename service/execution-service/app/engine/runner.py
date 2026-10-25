@@ -4,41 +4,34 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 
-from app.engine.error_classifier import classify_error, action_failure
 from app.db.database import AsyncSessionLocal
+from app.engine.approval_status import HumanApprovalStatus
 from app.engine.context import ExecutionContext
+from app.engine.error_classifier import action_failure, classify_error
+from app.engine.exceptions import (
+    ExecutionCancellationRequested,
+    HumanApprovalRequired,
+)
 from app.engine.executor import SequentialExecutor
-from app.engine.exceptions import HumanApprovalRequired, ActionExecutionFailed, ExecutionCancellationRequested
 from app.engine.graph import ExecutionGraph
+from app.engine.handlers.ai_decision import execute_ai_decision
+from app.engine.handlers.ai_generate import execute_ai_generate
+from app.engine.handlers.condition import evaluate_condition
+from app.engine.handlers.rag_search import execute_rag_search
 from app.engine.resolver import ExpressionResolver
+from app.engine.retry import (
+    RETRYABLE_STATUS_CODES,
+    SAFE_HTTP_METHODS,
+    execute_with_retry,
+)
+from app.engine.status import ExecutionStatus
 from app.engine.step_status import ExecutionStepStatus
 from app.grpc.action_client import ActionClient
 from app.grpc.workflow_client import WorkflowClient
-from app.models.execution_step import ExecutionStep
-from app.engine.approval_status import HumanApprovalStatus
-from app.models.human_approval import HumanApproval
 from app.models.execution import Execution
+from app.models.execution_step import ExecutionStep
+from app.models.human_approval import HumanApproval
 from app.utils.payload_sanitizer import sanitize_payload
-from app.engine.handlers.rag_search import execute_rag_search
-from app.engine.handlers.ai_decision import execute_ai_decision
-from app.engine.handlers.condition import evaluate_condition
-from app.engine.handlers.ai_generate import execute_ai_generate
-from app.engine.status import ExecutionStatus
-
-from app.engine.retry import (
-    execute_with_retry,
-    RETRYABLE_STATUS_CODES,
-    SAFE_HTTP_METHODS,
-)
-
-from app.ai.exceptions import (
-    AIDecisionValidationError,
-    AIAuthenticationError,
-    AIRateLimitError,
-    AITimeoutError,
-    AIServiceUnavailableError,
-    AIResponseError,
-)
 
 
 async def _commit_session(session, add=None, refresh=None):
@@ -54,6 +47,7 @@ async def _commit_session(session, add=None, refresh=None):
     except Exception:
         await session.rollback()
         raise
+
 
 async def mark_step_failed(
     execution_step_id,
@@ -77,15 +71,15 @@ async def mark_step_failed(
         step.status = ExecutionStepStatus.FAILED
         step.attempt = attempts_used
         step.completed_at = completed_at
-        step.error = sanitize_payload(error_message if isinstance(error_message, dict) else {"message": error_message})
+        step.error = sanitize_payload(
+            error_message if isinstance(error_message, dict) else {"message": error_message}
+        )
 
         if step.started_at:
-            step.duration_ms = int(
-                (completed_at - step.started_at).total_seconds()
-                * 1000
-            )
+            step.duration_ms = int((completed_at - step.started_at).total_seconds() * 1000)
 
         await _commit_session(session)
+
 
 async def check_execution_cancellation(execution_id):
     async with AsyncSessionLocal() as session:
@@ -99,9 +93,8 @@ async def check_execution_cancellation(execution_id):
         cancel_requested_at = result.scalar_one_or_none()
 
         if cancel_requested_at is not None:
-            raise ExecutionCancellationRequested(
-                "Execution cancellation requested"
-            )
+            raise ExecutionCancellationRequested("Execution cancellation requested")
+
 
 async def run_execution(
     execution_id,
@@ -136,20 +129,15 @@ async def run_execution(
             )
 
             if execution is None:
-                raise ValueError(
-                    "Execution not found"
-                )
+                raise ValueError("Execution not found")
 
             if execution.workspace_id != UUID(workspace_id):
-                raise ValueError(
-                    "Execution does not belong to workspace"
-                )
+                raise ValueError("Execution does not belong to workspace")
 
             if execution.workflow_name is None:
                 execution.workflow_name = workflow_name
 
                 await _commit_session(session)
-
 
         nodes = json.loads(response.nodes_json)
         edges = json.loads(response.edges_json)
@@ -173,18 +161,13 @@ async def run_execution(
         action_nodes = executor.get_action_nodes()
 
         if resume_from_sequence is not None:
-            raise ValueError(
-                "Sequence-based resume is deprecated. "
-                "Use start_node_id instead."
-            )
+            raise ValueError("Sequence-based resume is deprecated. Use start_node_id instead.")
 
         if start_node_id is not None:
             current_node = graph.get_node(start_node_id)
 
             if current_node is None:
-                raise ValueError(
-                    f"Resume node not found: {start_node_id}"
-                )
+                raise ValueError(f"Resume node not found: {start_node_id}")
         else:
             current_node = executor.get_start_node()
 
@@ -195,9 +178,7 @@ async def run_execution(
                         func.max(ExecutionStep.sequence),
                         0,
                     )
-                ).where(
-                    ExecutionStep.execution_id == execution_id
-                )
+                ).where(ExecutionStep.execution_id == execution_id)
             )
 
             sequence = result.scalar_one() + 1
@@ -205,10 +186,7 @@ async def run_execution(
         visited: set[str] = set()
         execution_order: list[dict] = []
 
-
-
         while current_node is not None:
-
             await check_execution_cancellation(execution_id)
 
             execution_step_id = None
@@ -216,14 +194,11 @@ async def run_execution(
             node_id = node["node_id"]
 
             if node_id in visited:
-                raise ValueError(
-                    f"Cycle detected in workflow at node: {node_id}"
-                )
+                raise ValueError(f"Cycle detected in workflow at node: {node_id}")
 
             visited.add(node_id)
             execution_order.append(node)
 
-            
             configuration = node.get("configuration", {})
 
             # Determine node type before creating the step.
@@ -265,23 +240,15 @@ async def run_execution(
 
                 await _commit_session(session)
 
-
             # Build an audit-only input snapshot.
             # Keep the original execution data unchanged.
             if node_type.startswith("trigger."):
-                node_input = (
-                    context.to_dict().get("trigger", {})
-                )
+                node_input = context.to_dict().get("trigger", {})
             else:
-                node_input = resolver.resolve(
-                    configuration.copy()
-                )
+                node_input = resolver.resolve(configuration.copy())
 
             # Hide HTTP headers in execution history.
-            if (
-                node_type == "action.http_request"
-                and isinstance(node_input, dict)
-            ):
+            if node_type == "action.http_request" and isinstance(node_input, dict):
                 node_input = {
                     **node_input,
                     "headers": "[REDACTED]",
@@ -293,8 +260,6 @@ async def run_execution(
                 execution_step = await session.get(ExecutionStep, execution_step_id)
                 execution_step.input = safe_input
                 await _commit_session(session)
-
-
 
             if node_type.startswith("trigger."):
                 # Trigger nodes do not execute an action.
@@ -312,10 +277,7 @@ async def run_execution(
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
-                            (
-                                completed_at - execution_step.started_at
-                            ).total_seconds()
-                            * 1000
+                            (completed_at - execution_step.started_at).total_seconds() * 1000
                         )
 
                     await _commit_session(session)
@@ -325,10 +287,7 @@ async def run_execution(
 
                 continue
 
-            if (
-                node_type == "action.http_request"
-                and isinstance(configuration.get("headers"), str)
-            ):
+            if node_type == "action.http_request" and isinstance(configuration.get("headers"), str):
                 headers = {}
 
                 for line in configuration["headers"].splitlines():
@@ -341,7 +300,6 @@ async def run_execution(
                 configuration["headers"] = headers
 
             resolved_configuration = resolver.resolve(configuration)
-
 
             # Execute RAG Search node
             if node_type == "ai.rag_search":
@@ -356,7 +314,6 @@ async def run_execution(
                     operation=rag_search_once,
                     node_id=node_id,
                 )
-
 
                 # Store output for downstream nodes
                 context.set_node_output(
@@ -373,19 +330,14 @@ async def run_execution(
                         execution_step_id,
                     )
 
-                    execution_step.status = (
-                        ExecutionStepStatus.COMPLETED
-                    )
+                    execution_step.status = ExecutionStepStatus.COMPLETED
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
                     execution_step.attempt = attempts_used
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
-                            (
-                                completed_at
-                                - execution_step.started_at
-                            ).total_seconds() * 1000
+                            (completed_at - execution_step.started_at).total_seconds() * 1000
                         )
 
                     await _commit_session(session)
@@ -396,9 +348,9 @@ async def run_execution(
 
                 continue
 
-
             # Execute AI Decision node
             if node_type == "ai.decision":
+
                 async def decision_once():
                     async with AsyncSessionLocal() as session:
                         return await execute_ai_decision(
@@ -411,7 +363,6 @@ async def run_execution(
                     operation=decision_once,
                     node_id=node_id,
                 )
-
 
                 # Store validated AI output for downstream nodes
                 context.set_node_output(
@@ -428,9 +379,7 @@ async def run_execution(
                         execution_step_id,
                     )
 
-                    execution_step.status = (
-                        ExecutionStepStatus.COMPLETED
-                    )
+                    execution_step.status = ExecutionStepStatus.COMPLETED
 
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
@@ -438,10 +387,7 @@ async def run_execution(
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
-                            (
-                                completed_at
-                                - execution_step.started_at
-                            ).total_seconds() * 1000
+                            (completed_at - execution_step.started_at).total_seconds() * 1000
                         )
 
                     await _commit_session(session)
@@ -451,8 +397,6 @@ async def run_execution(
                 sequence += 1
 
                 continue
-
-
 
             # Execute AI Generate node
             if node_type == "ai.generate":
@@ -470,7 +414,6 @@ async def run_execution(
                     node_id=node_id,
                 )
 
-
                 # Store generated output for downstream nodes
                 context.set_node_output(
                     node_id,
@@ -487,13 +430,9 @@ async def run_execution(
                     )
 
                     if execution_step is None:
-                        raise RuntimeError(
-                            "AI Generate execution step not found"
-                        )
+                        raise RuntimeError("AI Generate execution step not found")
 
-                    execution_step.status = (
-                        ExecutionStepStatus.COMPLETED
-                    )
+                    execution_step.status = ExecutionStepStatus.COMPLETED
 
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
@@ -501,10 +440,7 @@ async def run_execution(
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
-                            (
-                                completed_at
-                                - execution_step.started_at
-                            ).total_seconds() * 1000
+                            (completed_at - execution_step.started_at).total_seconds() * 1000
                         )
 
                     await _commit_session(session)
@@ -515,14 +451,10 @@ async def run_execution(
 
                 continue
 
-
-
             # Execute Condition node
             if node_type == "logic.condition":
                 # Read the resolved value
-                selected_condition = evaluate_condition(
-                    resolved_configuration
-                )
+                selected_condition = evaluate_condition(resolved_configuration)
 
                 # Find the matching outgoing edge
                 next_node = executor.get_next_node(
@@ -531,9 +463,7 @@ async def run_execution(
                 )
 
                 if next_node is None:
-                    raise ValueError(
-                        "Condition node has no matching branch"
-                    )
+                    raise ValueError("Condition node has no matching branch")
 
                 # Store the selected branch
                 result = {
@@ -556,19 +486,14 @@ async def run_execution(
                         execution_step_id,
                     )
 
-                    execution_step.status = (
-                        ExecutionStepStatus.COMPLETED
-                    )
+                    execution_step.status = ExecutionStepStatus.COMPLETED
 
                     execution_step.output = sanitize_payload(result)
                     execution_step.completed_at = completed_at
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
-                            (
-                                completed_at
-                                - execution_step.started_at
-                            ).total_seconds() * 1000
+                            (completed_at - execution_step.started_at).total_seconds() * 1000
                         )
 
                     await _commit_session(session)
@@ -579,16 +504,10 @@ async def run_execution(
 
                 continue
 
-
-
-
             # Human Approval does not use Action Service or a connection.
             if node_type == "human.approval":
-
                 approver_user_id = configuration.get("approver_user_id")
-                message = resolver.resolve(
-                    configuration.get("message", "")
-                )
+                message = resolver.resolve(configuration.get("message", ""))
                 timeout_minutes = configuration.get("timeout_minutes")
 
                 if not approver_user_id:
@@ -597,9 +516,7 @@ async def run_execution(
                     )
 
                 if not message:
-                    raise ValueError(
-                        f"Human approval node {node['node_id']} has no message"
-                    )
+                    raise ValueError(f"Human approval node {node['node_id']} has no message")
 
                 timeout_at = None
 
@@ -617,11 +534,17 @@ async def run_execution(
                     execution = result.scalar_one_or_none()
                     if execution is None:
                         raise ValueError(f"Execution {execution_id} not found")
-                    if execution.cancel_requested_at is not None or execution.status == ExecutionStatus.CANCELLED:
+                    if (
+                        execution.cancel_requested_at is not None
+                        or execution.status == ExecutionStatus.CANCELLED
+                    ):
                         raise ExecutionCancellationRequested("Execution cancellation requested")
                     if execution.status != ExecutionStatus.RUNNING:
                         raise ValueError("Execution is no longer running")
-                    if execution.lease_expires_at is not None and execution.lease_expires_at <= datetime.now(timezone.utc):
+                    if (
+                        execution.lease_expires_at is not None
+                        and execution.lease_expires_at <= datetime.now(timezone.utc)
+                    ):
                         raise ValueError("Execution lease expired before approval handoff")
 
                     execution_step = await session.get(ExecutionStep, execution_step_id)
@@ -630,9 +553,7 @@ async def run_execution(
                     execution.heartbeat_at = None
                     execution.lease_expires_at = None
 
-                    execution_step.status = (
-                        ExecutionStepStatus.WAITING_FOR_APPROVAL
-                    )
+                    execution_step.status = ExecutionStepStatus.WAITING_FOR_APPROVAL
 
                     execution.context = context.to_dict()
 
@@ -653,16 +574,12 @@ async def run_execution(
                         add=approval,
                     )
 
-
                 raise HumanApprovalRequired(node["node_id"])
-
 
             connection_id = resolved_configuration.get("connection_id")
 
             if not connection_id:
-                raise ValueError(
-                    f"Action node {node['node_id']} has no connection_id configured"
-                )
+                raise ValueError(f"Action node {node['node_id']} has no connection_id configured")
 
             if node_type == "action.http_request":
                 provider, action = "http", "request"
@@ -675,17 +592,12 @@ async def run_execution(
                 provider, action = "", "refund_payment"
 
             else:
-                raise ValueError(
-                    f"Unsupported action node type: {node_type}"
-                )
-
+                raise ValueError(f"Unsupported action node type: {node_type}")
 
             action_config = {}
-            
+
             if node_type == "action.refund":
-                resolved_configuration["idempotency_key"] = (
-                    f"relay:refund:{execution_id}:{node_id}"
-                )
+                resolved_configuration["idempotency_key"] = f"relay:refund:{execution_id}:{node_id}"
 
             if node_type == "action.http_request":
                 timeout = resolved_configuration.get("timeout", 10)
@@ -695,13 +607,10 @@ async def run_execution(
                     or not isinstance(timeout, (int, float))
                     or not 1 <= timeout <= 120
                 ):
-                    raise ValueError(
-                        "HTTP timeout must be between 1 and 120 seconds"
-                    )
+                    raise ValueError("HTTP timeout must be between 1 and 120 seconds")
 
                 action_config["timeout"] = timeout
 
-            
             async def execute_action_once():
                 response = await action_client.execute_action(
                     workspace_id=workspace_id,
@@ -719,26 +628,20 @@ async def run_execution(
                     return response
 
                 try:
-                    payload = json.loads(
-                        response.result_json or "{}"
-                    )
+                    payload = json.loads(response.result_json or "{}")
                     status_code = payload.get("status_code")
                 except (ValueError, TypeError, AttributeError):
                     status_code = None
 
-                method = str(
-                    resolved_configuration.get("method", "GET")
-                ).upper()
+                method = str(resolved_configuration.get("method", "GET")).upper()
 
-                retryable = (
-                    method in SAFE_HTTP_METHODS
-                    and (
-                        status_code in RETRYABLE_STATUS_CODES
-                        or response.error in {
-                            "HTTP_TIMEOUT",
-                            "HTTP_CONNECTION_ERROR",
-                        }
-                    )
+                retryable = method in SAFE_HTTP_METHODS and (
+                    status_code in RETRYABLE_STATUS_CODES
+                    or response.error
+                    in {
+                        "HTTP_TIMEOUT",
+                        "HTTP_CONNECTION_ERROR",
+                    }
                 )
 
                 if retryable:
@@ -750,23 +653,15 @@ async def run_execution(
                 response, attempts_used = await execute_with_retry(
                     operation=execute_action_once,
                     node_id=node_id,
-                    method=str(
-                        resolved_configuration.get("method", "GET")
-                    ),
+                    method=str(resolved_configuration.get("method", "GET")),
                 )
             else:
                 response = await execute_action_once()
                 attempts_used = 1
 
-
-
             if response.success:
                 try:
-                    result = (
-                        json.loads(response.result_json)
-                        if response.result_json
-                        else {}
-                    )
+                    result = json.loads(response.result_json) if response.result_json else {}
                 except (json.JSONDecodeError, TypeError):
                     result = {}
 
@@ -776,10 +671,7 @@ async def run_execution(
                 # HTTP connector results wrap the API payload under `body`.
                 # Expose object fields at the node root as convenient aliases
                 # while retaining status_code, headers, body, and success.
-                if (
-                    node_type == "action.http_request"
-                    and isinstance(result.get("body"), dict)
-                ):
+                if node_type == "action.http_request" and isinstance(result.get("body"), dict):
                     result = {
                         **result["body"],
                         **result,
@@ -789,7 +681,6 @@ async def run_execution(
                     node["node_id"],
                     result,
                 )
-
 
                 # Mark action step as completed
                 completed_at = datetime.now(timezone.utc)
@@ -807,10 +698,7 @@ async def run_execution(
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
-                            (
-                                completed_at - execution_step.started_at
-                            ).total_seconds()
-                            * 1000
+                            (completed_at - execution_step.started_at).total_seconds() * 1000
                         )
 
                     await _commit_session(session)
@@ -832,14 +720,13 @@ async def run_execution(
                     execution_step.attempt = attempts_used
                     failure = action_failure(node_id, response, attempts_used=attempts_used)
                     failure.failed_node_type = node_type
-                    execution_step.error = sanitize_payload(classify_error(failure, node_id, node_type))
+                    execution_step.error = sanitize_payload(
+                        classify_error(failure, node_id, node_type)
+                    )
 
                     if execution_step.started_at:
                         execution_step.duration_ms = int(
-                            (
-                                completed_at - execution_step.started_at
-                            ).total_seconds()
-                            * 1000
+                            (completed_at - execution_step.started_at).total_seconds() * 1000
                         )
 
                     await _commit_session(session)
@@ -862,7 +749,6 @@ async def run_execution(
         # The approval transaction already saved context and the waiting step.
         raise
     except Exception as exc:
-
         # Attach only node context; finalization uses the same safe classifier.
         exc.node_id = node_id
         exc.failed_node_type = node_type

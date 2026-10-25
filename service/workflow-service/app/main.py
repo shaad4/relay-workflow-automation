@@ -1,13 +1,12 @@
-from app.routes.dashboard import router as dashboard_router
-from contextlib import asynccontextmanager
-
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.dependencies import get_current_identity
 from app.grpc.server import start_grpc_server
+from app.routes.dashboard import router as dashboard_router
 from app.routes.workflows import router as workflows_router
 
 
@@ -36,9 +35,8 @@ elif "127.0.0.1" in frontend_url:
 
 @app.middleware("http")
 async def enforce_cookie_origin(request: Request, call_next):
-    if (
-        request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"}
-        and request.cookies.get("relay_access_token")
+    if request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"} and request.cookies.get(
+        "relay_access_token"
     ):
         origin = request.headers.get("origin")
         fetch_site = request.headers.get("sec-fetch-site")
@@ -50,6 +48,7 @@ async def enforce_cookie_origin(request: Request, call_next):
                 content={"detail": "Untrusted request origin"},
             )
     return await call_next(request)
+
 
 app.include_router(workflows_router)
 
@@ -68,5 +67,6 @@ async def protected_test(
         "user_id": identity["user_id"],
         "workspace_id": identity["workspace_id"],
     }
+
 
 app.include_router(dashboard_router)

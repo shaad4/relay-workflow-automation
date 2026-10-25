@@ -1,4 +1,3 @@
-
 """Safe failure descriptions. This module never makes retry decisions."""
 
 import json
@@ -7,14 +6,13 @@ import grpc
 
 from app.ai.exceptions import (
     AIAuthenticationError,
-    AIRateLimitError,
-    AITimeoutError,
-    AIServiceUnavailableError,
-    AIResponseError,
     AIDecisionValidationError,
+    AIRateLimitError,
+    AIResponseError,
+    AIServiceUnavailableError,
+    AITimeoutError,
 )
 from app.engine.exceptions import ActionExecutionFailed
-
 
 HTTP = {
     400: (
@@ -62,21 +60,11 @@ HTTP = {
 
 TRANSPORT = {
     "HTTP_TIMEOUT": "The HTTP request timed out.",
-    "HTTP_CONNECT_TIMEOUT": (
-        "The connection to the external API timed out."
-    ),
-    "HTTP_READ_TIMEOUT": (
-        "The external API took too long to respond."
-    ),
-    "HTTP_CONNECTION_REFUSED": (
-        "The external API refused the connection."
-    ),
-    "HTTP_DNS_FAILURE": (
-        "The external API hostname could not be resolved."
-    ),
-    "HTTP_CONNECTION_ERROR": (
-        "Relay could not connect to the external API."
-    ),
+    "HTTP_CONNECT_TIMEOUT": ("The connection to the external API timed out."),
+    "HTTP_READ_TIMEOUT": ("The external API took too long to respond."),
+    "HTTP_CONNECTION_REFUSED": ("The external API refused the connection."),
+    "HTTP_DNS_FAILURE": ("The external API hostname could not be resolved."),
+    "HTTP_CONNECTION_ERROR": ("Relay could not connect to the external API."),
 }
 
 
@@ -155,11 +143,7 @@ def action_failure(
     exc.error_code = (
         category
         if category in TRANSPORT
-        else (
-            response.error
-            if response.error in TRANSPORT
-            else None
-        )
+        else (response.error if response.error in TRANSPORT else None)
     )
 
     exc.attempts_used = attempts_used
@@ -190,18 +174,12 @@ def classify_error(
         1,
     )
 
-    attempts = (
-        attempts
-        if type(attempts) is int and attempts > 0
-        else 1
-    )
+    attempts = attempts if type(attempts) is int and attempts > 0 else 1
 
     code = "EXECUTION_FAILED"
     message = "Node execution failed."
     temporary = False
-    suggestion = (
-        "Review the failed node configuration before trying again."
-    )
+    suggestion = "Review the failed node configuration before trying again."
 
     status = getattr(
         exc,
@@ -209,11 +187,7 @@ def classify_error(
         None,
     )
 
-    status = (
-        status
-        if type(status) is int and 100 <= status <= 599
-        else None
-    )
+    status = status if type(status) is int and 100 <= status <= 599 else None
 
     # Classify action failures.
     if isinstance(exc, ActionExecutionFailed):
@@ -221,7 +195,6 @@ def classify_error(
         message = "Action execution failed."
 
         if node_type == "action.http_request":
-
             if status is not None:
                 suffix, suggestion = HTTP.get(
                     status,
@@ -232,18 +205,13 @@ def classify_error(
                 )
 
                 code = "HTTP_" + suffix
-                message = (
-                    f"The external API returned HTTP {status}."
-                )
+                message = f"The external API returned HTTP {status}."
 
             elif getattr(exc, "error_code", None) in TRANSPORT:
                 code = exc.error_code
                 message = TRANSPORT[code]
 
-                suggestion = (
-                    "Check the endpoint and network availability "
-                    "before trying again."
-                )
+                suggestion = "Check the endpoint and network availability before trying again."
 
             temporary = bool(exc.retryable)
 
@@ -255,7 +223,6 @@ def classify_error(
         ai_temporary,
         ai_suggestion,
     ) in AI:
-
         if isinstance(exc, kind):
             code = ai_code
             message = ai_message
@@ -264,28 +231,18 @@ def classify_error(
             break
 
     # Classify invalid AI node configurations.
-    if (
-        node_type
-        and node_type.startswith("ai.")
-        and isinstance(exc, ValueError)
-    ):
+    if node_type and node_type.startswith("ai.") and isinstance(exc, ValueError):
         code = "AI_INVALID_CONFIGURATION"
         message = "The AI node configuration is invalid."
 
-        suggestion = (
-            "Review the provider, model, input mappings, "
-            "and output configuration."
-        )
+        suggestion = "Review the provider, model, input mappings, and output configuration."
 
     # Classify RAG retrieval failures.
     if node_type and "rag" in node_type:
         cause = exc
         seen = set()
 
-        while (
-            cause is not None
-            and id(cause) not in seen
-        ):
+        while cause is not None and id(cause) not in seen:
             seen.add(id(cause))
 
             if isinstance(cause, grpc.RpcError):
@@ -329,10 +286,7 @@ def classify_error(
                 suggestion = (
                     "Try again after the retrieval service recovers."
                     if temporary
-                    else (
-                        "Check knowledge base access "
-                        "and retrieval configuration."
-                    )
+                    else ("Check knowledge base access and retrieval configuration.")
                 )
 
                 break
@@ -344,10 +298,7 @@ def classify_error(
                 code = "RAG_INVALID_CONFIGURATION"
                 message = "The retrieval configuration is invalid."
 
-                suggestion = (
-                    "Check the knowledge base, query, "
-                    "and result limit."
-                )
+                suggestion = "Check the knowledge base, query, and result limit."
 
                 if str(exc) in {
                     "RAG query cannot be empty",
@@ -356,18 +307,13 @@ def classify_error(
                     "RAG query contains unresolved expressions",
                 }:
                     code = "RAG_INVALID_QUERY"
-                    message = (
-                        "The retrieval query is empty or too long."
-                    )
+                    message = "The retrieval query is empty or too long."
 
     # Determine whether the failure is temporary.
     is_temporary = temporary
 
     if node_type == "action.http_request":
-        is_temporary = (
-            status in {408, 429, 500, 502, 503, 504}
-            or code in TRANSPORT
-        )
+        is_temporary = status in {408, 429, 500, 502, 503, 504} or code in TRANSPORT
 
     from app.engine.retry import MAX_ATTEMPTS
 
@@ -389,10 +335,7 @@ def classify_error(
     if node_type:
         result["node_type"] = node_type
 
-    if (
-        status is not None
-        and node_type == "action.http_request"
-    ):
+    if status is not None and node_type == "action.http_request":
         result["status_code"] = status
 
     return result

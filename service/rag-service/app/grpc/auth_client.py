@@ -4,7 +4,6 @@ import grpc
 
 from app.grpc.generated.auth import auth_pb2, auth_pb2_grpc
 
-
 AUTH_GRPC_TARGET = os.getenv(
     "AUTH_GRPC_TARGET",
     "auth-service:50051",
@@ -13,18 +12,12 @@ AUTH_GRPC_TARGET = os.getenv(
 
 class AuthGrpcClient:
     def __init__(self):
-        self.channel = grpc.aio.insecure_channel(
-            AUTH_GRPC_TARGET
-        )
+        self.channel = grpc.aio.insecure_channel(AUTH_GRPC_TARGET)
 
-        self.stub = auth_pb2_grpc.AuthInternalServiceStub(
-            self.channel
-        )
+        self.stub = auth_pb2_grpc.AuthInternalServiceStub(self.channel)
 
     async def validate_token(self, token: str):
-        request = auth_pb2.ValidateTokenRequest(
-            access_token=token
-        )
+        request = auth_pb2.ValidateTokenRequest(access_token=token)
 
         return await self.stub.ValidateToken(
             request,

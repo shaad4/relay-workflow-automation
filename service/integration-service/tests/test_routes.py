@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.dependencies import get_current_identity
 from app.routes import public_webhooks, webhooks
 
-
 WORKSPACE_ID = uuid4()
 WEBHOOK_ID = uuid4()
 WORKFLOW_ID = uuid4()
@@ -108,20 +107,26 @@ def test_create_webhook_validates_workspace_and_returns_secret(client, monkeypat
         return created, secret
 
     monkeypatch.setattr(webhooks, "create_webhook", create)
-    response = client.post("/webhooks/", json={
-        "workflow_id": str(WORKFLOW_ID),
-        "workflow_version_id": str(VERSION_ID),
-        "name": "Orders",
-        "event_name": "order.created",
-        "method": "POST",
-        "authentication_type": "secret",
-    })
+    response = client.post(
+        "/webhooks/",
+        json={
+            "workflow_id": str(WORKFLOW_ID),
+            "workflow_version_id": str(VERSION_ID),
+            "name": "Orders",
+            "event_name": "order.created",
+            "method": "POST",
+            "authentication_type": "secret",
+        },
+    )
     assert response.status_code == 201
     assert response.json()["secret"] == secret
     assert response.json()["public_token"] == "public-token"
 
 
-@pytest.mark.parametrize("exception, expected", [("NOT_FOUND", 404), ("DEADLINE_EXCEEDED", 504), ("UNAVAILABLE", 503), ("OTHER", 502)])
+@pytest.mark.parametrize(
+    "exception, expected",
+    [("NOT_FOUND", 404), ("DEADLINE_EXCEEDED", 504), ("UNAVAILABLE", 503), ("OTHER", 502)],
+)
 def test_create_webhook_maps_workflow_service_errors(client, monkeypatch, exception, expected):
     import grpc
 
@@ -140,10 +145,17 @@ def test_create_webhook_maps_workflow_service_errors(client, monkeypatch, except
         raise RpcError()
 
     monkeypatch.setattr(webhooks, "create_webhook", fail)
-    response = client.post("/webhooks/", json={
-        "workflow_id": str(WORKFLOW_ID), "workflow_version_id": str(VERSION_ID),
-        "name": "Orders", "event_name": "order.created", "method": "POST", "authentication_type": "none",
-    })
+    response = client.post(
+        "/webhooks/",
+        json={
+            "workflow_id": str(WORKFLOW_ID),
+            "workflow_version_id": str(VERSION_ID),
+            "name": "Orders",
+            "event_name": "order.created",
+            "method": "POST",
+            "authentication_type": "none",
+        },
+    )
     assert response.status_code == expected
 
 
@@ -154,10 +166,17 @@ def test_create_webhook_rejects_unpublished_version(client, monkeypatch):
         raise UnpublishedWorkflowVersionError("Webhook workflow version must be published")
 
     monkeypatch.setattr(webhooks, "create_webhook", fail)
-    response = client.post("/webhooks/", json={
-        "workflow_id": str(WORKFLOW_ID), "workflow_version_id": str(VERSION_ID),
-        "name": "Orders", "event_name": "order.created", "method": "POST", "authentication_type": "none",
-    })
+    response = client.post(
+        "/webhooks/",
+        json={
+            "workflow_id": str(WORKFLOW_ID),
+            "workflow_version_id": str(VERSION_ID),
+            "name": "Orders",
+            "event_name": "order.created",
+            "method": "POST",
+            "authentication_type": "none",
+        },
+    )
     assert response.status_code == 409
 
 
@@ -168,10 +187,17 @@ def test_create_webhook_rejects_inactive_workflow(client, monkeypatch):
         raise InactiveWorkflowError("Workflow is inactive")
 
     monkeypatch.setattr(webhooks, "create_webhook", fail)
-    response = client.post("/webhooks/", json={
-        "workflow_id": str(WORKFLOW_ID), "workflow_version_id": str(VERSION_ID),
-        "name": "Orders", "event_name": "order.created", "method": "POST", "authentication_type": "none",
-    })
+    response = client.post(
+        "/webhooks/",
+        json={
+            "workflow_id": str(WORKFLOW_ID),
+            "workflow_version_id": str(VERSION_ID),
+            "name": "Orders",
+            "event_name": "order.created",
+            "method": "POST",
+            "authentication_type": "none",
+        },
+    )
     assert response.status_code == 409
 
 
@@ -244,8 +270,10 @@ def test_test_session_routes_handle_missing_webhook_and_workspace(client, monkey
     assert client.post(f"/webhooks/{WEBHOOK_ID}/test-sessions/").status_code == 404
 
     app = client.app
+
     async def invalid_identity():
         return {"workspace_id": "not-a-uuid"}
+
     app.dependency_overrides[get_current_identity] = invalid_identity
     assert client.post(f"/webhooks/{WEBHOOK_ID}/test-sessions/").status_code == 401
     assert client.get(f"/webhooks/{WEBHOOK_ID}/test-sessions/{uuid4()}/").status_code == 401
@@ -254,6 +282,7 @@ def test_test_session_routes_handle_missing_webhook_and_workspace(client, monkey
 def async_return(value):
     async def result(*_args, **_kwargs):
         return value
+
     return result
 
 
@@ -272,22 +301,48 @@ def test_public_webhook_not_found_inactive_and_auth_errors(client, monkeypatch):
     assert client.post("/hooks/public-token", json={}).status_code == 401
     assert client.post("/hooks/public-token/test", json={}).status_code == 401
     monkeypatch.setattr(public_webhooks, "verify_webhook_secret", lambda **_kwargs: False)
-    assert client.post("/hooks/public-token", json={}, headers={"X-Relay-Secret": "wrong"}).status_code == 401
-    assert client.post("/hooks/public-token/test", json={}, headers={"X-Relay-Secret": "wrong"}).status_code == 401
+    assert (
+        client.post("/hooks/public-token", json={}, headers={"X-Relay-Secret": "wrong"}).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/hooks/public-token/test", json={}, headers={"X-Relay-Secret": "wrong"}
+        ).status_code
+        == 401
+    )
 
 
 def test_public_webhook_validates_secret_configuration_and_json(client, monkeypatch):
     broken = webhook(authentication_type="secret", secret_hash=None)
     monkeypatch.setattr(public_webhooks, "get_webhook_by_public_token", async_return(broken))
-    assert client.post("/hooks/public-token", json={}, headers={"X-Relay-Secret": "secret"}).status_code == 500
-    assert client.post("/hooks/public-token/test", json={}, headers={"X-Relay-Secret": "secret"}).status_code == 500
+    assert (
+        client.post(
+            "/hooks/public-token", json={}, headers={"X-Relay-Secret": "secret"}
+        ).status_code
+        == 500
+    )
+    assert (
+        client.post(
+            "/hooks/public-token/test", json={}, headers={"X-Relay-Secret": "secret"}
+        ).status_code
+        == 500
+    )
 
     valid = webhook(authentication_type="secret", secret_hash="hash")
     monkeypatch.setattr(public_webhooks, "get_webhook_by_public_token", async_return(valid))
     monkeypatch.setattr(public_webhooks, "validate_workflow_version", async_return(None))
     monkeypatch.setattr(public_webhooks, "verify_webhook_secret", lambda **_kwargs: True)
-    invalid_json = client.post("/hooks/public-token", content="bad json", headers={"X-Relay-Secret": "secret", "Content-Type": "application/json"})
-    invalid_test_json = client.post("/hooks/public-token/test", content="bad json", headers={"X-Relay-Secret": "secret", "Content-Type": "application/json"})
+    invalid_json = client.post(
+        "/hooks/public-token",
+        content="bad json",
+        headers={"X-Relay-Secret": "secret", "Content-Type": "application/json"},
+    )
+    invalid_test_json = client.post(
+        "/hooks/public-token/test",
+        content="bad json",
+        headers={"X-Relay-Secret": "secret", "Content-Type": "application/json"},
+    )
     assert invalid_json.status_code == invalid_test_json.status_code == 400
 
 
@@ -319,6 +374,7 @@ def test_public_webhook_rejects_legacy_unpublished_version_before_kafka(client, 
         raise UnpublishedWorkflowVersionError("Webhook workflow version must be published")
 
     events = []
+
     async def publish(event):
         events.append(event)
 
@@ -360,7 +416,9 @@ def test_public_test_webhook_returns_payload_and_updates_session(client, monkeyp
         return created
 
     test_session = asyncio.run(run())["session_id"]
-    response = client.post(f"/hooks/public-token/test?relay_test_session={test_session}", json={"amount": 99})
+    response = client.post(
+        f"/hooks/public-token/test?relay_test_session={test_session}", json={"amount": 99}
+    )
     assert response.status_code == 200
     assert response.json()["received"] is True
     assert response.json()["payload"] == {"amount": 99}
@@ -378,7 +436,11 @@ def test_public_test_webhook_reports_invalid_json_into_session(client, monkeypat
 
     created = asyncio.run(create_session(str(WEBHOOK_ID), str(WORKSPACE_ID)))
     session_id = created["session_id"]
-    response = client.post(f"/hooks/public-token/test?relay_test_session={session_id}", content="not json", headers={"Content-Type": "application/json"})
+    response = client.post(
+        f"/hooks/public-token/test?relay_test_session={session_id}",
+        content="not json",
+        headers={"Content-Type": "application/json"},
+    )
     assert response.status_code == 400
     state = asyncio.run(get_session(session_id, str(WEBHOOK_ID), str(WORKSPACE_ID)))
     assert state["status"] == "failed"

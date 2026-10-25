@@ -1,4 +1,3 @@
-
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +8,6 @@ from app.repositories.knowledge_base import KnowledgeBaseRepository
 
 
 class RetrievalService:
-
     def __init__(self, db: AsyncSession):
         self.db = db
         self.embedding_provider = EmbeddingProvider()
@@ -31,9 +29,7 @@ class RetrievalService:
             raise ValueError("Search query cannot be empty")
 
         if len(query) > 2000:
-            raise ValueError(
-                "Search query cannot exceed 2000 characters"
-            )
+            raise ValueError("Search query cannot exceed 2000 characters")
 
         if not 1 <= top_k <= 20:
             raise ValueError("top_k must be between 1 and 20")
@@ -48,9 +44,7 @@ class RetrievalService:
             raise ValueError("Knowledge base not found")
 
         # 3. Generate query embedding
-        embeddings = await self.embedding_provider.generate_embeddings(
-            [query]
-        )
+        embeddings = await self.embedding_provider.generate_embeddings([query])
 
         query_embedding = embeddings[0]
 

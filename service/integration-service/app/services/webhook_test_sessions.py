@@ -62,7 +62,11 @@ async def publish_result(session_id: str, webhook_id: str, status: str, result: 
 async def publish_session_result(session_id: str, status: str, result: dict) -> bool:
     async with _lock:
         session = _sessions.get(session_id)
-        if not session or session["expires_at"] <= time.monotonic() or session["status"] != "waiting":
+        if (
+            not session
+            or session["expires_at"] <= time.monotonic()
+            or session["status"] != "waiting"
+        ):
             return False
         session["status"] = status
         session["result"] = result

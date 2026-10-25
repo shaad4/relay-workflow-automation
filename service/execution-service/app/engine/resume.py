@@ -47,18 +47,12 @@ async def get_resume_state(
             raise ValueError("Approved human approval not found")
 
         approval_step = next(
-            (
-                step
-                for step in steps
-                if step.id == approval.execution_step_id
-            ),
+            (step for step in steps if step.id == approval.execution_step_id),
             None,
         )
 
         if approval_step is None:
-            raise ValueError(
-                "Human approval execution step not found"
-            )
+            raise ValueError("Human approval execution step not found")
 
         return execution, steps, approval_step.sequence
 

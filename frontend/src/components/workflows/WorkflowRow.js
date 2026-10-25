@@ -45,11 +45,25 @@ function TrashIcon(props) {
 }
 
 function WorkflowMark({ name = "Workflow" }) {
-  const hue = Array.from(name).reduce((value, char) => value + char.charCodeAt(0), 0) % 360;
+  const hue =
+    Array.from(name).reduce((value, char) => value + char.charCodeAt(0), 0) %
+    360;
   return (
     <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--elevated)] text-[var(--text-primary)]">
-      <div className="absolute inset-0 opacity-20" style={{ background: `radial-gradient(circle at 30% 20%, hsl(${hue} 85% 65%), transparent 70%)` }} />
-      <svg className="relative h-5 w-5" viewBox="0 0 24 24" fill="none" stroke={`hsl(${hue} 75% 62%)`} strokeWidth="1.6" aria-hidden="true">
+      <div
+        className="absolute inset-0 opacity-20"
+        style={{
+          background: `radial-gradient(circle at 30% 20%, hsl(${hue} 85% 65%), transparent 70%)`,
+        }}
+      />
+      <svg
+        className="relative h-5 w-5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={`hsl(${hue} 75% 62%)`}
+        strokeWidth="1.6"
+        aria-hidden="true"
+      >
         <circle cx="5" cy="6" r="2.2" />
         <circle cx="19" cy="18" r="2.2" />
         <circle cx="18" cy="6" r="2.2" />
@@ -105,7 +119,11 @@ export function formatDate(dateString) {
   });
 }
 
-export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatusChange }) {
+export default function WorkflowRow({
+  workflow,
+  onDeleteRequest,
+  onWorkflowStatusChange,
+}) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
@@ -118,7 +136,9 @@ export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatu
   const name = workflow.name || "Untitled Workflow";
   const description = workflow.description || "";
   const status = workflow.status || "draft";
-  const updatedAt = formatRelativeTime(workflow.updated_at || workflow.created_at);
+  const updatedAt = formatRelativeTime(
+    workflow.updated_at || workflow.created_at,
+  );
 
   const handleCloseMenu = useCallback(() => {
     setMenuOpen(false);
@@ -178,8 +198,12 @@ export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatu
   const normalizedStatus = String(status).toLowerCase();
   const isDraft = normalizedStatus === "draft";
   const canDelete = isDraft || normalizedStatus === "inactive";
-  const canToggleStatus = normalizedStatus === "active" || normalizedStatus === "inactive" || normalizedStatus === "published";
-  const isActive = normalizedStatus === "active" || normalizedStatus === "published";
+  const canToggleStatus =
+    normalizedStatus === "active" ||
+    normalizedStatus === "inactive" ||
+    normalizedStatus === "published";
+  const isActive =
+    normalizedStatus === "active" || normalizedStatus === "published";
 
   const handleToggleStatus = async (e) => {
     e.stopPropagation();
@@ -190,10 +214,16 @@ export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatu
       const response = isActive
         ? await deactivateWorkflow(workflowId)
         : await activateWorkflow(workflowId);
-      onWorkflowStatusChange?.(workflowId, response?.status || (isActive ? "inactive" : "active"));
+      onWorkflowStatusChange?.(
+        workflowId,
+        response?.status || (isActive ? "inactive" : "active"),
+      );
       setShowStatusConfirm(false);
     } catch (error) {
-      setStatusError(error?.message || `Unable to ${isActive ? "deactivate" : "activate"} workflow.`);
+      setStatusError(
+        error?.message ||
+          `Unable to ${isActive ? "deactivate" : "activate"} workflow.`,
+      );
     } finally {
       setIsChangingStatus(false);
     }
@@ -210,136 +240,186 @@ export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatu
       <div className="flex items-start gap-3 pr-9">
         <WorkflowMark name={name} />
         <div className="min-w-0 flex-1 pt-0.5">
-          <div className="truncate text-[15px] font-semibold tracking-tight text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">{name}</div>
-          <div className="mt-1 truncate font-mono text-[10px] text-[var(--text-tertiary)]">/workflows/{workflowId.slice(0, 8)}</div>
+          <div className="truncate text-[15px] font-semibold tracking-tight text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
+            {name}
+          </div>
+          <div className="mt-1 truncate font-mono text-[10px] text-[var(--text-tertiary)]">
+            /workflows/{workflowId.slice(0, 8)}
+          </div>
         </div>
       </div>
 
       <p className="mt-4 min-h-[54px] text-[13px] leading-[19px] text-[var(--text-secondary)] line-clamp-3">
-        {description || <span className="italic text-[var(--text-tertiary)]">No description added yet.</span>}
+        {description || (
+          <span className="italic text-[var(--text-tertiary)]">
+            No description added yet.
+          </span>
+        )}
       </p>
 
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <WorkflowStatus status={status} />
           <span className="h-1 w-1 rounded-full bg-[var(--border-strong)]" />
-          <span className="truncate text-[11px] text-[var(--text-tertiary)]">Updated {updatedAt}</span>
+          <span className="truncate text-[11px] text-[var(--text-tertiary)]">
+            Updated {updatedAt}
+          </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-          <RunWorkflowButton workflowId={workflowId} workflowName={name} workflowStatus={status} publishedVersionId={workflow.published_version_id} iconOnly />
+        <div
+          className="flex shrink-0 items-center gap-2"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <RunWorkflowButton
+            workflowId={workflowId}
+            workflowName={name}
+            workflowStatus={status}
+            publishedVersionId={workflow.published_version_id}
+            iconOnly
+          />
         </div>
       </div>
 
       <div ref={menuRef} className="absolute right-3 top-3 z-10">
-          <button
-            type="button"
-            aria-label={`Actions for ${name}`}
-            aria-expanded={menuOpen}
-            aria-haspopup="true"
-            onClick={handleToggleMenu}
-            className="p-1 rounded-[4px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface)] transition-colors focus:outline-none focus:ring-1 focus:ring-[var(--accent)] cursor-pointer"
+        <button
+          type="button"
+          aria-label={`Actions for ${name}`}
+          aria-expanded={menuOpen}
+          aria-haspopup="true"
+          onClick={handleToggleMenu}
+          className="p-1 rounded-[4px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface)] transition-colors focus:outline-none focus:ring-1 focus:ring-[var(--accent)] cursor-pointer"
+        >
+          <MoreHorizontalIcon className="w-4 h-4 stroke-[1.5]" />
+        </button>
+
+        {/* Action Popover Menu */}
+        {menuOpen && (
+          <div
+            role="menu"
+            className={`absolute right-0 ${
+              openUpward ? "bottom-full mb-1" : "top-full mt-1"
+            } w-36 bg-[var(--surface)] border border-[var(--border-subtle)] rounded-md shadow-lg p-1 z-50 text-[var(--text-primary)] animate-in fade-in zoom-in-95 duration-100 ease-out select-none`}
           >
-            <MoreHorizontalIcon className="w-4 h-4 stroke-[1.5]" />
-          </button>
-
-          {/* Action Popover Menu */}
-          {menuOpen && (
-            <div
-              role="menu"
-              className={`absolute right-0 ${
-                openUpward ? "bottom-full mb-1" : "top-full mt-1"
-              } w-36 bg-[var(--surface)] border border-[var(--border-subtle)] rounded-md shadow-lg p-1 z-50 text-[var(--text-primary)] animate-in fade-in zoom-in-95 duration-100 ease-out select-none`}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCloseMenu();
+                router.push(`/workflows/${workflowId}`);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] rounded-[4px] transition-colors cursor-pointer text-left"
             >
+              <ExternalLinkIcon className="w-3.5 h-3.5 stroke-[1.5]" />
+              <span>Open</span>
+            </button>
+
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCloseMenu();
+                router.push(`/workflows/${workflowId}`);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] rounded-[4px] transition-colors cursor-pointer text-left"
+            >
+              <EditIcon className="w-3.5 h-3.5 stroke-[1.5]" />
+              <span>Edit</span>
+            </button>
+
+            {canToggleStatus && (
+              <button
+                type="button"
+                role="menuitem"
+                disabled={isChangingStatus}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setStatusError("");
+                  handleCloseMenu();
+                  setShowStatusConfirm(true);
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] rounded-[4px] transition-colors cursor-pointer text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isChangingStatus
+                  ? isActive
+                    ? "Deactivating..."
+                    : "Activating..."
+                  : isActive
+                    ? "Deactivate"
+                    : "Activate"}
+              </button>
+            )}
+
+            {statusError && (
+              <p
+                role="alert"
+                className="px-2.5 py-1 text-[11px] leading-4 text-red-500"
+              >
+                {statusError}
+              </p>
+            )}
+
+            <div className="my-1 border-t border-[var(--border-subtle)]" />
+
+            {canDelete ? (
               <button
                 type="button"
                 role="menuitem"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleCloseMenu();
-                  router.push(`/workflows/${workflowId}`);
+                  if (onDeleteRequest) {
+                    onDeleteRequest(workflow);
+                  }
                 }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] rounded-[4px] transition-colors cursor-pointer text-left"
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-red-500 dark:text-red-400 hover:bg-red-500/10 rounded-[4px] transition-colors cursor-pointer text-left"
               >
-                <ExternalLinkIcon className="w-3.5 h-3.5 stroke-[1.5]" />
-                <span>Open</span>
+                <TrashIcon className="w-3.5 h-3.5 stroke-[1.5]" />
+                <span>Delete</span>
               </button>
-
+            ) : (
               <button
                 type="button"
                 role="menuitem"
+                disabled
+                title="Only draft or inactive workflows can be deleted. Deactivate active workflows first."
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleCloseMenu();
-                  router.push(`/workflows/${workflowId}`);
                 }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] rounded-[4px] transition-colors cursor-pointer text-left"
+                className="w-full flex items-center justify-between px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-disabled)] opacity-40 cursor-not-allowed select-none rounded-[4px]"
               >
-                <EditIcon className="w-3.5 h-3.5 stroke-[1.5]" />
-                <span>Edit</span>
-              </button>
-
-              {canToggleStatus && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={isChangingStatus}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setStatusError("");
-                    handleCloseMenu();
-                    setShowStatusConfirm(true);
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--elevated)] rounded-[4px] transition-colors cursor-pointer text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isChangingStatus ? (isActive ? "Deactivating..." : "Activating...") : isActive ? "Deactivate" : "Activate"}
-                </button>
-              )}
-
-              {statusError && <p role="alert" className="px-2.5 py-1 text-[11px] leading-4 text-red-500">{statusError}</p>}
-
-              <div className="my-1 border-t border-[var(--border-subtle)]" />
-
-              {canDelete ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCloseMenu();
-                    if (onDeleteRequest) {
-                      onDeleteRequest(workflow);
-                    }
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-medium text-red-500 dark:text-red-400 hover:bg-red-500/10 rounded-[4px] transition-colors cursor-pointer text-left"
-                >
+                <div className="flex items-center gap-2">
                   <TrashIcon className="w-3.5 h-3.5 stroke-[1.5]" />
                   <span>Delete</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled
-                  title="Only draft or inactive workflows can be deleted. Deactivate active workflows first."
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                  className="w-full flex items-center justify-between px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-disabled)] opacity-40 cursor-not-allowed select-none rounded-[4px]"
-                >
-                  <div className="flex items-center gap-2">
-                    <TrashIcon className="w-3.5 h-3.5 stroke-[1.5]" />
-                    <span>Delete</span>
-                  </div>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+                </div>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {showStatusConfirm && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]" role="presentation" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} onMouseDown={(event) => { if (event.target === event.currentTarget && !isChangingStatus) setShowStatusConfirm(false); }}>
-          <section role="dialog" aria-modal="true" aria-labelledby={`workflow-status-confirm-${workflowId}`} className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-5 text-left shadow-2xl">
-            <h2 id={`workflow-status-confirm-${workflowId}`} className="text-[16px] font-semibold text-[var(--text-primary)]">
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
+          role="presentation"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isChangingStatus)
+              setShowStatusConfirm(false);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`workflow-status-confirm-${workflowId}`}
+            className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-5 text-left shadow-2xl"
+          >
+            <h2
+              id={`workflow-status-confirm-${workflowId}`}
+              className="text-[16px] font-semibold text-[var(--text-primary)]"
+            >
               {isActive ? "Deactivate workflow?" : "Activate workflow?"}
             </h2>
             <p className="mt-2 text-[13px] leading-5 text-[var(--text-secondary)]">
@@ -347,12 +427,36 @@ export default function WorkflowRow({ workflow, onDeleteRequest, onWorkflowStatu
                 ? "This will stop the entire workflow from running. The change applies to all versions, not only the version currently selected."
                 : "This will enable the entire workflow to run. The change applies to all versions, not only the version currently selected."}
             </p>
-            {statusError && <p role="alert" className="mt-3 text-[12px] text-red-500">{statusError}</p>}
+            {statusError && (
+              <p role="alert" className="mt-3 text-[12px] text-red-500">
+                {statusError}
+              </p>
+            )}
             <div className="mt-5 flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-3">
-              <button type="button" disabled={isChangingStatus} onClick={() => setShowStatusConfirm(false)} className="h-8 rounded-lg border border-[var(--border-default)] px-3 text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-50">Cancel</button>
-              <button type="button" disabled={isChangingStatus} onClick={handleToggleStatus} className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-medium text-white disabled:opacity-50 ${isActive ? "bg-red-600 hover:bg-red-700" : "bg-[var(--accent)] hover:opacity-90"}`}>
-                {isChangingStatus && <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
-                {isChangingStatus ? (isActive ? "Deactivating..." : "Activating...") : (isActive ? "Deactivate workflow" : "Activate workflow")}
+              <button
+                type="button"
+                disabled={isChangingStatus}
+                onClick={() => setShowStatusConfirm(false)}
+                className="h-8 rounded-lg border border-[var(--border-default)] px-3 text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--elevated)] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isChangingStatus}
+                onClick={handleToggleStatus}
+                className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-medium text-white disabled:opacity-50 ${isActive ? "bg-red-600 hover:bg-red-700" : "bg-[var(--accent)] hover:opacity-90"}`}
+              >
+                {isChangingStatus && (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                )}
+                {isChangingStatus
+                  ? isActive
+                    ? "Deactivating..."
+                    : "Activating..."
+                  : isActive
+                    ? "Deactivate workflow"
+                    : "Activate workflow"}
               </button>
             </div>
           </section>

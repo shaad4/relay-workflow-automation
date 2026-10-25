@@ -3,21 +3,18 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.engine.approval_status import HumanApprovalStatus
-from app.dependencies import get_current_identity
 from app.db.database import AsyncSessionLocal
-
+from app.dependencies import get_current_identity
+from app.engine.approval_status import HumanApprovalStatus
 from app.schemas.approvals import (
     ApprovalListResponse,
     ApprovalResponse,
 )
-
 from app.services.approval_service import (
     decide_approval,
-    list_pending_approvals,
     get_approval,
+    list_pending_approvals,
 )
-
 
 router = APIRouter(
     prefix="/approvals",
@@ -47,10 +44,7 @@ async def get_approvals(
     )
 
     return ApprovalListResponse(
-        approvals=[
-            ApprovalResponse.model_validate(approval)
-            for approval in approvals
-        ]
+        approvals=[ApprovalResponse.model_validate(approval) for approval in approvals]
     )
 
 
@@ -109,9 +103,7 @@ async def _handle_approval_decision(
             detail=str(exc),
         ) from exc
 
-    return ApprovalResponse.model_validate(
-        result.approval
-    )
+    return ApprovalResponse.model_validate(result.approval)
 
 
 @router.post(

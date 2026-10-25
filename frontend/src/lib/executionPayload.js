@@ -2,7 +2,9 @@
 export const PAYLOAD_SECTION_SIZE = 12000;
 export const payloadTabs = ["input", "output", "error"];
 export const emptyPayloadMessages = {
-  input: "No input data recorded.", output: "No output available.", error: "No error recorded.",
+  input: "No input data recorded.",
+  output: "No output available.",
+  error: "No error recorded.",
 };
 export function defaultPayloadTab(status) {
   const normalized = String(status).toLowerCase();
@@ -13,11 +15,20 @@ export function serializePayload(value) {
   return JSON.stringify(value === undefined ? null : value, null, 2);
 }
 // Avoid cutting a surrogate pair between sections (for example emoji in prompts).
-export function payloadSection(text, requestedPage = 0, size = PAYLOAD_SECTION_SIZE) {
+export function payloadSection(
+  text,
+  requestedPage = 0,
+  size = PAYLOAD_SECTION_SIZE,
+) {
   const total = Math.max(1, Math.ceil(text.length / size));
   const page = Math.max(0, Math.min(requestedPage, total - 1));
-  const boundary = position => position > 0 && position < text.length &&
-    /[\uD800-\uDBFF]/.test(text[position - 1]) && /[\uDC00-\uDFFF]/.test(text[position]) ? position - 1 : position;
+  const boundary = (position) =>
+    position > 0 &&
+    position < text.length &&
+    /[\uD800-\uDBFF]/.test(text[position - 1]) &&
+    /[\uDC00-\uDFFF]/.test(text[position])
+      ? position - 1
+      : position;
   const start = boundary(page * size);
   const end = boundary(Math.min((page + 1) * size, text.length));
   return { page, total, start, end, text: text.slice(start, end) };
@@ -32,19 +43,37 @@ export function payloadSizeLabel(bytes) {
 // Only tokens intersecting the visible section are returned to React.
 export function payloadTokens(text, start = 0, end = text.length) {
   const tokens = [];
-  const pattern = /"(?:\\[\s\S]|[^"\\])*"|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+  const pattern =
+    /"(?:\\[\s\S]|[^"\\])*"|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
   let cursor = start;
   for (const match of text.matchAll(pattern)) {
     const from = match.index;
     const to = from + match[0].length;
     if (to <= start) continue;
     if (from >= end) break;
-    if (from > cursor) tokens.push({ type: "punctuation", text: text.slice(cursor, Math.min(from, end)) });
+    if (from > cursor)
+      tokens.push({
+        type: "punctuation",
+        text: text.slice(cursor, Math.min(from, end)),
+      });
     const raw = match[0];
-    const type = raw[0] === '"' ? (/^\s*:/.test(text.slice(to, to + 20)) ? "key" : "string") : raw === "null" ? "null" : /true|false/.test(raw) ? "boolean" : "number";
-    tokens.push({ type, text: text.slice(Math.max(from, start), Math.min(to, end)) });
+    const type =
+      raw[0] === '"'
+        ? /^\s*:/.test(text.slice(to, to + 20))
+          ? "key"
+          : "string"
+        : raw === "null"
+          ? "null"
+          : /true|false/.test(raw)
+            ? "boolean"
+            : "number";
+    tokens.push({
+      type,
+      text: text.slice(Math.max(from, start), Math.min(to, end)),
+    });
     cursor = Math.min(to, end);
   }
-  if (cursor < end) tokens.push({ type: "punctuation", text: text.slice(cursor, end) });
+  if (cursor < end)
+    tokens.push({ type: "punctuation", text: text.slice(cursor, end) });
   return tokens;
 }

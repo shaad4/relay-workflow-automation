@@ -16,7 +16,8 @@ export async function loginUser(data) {
 
 export async function refreshToken() {
   const tokens = await refreshAuthTokens();
-  if (!tokens) throw new Error("Your session has expired. Please sign in again.");
+  if (!tokens)
+    throw new Error("Your session has expired. Please sign in again.");
   return tokens;
 }
 
@@ -33,13 +34,10 @@ export async function getCurrentUser() {
 }
 
 export async function verifyEmail(token, options = {}) {
-  return apiRequest(
-    `/auth/verify-email?token=${encodeURIComponent(token)}`,
-    {
-      method: "GET",
-      ...options,
-    }
-  );
+  return apiRequest(`/auth/verify-email?token=${encodeURIComponent(token)}`, {
+    method: "GET",
+    ...options,
+  });
 }
 
 export async function resendVerification(email) {

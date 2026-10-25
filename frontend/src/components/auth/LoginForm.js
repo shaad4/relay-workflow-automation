@@ -11,13 +11,13 @@ export function isEmailValid(email = "") {
   const [localPart, domain, ...extraParts] = email.trim().split("@");
   return Boolean(
     localPart &&
-      domain &&
-      extraParts.length === 0 &&
-      !/\s/.test(localPart) &&
-      !/\s/.test(domain) &&
-      domain.includes(".") &&
-      !domain.startsWith(".") &&
-      !domain.endsWith(".")
+    domain &&
+    extraParts.length === 0 &&
+    !/\s/.test(localPart) &&
+    !/\s/.test(domain) &&
+    domain.includes(".") &&
+    !domain.startsWith(".") &&
+    !domain.endsWith("."),
   );
 }
 
@@ -60,8 +60,8 @@ export default function LoginForm() {
     ? !formData.email.trim()
       ? "Email is required."
       : !isEmailValid(formData.email)
-      ? "Please enter a valid email address."
-      : null
+        ? "Please enter a valid email address."
+        : null
     : null;
 
   const passwordError = touched.password
@@ -71,9 +71,7 @@ export default function LoginForm() {
     : null;
 
   const isFormValid = Boolean(
-    formData.email.trim() &&
-      isEmailValid(formData.email) &&
-      formData.password
+    formData.email.trim() && isEmailValid(formData.email) && formData.password,
   );
 
   const handleSubmit = async (e) => {
@@ -133,7 +131,9 @@ export default function LoginForm() {
       } else if (isNetworkOrDevError) {
         setBackendError("Unable to sign in right now. Please try again.");
       } else {
-        setBackendError(msg || "Unable to sign in right now. Please try again.");
+        setBackendError(
+          msg || "Unable to sign in right now. Please try again.",
+        );
       }
     }
   };

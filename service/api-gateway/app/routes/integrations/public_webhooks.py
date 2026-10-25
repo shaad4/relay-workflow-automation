@@ -1,11 +1,8 @@
-
 import re
 
 import httpx
-
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
-
 
 router = APIRouter(
     prefix="/hooks",

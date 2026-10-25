@@ -64,14 +64,14 @@ export async function refreshAuthTokens() {
   return refreshPromise;
 }
 
-export async function apiRequest(
-  endpoint,
-  options = {}
-) {
+export async function apiRequest(endpoint, options = {}) {
   const { skipAuthRetry = false, ...fetchOptions } = options;
   const request = (requestOptions) => {
     const headers = new Headers(requestOptions.headers);
-    if (typeof FormData !== "undefined" && requestOptions.body instanceof FormData) {
+    if (
+      typeof FormData !== "undefined" &&
+      requestOptions.body instanceof FormData
+    ) {
       headers.delete("Content-Type");
     } else if (!headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
@@ -88,7 +88,12 @@ export async function apiRequest(
   let data = parseResponse(response, text);
 
   const isRefreshRequest = endpoint === "/auth/refresh";
-  if (response.status === 401 && !isRefreshRequest && !skipAuthRetry && typeof window !== "undefined") {
+  if (
+    response.status === 401 &&
+    !isRefreshRequest &&
+    !skipAuthRetry &&
+    typeof window !== "undefined"
+  ) {
     const refreshedTokens = await refreshAuthTokens();
     if (refreshedTokens) {
       response = await request(fetchOptions);
@@ -104,7 +109,7 @@ export async function apiRequest(
     const error = new Error(
       getErrorMessage(data.detail) ||
         getErrorMessage(data.message) ||
-        "Something went wrong"
+        "Something went wrong",
     );
     error.status = response.status;
     throw error;

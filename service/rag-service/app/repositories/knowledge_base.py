@@ -8,7 +8,6 @@ from app.schemas.knowledge_base import KnowledgeBaseCreate
 
 
 class KnowledgeBaseRepository:
-
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -31,7 +30,6 @@ class KnowledgeBaseRepository:
 
         return knowledge_base
 
-
     async def list_by_workspace(
         self,
         workspace_id: uuid.UUID,
@@ -47,25 +45,20 @@ class KnowledgeBaseRepository:
 
         return list(result.scalars().all())
 
-
     async def get_by_id(
         self,
         knowledge_base_id: uuid.UUID,
         workspace_id: uuid.UUID,
     ) -> KnowledgeBase | None:
 
-        statement = (
-            select(KnowledgeBase)
-            .where(
-                KnowledgeBase.id == knowledge_base_id,
-                KnowledgeBase.workspace_id == workspace_id,
-            )
+        statement = select(KnowledgeBase).where(
+            KnowledgeBase.id == knowledge_base_id,
+            KnowledgeBase.workspace_id == workspace_id,
         )
 
         result = await self.db.execute(statement)
 
         return result.scalar_one_or_none()
-
 
     async def delete(
         self,

@@ -1,6 +1,6 @@
 from app.parsers.document_parser import parse_document
-from app.parsers.text_cleaner import clean_text
 from app.parsers.text_chunker import chunk_text
+from app.parsers.text_cleaner import clean_text
 
 
 def process_document(

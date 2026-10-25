@@ -1,4 +1,3 @@
-
 from anthropic import AsyncAnthropic
 from google import genai
 from google.genai import types
@@ -36,9 +35,7 @@ async def test_ai_provider_connection(
         )
 
         try:
-            async for _ in await client.aio.models.list(
-                config={"page_size": 1}
-            ):
+            async for _ in await client.aio.models.list(config={"page_size": 1}):
                 break
 
             return True

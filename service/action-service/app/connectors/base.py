@@ -3,7 +3,6 @@ from typing import Any
 
 
 class Connector(ABC):
-
     @abstractmethod
     async def execute(
         self,

@@ -2,25 +2,27 @@ from uuid import UUID
 
 import grpc
 
-from app.grpc.generated.integration import webhook_lifecycle_pb2
-from app.grpc.generated.integration import webhook_lifecycle_pb2_grpc
 from app.db.database import AsyncSessionLocal
-from app.services.webhook_service import activate_workflow_version_webhooks, delete_workflow_webhooks
+from app.grpc.generated.integration import webhook_lifecycle_pb2, webhook_lifecycle_pb2_grpc
+from app.services.webhook_service import (
+    activate_workflow_version_webhooks,
+    delete_workflow_webhooks,
+)
 from app.services.workflow_schedule_service import (
-    sync_workflow_schedule,
-    suspend_workflow_schedule,
     delete_workflow_schedule,
+    suspend_workflow_schedule,
+    sync_workflow_schedule,
 )
 
 
-class IntegrationInternalService(
-    webhook_lifecycle_pb2_grpc.IntegrationInternalServiceServicer
-):
+class IntegrationInternalService(webhook_lifecycle_pb2_grpc.IntegrationInternalServiceServicer):
     async def DeleteWorkflowWebhooks(self, request, context):
         try:
             workflow_id = UUID(request.workflow_id)
             workspace_id = UUID(request.workspace_id)
-            workflow_version_id = UUID(request.workflow_version_id) if request.workflow_version_id else None
+            workflow_version_id = (
+                UUID(request.workflow_version_id) if request.workflow_version_id else None
+            )
         except (ValueError, TypeError):
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details("Invalid workflow cleanup identifiers")
@@ -35,9 +37,7 @@ class IntegrationInternalService(
                     session=session,
                 )
 
-            return webhook_lifecycle_pb2.DeleteWorkflowWebhooksResponse(
-                deleted_count=deleted_count
-            )
+            return webhook_lifecycle_pb2.DeleteWorkflowWebhooksResponse(deleted_count=deleted_count)
         except Exception:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details("Webhook cleanup failed")
@@ -69,14 +69,11 @@ class IntegrationInternalService(
             context.set_details("Webhook activation failed")
             return webhook_lifecycle_pb2.ActivateWorkflowVersionWebhooksResponse()
 
-
     async def SyncWorkflowSchedule(self, request, context):
         try:
             workflow_id = UUID(request.workflow_id)
             workspace_id = UUID(request.workspace_id)
-            workflow_version_id = UUID(
-                request.workflow_version_id
-            )
+            workflow_version_id = UUID(request.workflow_version_id)
         except (ValueError, TypeError):
             await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT,
@@ -94,9 +91,7 @@ class IntegrationInternalService(
                     session=session,
                 )
 
-            return webhook_lifecycle_pb2.WorkflowScheduleLifecycleResponse(
-                affected_count=count
-            )
+            return webhook_lifecycle_pb2.WorkflowScheduleLifecycleResponse(affected_count=count)
 
         except Exception:
             await context.abort(
@@ -122,9 +117,7 @@ class IntegrationInternalService(
                     session=session,
                 )
 
-            return webhook_lifecycle_pb2.WorkflowScheduleLifecycleResponse(
-                affected_count=count
-            )
+            return webhook_lifecycle_pb2.WorkflowScheduleLifecycleResponse(affected_count=count)
 
         except Exception:
             await context.abort(
@@ -150,9 +143,7 @@ class IntegrationInternalService(
                     session=session,
                 )
 
-            return webhook_lifecycle_pb2.WorkflowScheduleLifecycleResponse(
-                affected_count=count
-            )
+            return webhook_lifecycle_pb2.WorkflowScheduleLifecycleResponse(affected_count=count)
 
         except Exception:
             await context.abort(

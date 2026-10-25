@@ -8,21 +8,19 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, select
-from sqlalchemy.engine import make_url
-from unittest.mock import AsyncMock, patch
-
-from app.db.database import AsyncSessionLocal, DATABASE_URL, engine
+from app.db.database import DATABASE_URL, AsyncSessionLocal, engine
 from app.engine.runner import run_execution
 from app.engine.status import ExecutionStatus
 from app.engine.step_status import ExecutionStepStatus
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
 from app.models.human_approval import HumanApproval
-
+from sqlalchemy import delete, select
+from sqlalchemy.engine import make_url
 
 DECISIONS = ("TECHNICAL", "BILLING", "GENERAL")
 
@@ -48,15 +46,17 @@ def workflow(decision=..., duplicate=False):
         },
     ]
     for value in DECISIONS:
-        nodes.append({
-            "node_id": f"email_{value.lower()}",
-            "node_type": "action.email",
-            "configuration": {
-                "connection_id": f"mock-{value.lower()}",
-                "to": f"{value.lower()}@example.test",
-                "subject": "Mocked branch test",
-            },
-        })
+        nodes.append(
+            {
+                "node_id": f"email_{value.lower()}",
+                "node_type": "action.email",
+                "configuration": {
+                    "connection_id": f"mock-{value.lower()}",
+                    "to": f"{value.lower()}@example.test",
+                    "subject": "Mocked branch test",
+                },
+            }
+        )
 
     edges = [
         {"source_node_id": "webhook", "target_node_id": "ai_decision"},
@@ -71,11 +71,13 @@ def workflow(decision=..., duplicate=False):
         ],
     ]
     if duplicate:
-        edges.append({
-            "source_node_id": "condition",
-            "target_node_id": "email_technical",
-            "condition": "TECHNICAL",
-        })
+        edges.append(
+            {
+                "source_node_id": "condition",
+                "target_node_id": "email_technical",
+                "condition": "TECHNICAL",
+            }
+        )
     return nodes, edges
 
 
@@ -86,20 +88,24 @@ async def run_database_case(decision=..., duplicate=False):
 
     workspace_id, workflow_id, version_id, execution_id = (uuid4() for _ in range(4))
     nodes, edges = workflow(decision, duplicate)
-    definition = SimpleNamespace(workflow_name="Test workflow", nodes_json=json.dumps(nodes), edges_json=json.dumps(edges))
+    definition = SimpleNamespace(
+        workflow_name="Test workflow", nodes_json=json.dumps(nodes), edges_json=json.dumps(edges)
+    )
 
     async with AsyncSessionLocal() as session:
-        session.add(Execution(
-            id=execution_id,
-            workspace_id=workspace_id,
-            workflow_id=workflow_id,
-            workflow_version_id=version_id,
-            status=ExecutionStatus.RUNNING,
-            trigger_type="trigger.webhook",
-            trigger_data={"message": "Example request"},
-            context={},
-            started_at=datetime.now(timezone.utc),
-        ))
+        session.add(
+            Execution(
+                id=execution_id,
+                workspace_id=workspace_id,
+                workflow_id=workflow_id,
+                workflow_version_id=version_id,
+                status=ExecutionStatus.RUNNING,
+                trigger_type="trigger.webhook",
+                trigger_data={"message": "Example request"},
+                context={},
+                started_at=datetime.now(timezone.utc),
+            )
+        )
         await session.commit()
 
     try:
@@ -113,11 +119,13 @@ async def run_database_case(decision=..., duplicate=False):
             workflow_client.close = AsyncMock()
 
             action_client = action_class.return_value
-            action_client.execute_action = AsyncMock(return_value=SimpleNamespace(
-                success=True,
-                result_json='{"sent": true}',
-                error="",
-            ))
+            action_client.execute_action = AsyncMock(
+                return_value=SimpleNamespace(
+                    success=True,
+                    result_json='{"sent": true}',
+                    error="",
+                )
+            )
             action_client.close = AsyncMock()
 
             if decision is ...:
@@ -155,19 +163,29 @@ async def run_database_case(decision=..., duplicate=False):
                 error = exc
 
             async with AsyncSessionLocal() as session:
-                steps = (await session.execute(
-                    select(ExecutionStep)
-                    .where(ExecutionStep.execution_id == execution_id)
-                    .order_by(ExecutionStep.sequence)
-                )).scalars().all()
+                steps = (
+                    (
+                        await session.execute(
+                            select(ExecutionStep)
+                            .where(ExecutionStep.execution_id == execution_id)
+                            .order_by(ExecutionStep.sequence)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
                 persisted = {step.node_id: step for step in steps}
 
             action_calls = action_client.execute_action.await_args_list
             return result, error, persisted, action_calls
     finally:
         async with AsyncSessionLocal() as session:
-            await session.execute(delete(HumanApproval).where(HumanApproval.execution_id == execution_id))
-            await session.execute(delete(ExecutionStep).where(ExecutionStep.execution_id == execution_id))
+            await session.execute(
+                delete(HumanApproval).where(HumanApproval.execution_id == execution_id)
+            )
+            await session.execute(
+                delete(ExecutionStep).where(ExecutionStep.execution_id == execution_id)
+            )
             await session.execute(delete(Execution).where(Execution.id == execution_id))
             await session.commit()
         # The test functions use asyncio.run independently; don't carry asyncpg
@@ -191,7 +209,9 @@ def test_runner_executes_only_the_matching_email_and_persists_condition(decision
     assert not (set(steps) & {f"email_{other.lower()}" for other in DECISIONS if other != decision})
     assert len(calls) == 1
     assert calls[0].kwargs["connection_id"] == f"mock-{decision.lower()}"
-    assert json.loads(calls[0].kwargs["input_data_json"])["to"] == f"{decision.lower()}@example.test"
+    assert (
+        json.loads(calls[0].kwargs["input_data_json"])["to"] == f"{decision.lower()}@example.test"
+    )
 
 
 @pytest.mark.parametrize("decision", ["UNKNOWN", None])
@@ -218,15 +238,27 @@ def test_human_approval_edges_still_resolve_approved_and_rejected(monkeypatch):
 
     definition = SimpleNamespace(
         workflow_name="Test workflow",
-        nodes_json=json.dumps([
-            {"node_id": "approval", "node_type": "human.approval"},
-            {"node_id": "approved", "node_type": "action.email"},
-            {"node_id": "rejected", "node_type": "action.email"},
-        ]),
-        edges_json=json.dumps([
-            {"source_node_id": "approval", "target_node_id": "approved", "condition": "approved"},
-            {"source_node_id": "approval", "target_node_id": "rejected", "condition": "rejected"},
-        ]),
+        nodes_json=json.dumps(
+            [
+                {"node_id": "approval", "node_type": "human.approval"},
+                {"node_id": "approved", "node_type": "action.email"},
+                {"node_id": "rejected", "node_type": "action.email"},
+            ]
+        ),
+        edges_json=json.dumps(
+            [
+                {
+                    "source_node_id": "approval",
+                    "target_node_id": "approved",
+                    "condition": "approved",
+                },
+                {
+                    "source_node_id": "approval",
+                    "target_node_id": "rejected",
+                    "condition": "rejected",
+                },
+            ]
+        ),
     )
 
     class WorkflowClient:
@@ -237,5 +269,15 @@ def test_human_approval_edges_still_resolve_approved_and_rejected(monkeypatch):
             pass
 
     monkeypatch.setattr(approval_branch_service, "WorkflowClient", WorkflowClient)
-    assert asyncio.run(approval_branch_service.resolve_approval_branch("w", "v", "x", "approval", "approved")) == "approved"
-    assert asyncio.run(approval_branch_service.resolve_approval_branch("w", "v", "x", "approval", "rejected")) == "rejected"
+    assert (
+        asyncio.run(
+            approval_branch_service.resolve_approval_branch("w", "v", "x", "approval", "approved")
+        )
+        == "approved"
+    )
+    assert (
+        asyncio.run(
+            approval_branch_service.resolve_approval_branch("w", "v", "x", "approval", "rejected")
+        )
+        == "rejected"
+    )

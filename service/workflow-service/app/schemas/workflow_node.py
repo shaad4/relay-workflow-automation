@@ -25,7 +25,7 @@ class WorkflowNodeResponse(BaseModel):
     position_y: int
     configuration: dict
     created_at: datetime
-    
+
 
 class WorkflowNodeUpdate(BaseModel):
     node_id: str | None = Field(

@@ -4,7 +4,6 @@ from fastapi import APIRouter, Request
 
 from app.core.proxy import proxy_request
 
-
 router = APIRouter(
     prefix="/workflows",
     tags=["manual-triggers"],

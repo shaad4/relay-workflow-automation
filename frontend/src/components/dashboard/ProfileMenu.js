@@ -50,14 +50,19 @@ function LogOutIcon(props) {
   );
 }
 
-export default function ProfileMenu({ open, onClose, positionClass = "bottom-full mb-2 left-0" }) {
+export default function ProfileMenu({
+  open,
+  onClose,
+  positionClass = "bottom-full mb-2 left-0",
+}) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
 
   const menuRef = useRef(null);
 
-  const userName = user?.name || (user?.email ? user.email.split("@")[0] : "User");
+  const userName =
+    user?.name || (user?.email ? user.email.split("@")[0] : "User");
   const userEmail = user?.email || "";
 
   const handleClose = useCallback(() => {
@@ -128,7 +133,9 @@ export default function ProfileMenu({ open, onClose, positionClass = "bottom-ful
       {/* Direct Theme Switcher Toggle Row */}
       <div className="px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2.5 text-[13px] font-medium text-[var(--text-secondary)]">
-          <span className="text-[var(--text-tertiary)]">{currentThemeIcon}</span>
+          <span className="text-[var(--text-tertiary)]">
+            {currentThemeIcon}
+          </span>
           <span>Theme</span>
         </div>
 

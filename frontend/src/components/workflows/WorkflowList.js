@@ -14,7 +14,11 @@ function AlertTriangleIcon(props) {
   );
 }
 
-export default function WorkflowList({ workflows = [], onDeleteSuccess, onWorkflowStatusChange }) {
+export default function WorkflowList({
+  workflows = [],
+  onDeleteSuccess,
+  onWorkflowStatusChange,
+}) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -42,20 +46,20 @@ export default function WorkflowList({ workflows = [], onDeleteSuccess, onWorkfl
   return (
     <div className="w-full">
       <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
-          {workflows.map((wf) => (
-            <WorkflowRow
-              key={wf.id}
-              workflow={wf}
-              onWorkflowStatusChange={onWorkflowStatusChange}
-              onDeleteRequest={(target) => {
-                const status = String(target?.status || "").toLowerCase();
-                if (status === "draft" || status === "inactive") {
-                  setDeleteError("");
-                  setDeleteTarget(target);
-                }
-              }}
-            />
-          ))}
+        {workflows.map((wf) => (
+          <WorkflowRow
+            key={wf.id}
+            workflow={wf}
+            onWorkflowStatusChange={onWorkflowStatusChange}
+            onDeleteRequest={(target) => {
+              const status = String(target?.status || "").toLowerCase();
+              if (status === "draft" || status === "inactive") {
+                setDeleteError("");
+                setDeleteTarget(target);
+              }
+            }}
+          />
+        ))}
       </div>
 
       {/* Delete Confirmation Modal */}
@@ -71,18 +75,29 @@ export default function WorkflowList({ workflows = [], onDeleteSuccess, onWorkfl
                   Delete Workflow?
                 </h3>
                 <p className="text-[13px] text-[var(--text-secondary)] mt-1 leading-relaxed">
-                  Are you sure you want to delete &quot;<span className="font-medium text-[var(--text-primary)]">{deleteTarget.name}</span>&quot;? This action cannot be undone.
+                  Are you sure you want to delete &quot;
+                  <span className="font-medium text-[var(--text-primary)]">
+                    {deleteTarget.name}
+                  </span>
+                  &quot;? This action cannot be undone.
                 </p>
               </div>
             </div>
 
-            {deleteError && <p role="alert" className="mb-3 text-[12px] text-red-500">{deleteError}</p>}
+            {deleteError && (
+              <p role="alert" className="mb-3 text-[12px] text-red-500">
+                {deleteError}
+              </p>
+            )}
 
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--border-subtle)]">
               <button
                 type="button"
                 disabled={isDeleting}
-                onClick={() => { setDeleteError(""); setDeleteTarget(null); }}
+                onClick={() => {
+                  setDeleteError("");
+                  setDeleteTarget(null);
+                }}
                 className="h-8 px-3 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--elevated)] text-[12px] font-medium text-[var(--text-primary)] transition-colors cursor-pointer disabled:opacity-50"
               >
                 Cancel

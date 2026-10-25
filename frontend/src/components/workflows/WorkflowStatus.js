@@ -5,7 +5,13 @@ export default function WorkflowStatus({ status = "draft" }) {
   const isActive = normalizedStatus === "active";
   const isInactive = normalizedStatus === "inactive";
   const isPublished = normalizedStatus === "published";
-  const label = isActive ? "Active" : isInactive ? "Inactive" : isPublished ? "Published" : "Draft";
+  const label = isActive
+    ? "Active"
+    : isInactive
+      ? "Inactive"
+      : isPublished
+        ? "Published"
+        : "Draft";
 
   return (
     <div className="inline-flex items-center gap-2 select-none text-[12px] font-mono leading-none">

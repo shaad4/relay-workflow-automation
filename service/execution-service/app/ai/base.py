@@ -1,4 +1,3 @@
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -12,7 +11,6 @@ class AIResponse:
 
 
 class AIProvider(ABC):
-
     @abstractmethod
     async def generate(
         self,

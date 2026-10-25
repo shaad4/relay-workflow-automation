@@ -2,17 +2,15 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import jwt
-
 from sqlalchemy import select
 
 from app.core.jwt import decode_token
 from app.db.database import AsyncSessionLocal
+from app.grpc.generated.auth import auth_pb2, auth_pb2_grpc
 from app.models import RefreshSession, User
-from app.grpc.generated.auth import auth_pb2
-from app.grpc.generated.auth import auth_pb2_grpc
+
 
 class AuthInternalService(auth_pb2_grpc.AuthInternalServiceServicer):
-
     async def ValidateToken(self, request, context):
         try:
             payload = decode_token(request.access_token)
@@ -69,9 +67,7 @@ class AuthInternalService(auth_pb2_grpc.AuthInternalServiceServicer):
 
     async def ResolveWorkspace(self, request, context):
         async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(User).where(User.id == request.user_id)
-            )
+            result = await session.execute(select(User).where(User.id == request.user_id))
 
             user = result.scalar_one_or_none()
 

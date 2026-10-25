@@ -1,7 +1,6 @@
 from uuid import UUID
 
 import grpc
-
 from app.grpc.integration_client import IntegrationGrpcClient
 
 
@@ -26,7 +25,9 @@ async def revoke_workflow_webhooks(
             workflow_version_id=workflow_version_id,
         )
     except grpc.aio.AioRpcError as exc:
-        raise WebhookCleanupError("Integration Service could not revoke webhook endpoints.") from exc
+        raise WebhookCleanupError(
+            "Integration Service could not revoke webhook endpoints."
+        ) from exc
     finally:
         await client.close()
 
@@ -44,6 +45,8 @@ async def activate_workflow_version_webhooks(
             workflow_version_id=workflow_version_id,
         )
     except grpc.aio.AioRpcError as exc:
-        raise WebhookActivationError("Integration Service could not activate webhook endpoints.") from exc
+        raise WebhookActivationError(
+            "Integration Service could not activate webhook endpoints."
+        ) from exc
     finally:
         await client.close()

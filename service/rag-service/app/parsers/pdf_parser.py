@@ -14,9 +14,7 @@ def extract_pdf_text(content: bytes) -> str:
         reader = PdfReader(BytesIO(content), strict=True)
 
         if reader.is_encrypted:
-            raise ValueError(
-                "Encrypted PDF files are not supported"
-            )
+            raise ValueError("Encrypted PDF files are not supported")
 
         pages = []
 
@@ -27,9 +25,7 @@ def extract_pdf_text(content: bytes) -> str:
                 pages.append(text.strip())
 
         if not pages:
-            raise ValueError(
-                "PDF contains no extractable text"
-            )
+            raise ValueError("PDF contains no extractable text")
 
         return "\n\n".join(pages)
 
@@ -37,6 +33,4 @@ def extract_pdf_text(content: bytes) -> str:
         if isinstance(exc, ValueError):
             raise
 
-        raise ValueError(
-            "Unable to read PDF document"
-        ) from exc
+        raise ValueError("Unable to read PDF document") from exc

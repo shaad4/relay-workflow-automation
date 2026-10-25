@@ -3,13 +3,13 @@ from datetime import datetime, timezone
 
 import jwt
 from dotenv import load_dotenv
-
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
 from app.core.exceptions import EmailVerificationRequired
+from app.core.jwt import decode_token
 from app.db.database import AsyncSessionLocal
 from app.models import User
 from app.schemas.auth import (
@@ -59,7 +59,6 @@ from app.services.password_reset_service import (
     reset_password,
 )
 from app.services.token_sessions import revoke_refresh_session
-from app.core.jwt import decode_token
 
 load_dotenv()
 
@@ -111,6 +110,7 @@ def clear_refresh_cookie(response: Response) -> None:
         samesite=os.getenv("COOKIE_SAMESITE", "lax").lower(),
     )
 
+
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
@@ -120,7 +120,7 @@ async def get_db():
 async def register(
     data: RegisterRequest,
     background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_db)
+    session: AsyncSession = Depends(get_db),
 ):
     try:
         user, verification_token = await register_user(data, session)
@@ -155,7 +155,6 @@ async def login(
         )
 
     except EmailVerificationRequired as exc:
-
         background_tasks.add_task(
             send_verification_email,
             exc.user_email,
@@ -178,12 +177,12 @@ async def login(
             detail=str(exc),
         )
 
-
     set_access_cookie(response, access_token)
     set_refresh_cookie(response, refresh_token)
     return LoginResponse(
         token_type="bearer",
     )
+
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
 async def refresh_token(
@@ -219,11 +218,13 @@ async def refresh_token(
         token_type="bearer",
     )
 
+
 @router.get("/me", response_model=RegisterResponse)
 async def get_me(
     current_user: User = Depends(get_current_user),
 ):
     return current_user
+
 
 @router.post("/logout")
 async def logout(
@@ -241,15 +242,11 @@ async def logout(
             pass
     clear_access_cookie(response)
     clear_refresh_cookie(response)
-    return {
-        "message": "Logged out successfully"
-    }
+    return {"message": "Logged out successfully"}
+
 
 @router.get("/verify-email")
-async def verify_email(
-    token: str,
-    session: AsyncSession = Depends(get_db)
-):
+async def verify_email(token: str, session: AsyncSession = Depends(get_db)):
     try:
         await verify_email_token(token, session)
     except ValueError as exc:
@@ -289,10 +286,7 @@ async def resend_verification(
         )
 
     return ResendVerificationResponse(
-        message=(
-            "If an account with that email exists, "
-            "a verification email has been sent."
-        )
+        message=("If an account with that email exists, a verification email has been sent.")
     )
 
 
@@ -300,7 +294,7 @@ async def resend_verification(
 async def forgot_password(
     data: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_db)
+    session: AsyncSession = Depends(get_db),
 ):
     result = await create_password_reset_token(
         data.email,
@@ -317,7 +311,6 @@ async def forgot_password(
             token.token,
             PASSWORD_RESET_TOKEN_EXPIRE_MINUTES,
         )
-
 
     return ForgotPasswordResponse(
         message="If an account with that email exists, a password reset link has been sent."
@@ -345,6 +338,7 @@ async def reset_password_route(
         message="Password reset successfully",
     )
 
+
 @router.get("/google")
 async def google_login():
     authorization_url, state = create_google_authorization_url()
@@ -362,6 +356,7 @@ async def google_login():
     )
 
     return response
+
 
 @router.get("/google/callback")
 async def google_callback(
@@ -387,13 +382,9 @@ async def google_callback(
         frontend_url = os.getenv("FRONTEND_URL")
 
         if not frontend_url:
-            raise RuntimeError(
-                "FRONTEND_URL is not configured"
-            )
+            raise RuntimeError("FRONTEND_URL is not configured")
 
-        return RedirectResponse(
-            url=f"{frontend_url}/login"
-        )
+        return RedirectResponse(url=f"{frontend_url}/login")
 
     if not code:
         raise HTTPException(
@@ -401,12 +392,9 @@ async def google_callback(
             detail="Google authorization code is missing",
         )
 
-
     google_tokens = await exchange_google_code(code)
 
-    google_user = await get_google_userinfo(
-        google_tokens["access_token"]
-    )
+    google_user = await get_google_userinfo(google_tokens["access_token"])
 
     google_id = google_user["sub"]
     email = google_user["email"]
@@ -426,16 +414,10 @@ async def google_callback(
         frontend_url = os.getenv("FRONTEND_URL")
 
         if not frontend_url:
-            raise RuntimeError(
-                "FRONTEND_URL is not configured"
-            )
+            raise RuntimeError("FRONTEND_URL is not configured")
 
         return RedirectResponse(
-            url=(
-                f"{frontend_url}"
-                f"/auth/google/callback"
-                f"?code={login_session.id}"
-            )
+            url=(f"{frontend_url}/auth/google/callback?code={login_session.id}")
         )
 
     signup_session = await create_google_signup_session(
@@ -448,17 +430,10 @@ async def google_callback(
     frontend_url = os.getenv("FRONTEND_URL")
 
     if not frontend_url:
-        raise RuntimeError(
-            "FRONTEND_URL is not configured"
-        )
+        raise RuntimeError("FRONTEND_URL is not configured")
 
-    return RedirectResponse(
-        url=(
-            f"{frontend_url}"
-            f"/workspace-setup"
-            f"?session={signup_session.id}"
-        )
-    )
+    return RedirectResponse(url=(f"{frontend_url}/workspace-setup?session={signup_session.id}"))
+
 
 @router.post(
     "/google/exchange",
@@ -470,11 +445,9 @@ async def exchange_google_login_code(
     session: AsyncSession = Depends(get_db),
 ):
     try:
-        access_token, refresh_token = (
-            await consume_google_login_session(
-                login_session_id=data.code,
-                session=session,
-            )
+        access_token, refresh_token = await consume_google_login_session(
+            login_session_id=data.code,
+            session=session,
         )
 
     except ValueError as exc:
@@ -500,12 +473,10 @@ async def complete_google_signup_route(
     session: AsyncSession = Depends(get_db),
 ):
     try:
-        user, access_token, refresh_token = (
-            await complete_google_signup(
-                signup_session_id=data.signup_session_id,
-                workspace_name=data.workspace_name,
-                session=session,
-            )
+        user, access_token, refresh_token = await complete_google_signup(
+            signup_session_id=data.signup_session_id,
+            workspace_name=data.workspace_name,
+            session=session,
         )
 
     except ValueError as exc:

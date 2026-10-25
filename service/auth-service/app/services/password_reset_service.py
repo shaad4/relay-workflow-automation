@@ -18,17 +18,17 @@ PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = int(
     )
 )
 
+
 def generate_password_reset_token() -> str:
     return secrets.token_urlsafe(32)
+
 
 async def create_password_reset_token(
     email: str,
     session: AsyncSession,
 ) -> tuple[PasswordResetToken, User] | None:
 
-    result = await session.execute(
-        select(User).where(User.email == email)
-    )
+    result = await session.execute(select(User).where(User.email == email))
 
     user = result.scalar_one_or_none()
 
@@ -52,12 +52,7 @@ async def create_password_reset_token(
         token = PasswordResetToken(
             user_id=user.id,
             token=generate_password_reset_token(),
-            expires_at=(
-                now
-                + timedelta(
-                    minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
-                )
-            ),
+            expires_at=(now + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES)),
         )
 
         session.add(token)
@@ -76,37 +71,25 @@ async def reset_password(
     new_password: str,
     session: AsyncSession,
 ) -> None:
-    
+
     result = await session.execute(
-        select(PasswordResetToken).where(
-            PasswordResetToken.token == token
-        )
+        select(PasswordResetToken).where(PasswordResetToken.token == token)
     )
 
     reset_token = result.scalar_one_or_none()
 
     if reset_token is None:
-        raise ValueError(
-            "Invalid password reset token"
-        )
+        raise ValueError("Invalid password reset token")
 
     if reset_token.used_at is not None:
-        raise ValueError(
-            "Password reset token has already been used"
-        )
+        raise ValueError("Password reset token has already been used")
 
     now = datetime.now(timezone.utc)
 
     if reset_token.expires_at <= now:
-        raise ValueError(
-            "Password reset token has expired"
-        )
+        raise ValueError("Password reset token has expired")
 
-    result = await session.execute(
-        select(User).where(
-            User.id == reset_token.user_id
-        )
-    )
+    result = await session.execute(select(User).where(User.id == reset_token.user_id))
 
     user = result.scalar_one_or_none()
 
@@ -114,9 +97,7 @@ async def reset_password(
         raise ValueError("User not found")
 
     try:
-        user.password_hash = hash_password(
-            new_password
-        )
+        user.password_hash = hash_password(new_password)
 
         reset_token.used_at = now
 

@@ -8,7 +8,6 @@ from app.schemas.knowledge_base import KnowledgeBaseCreate
 
 
 class KnowledgeBaseService:
-
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repository = KnowledgeBaseRepository(db)
@@ -33,7 +32,6 @@ class KnowledgeBaseService:
             await self.db.rollback()
             raise
 
-
     async def list_by_workspace(
         self,
         workspace_id: uuid.UUID,
@@ -53,7 +51,6 @@ class KnowledgeBaseService:
             knowledge_base_id=knowledge_base_id,
             workspace_id=workspace_id,
         )
-    
 
     async def delete(
         self,

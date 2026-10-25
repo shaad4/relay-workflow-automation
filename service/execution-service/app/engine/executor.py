@@ -9,9 +9,7 @@ class SequentialExecutor:
         start_node = self.graph.get_start_node()
 
         if start_node is None:
-            raise ValueError(
-                "Workflow does not have a start node"
-            )
+            raise ValueError("Workflow does not have a start node")
 
         execution_order: list[dict] = []
         visited: set[str] = set()
@@ -22,9 +20,7 @@ class SequentialExecutor:
             node_id = current_node["node_id"]
 
             if node_id in visited:
-                raise ValueError(
-                    f"Cycle detected in workflow at node: {node_id}"
-                )
+                raise ValueError(f"Cycle detected in workflow at node: {node_id}")
 
             visited.add(node_id)
             execution_order.append(current_node)
@@ -36,8 +32,7 @@ class SequentialExecutor:
 
             if len(next_edges) > 1:
                 raise ValueError(
-                    f"Sequential execution found multiple outgoing "
-                    f"edges from node: {node_id}"
+                    f"Sequential execution found multiple outgoing edges from node: {node_id}"
                 )
 
             current_node = self.graph.get_next_node(node_id)
@@ -48,9 +43,7 @@ class SequentialExecutor:
         start_node = self.graph.get_start_node()
 
         if start_node is None:
-            raise ValueError(
-                "Workflow does not have a start node"
-            )
+            raise ValueError("Workflow does not have a start node")
 
         return start_node
 

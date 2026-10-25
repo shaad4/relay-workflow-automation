@@ -53,15 +53,20 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
 
   const nameInputRef = useRef(null);
 
-  // Reset form when dialog opens
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (open) {
       setName("");
       setDescription("");
       setValidationError("");
       setApiError("");
       setIsSubmitting(false);
+    }
+  }
 
+  useEffect(() => {
+    if (open) {
       const timer = setTimeout(() => {
         if (nameInputRef.current) {
           nameInputRef.current.focus();
@@ -113,11 +118,11 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
 
       // Extract generated workflow ID
       const createdId =
-        res?.id ||
-        res?.workflow_id ||
-        res?.workflow?.id ||
-        res?.data?.id;
-      if (!createdId) throw new Error("The server created the workflow but did not return its ID.");
+        res?.id || res?.workflow_id || res?.workflow?.id || res?.data?.id;
+      if (!createdId)
+        throw new Error(
+          "The server created the workflow but did not return its ID.",
+        );
 
       // Notify parent & close modal
       if (onSuccess) onSuccess(res || { id: createdId, name: trimmedName });
@@ -127,7 +132,9 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
       router.push(`/workflows/${createdId}`);
     } catch (err) {
       console.error("Workflow creation error:", err);
-      setApiError(err?.message || "Unable to create workflow. Please try again.");
+      setApiError(
+        err?.message || "Unable to create workflow. Please try again.",
+      );
       setIsSubmitting(false);
     }
   };
@@ -166,7 +173,8 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
                 Create a workflow
               </h2>
               <p className="mt-1 text-[13px] leading-5 text-[var(--text-secondary)]">
-                Start with a name and a short description. You can add steps next.
+                Start with a name and a short description. You can add steps
+                next.
               </p>
             </div>
           </div>
@@ -248,34 +256,36 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
 
           {/* Action Buttons */}
           <div className="-mx-6 -mb-5 mt-1 flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] bg-[var(--elevated)]/45 px-6 py-4">
-            <p className="hidden text-[11px] text-[var(--text-tertiary)] sm:block">You can change these details later.</p>
+            <p className="hidden text-[11px] text-[var(--text-tertiary)] sm:block">
+              You can change these details later.
+            </p>
             <div className="ml-auto flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="h-9 rounded-lg border border-[var(--border-default)] bg-[var(--surface)] px-4 text-[12px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--elevated)] disabled:opacity-50"
-            >
-              Cancel
-            </button>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSubmitting}
+                className="h-9 rounded-lg border border-[var(--border-default)] bg-[var(--surface)] px-4 text-[12px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--elevated)] disabled:opacity-50"
+              >
+                Cancel
+              </button>
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-[12px] font-semibold text-white shadow-sm transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  <span>Creating...</span>
-                </>
-              ) : (
-                <>
-                  <PlusIcon className="w-3.5 h-3.5 stroke-[2]" />
-                  <span>Create</span>
-                </>
-              )}
-            </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-[12px] font-semibold text-white shadow-sm transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    <span>Creating...</span>
+                  </>
+                ) : (
+                  <>
+                    <PlusIcon className="w-3.5 h-3.5 stroke-[2]" />
+                    <span>Create</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </form>

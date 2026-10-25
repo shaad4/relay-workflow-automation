@@ -1,4 +1,3 @@
-
 from uuid import UUID
 
 from app.grpc.rag_client import RagClient
@@ -16,7 +15,11 @@ async def execute_rag_search(
     if "knowledge_base_id" in configuration and "knowledge_base" in configuration:
         if configuration["knowledge_base_id"] != configuration["knowledge_base"]:
             raise ValueError("Conflicting knowledge base identifiers")
-    knowledge_base_id = configuration.get("knowledge_base_id") if "knowledge_base_id" in configuration else configuration.get("knowledge_base")
+    knowledge_base_id = (
+        configuration.get("knowledge_base_id")
+        if "knowledge_base_id" in configuration
+        else configuration.get("knowledge_base")
+    )
 
     if not knowledge_base_id:
         raise ValueError("Knowledge base ID is required")
@@ -24,9 +27,7 @@ async def execute_rag_search(
     try:
         knowledge_base_id = str(UUID(str(knowledge_base_id)))
     except (ValueError, TypeError, AttributeError) as exc:
-        raise ValueError(
-            "Invalid knowledge base ID"
-        ) from exc
+        raise ValueError("Invalid knowledge base ID") from exc
 
     query = configuration.get("query")
 
@@ -39,15 +40,11 @@ async def execute_rag_search(
         raise ValueError("RAG query cannot be empty")
 
     if len(query) > 2000:
-        raise ValueError(
-            "RAG query cannot exceed 2000 characters"
-        )
+        raise ValueError("RAG query cannot exceed 2000 characters")
 
     # Do not send unresolved expressions to RAG Service
     if "{{" in query or "}}" in query:
-        raise ValueError(
-            "RAG query contains unresolved expressions"
-        )
+        raise ValueError("RAG query contains unresolved expressions")
 
     top_k = configuration.get("top_k", 5)
 
@@ -82,10 +79,7 @@ async def execute_rag_search(
     ]
 
     # Build readable context for downstream AI nodes
-    context = "\n\n".join(
-        f"[chunk: {chunk['chunk_id']}]\n{chunk['content']}"
-        for chunk in chunks
-    )
+    context = "\n\n".join(f"[chunk: {chunk['chunk_id']}]\n{chunk['content']}" for chunk in chunks)
 
     return {
         "chunks": chunks,

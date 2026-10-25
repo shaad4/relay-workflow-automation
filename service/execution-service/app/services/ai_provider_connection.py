@@ -4,12 +4,12 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.connection_test import test_ai_provider_connection
 from app.ai.encryption import CredentialEncryption
+from app.ai.model_catalog import list_provider_models
 from app.repositories.ai_provider_connection import (
     AIProviderConnectionRepository,
 )
-from app.ai.connection_test import test_ai_provider_connection
-from app.ai.model_catalog import list_provider_models
 
 SUPPORTED_PROVIDERS = {
     "openai",
@@ -19,7 +19,6 @@ SUPPORTED_PROVIDERS = {
 
 
 class AIProviderConnectionService:
-
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repository = AIProviderConnectionRepository(db)
@@ -36,9 +35,7 @@ class AIProviderConnectionService:
         provider = provider.strip().lower()
 
         if not name or len(name) > 100:
-            raise ValueError(
-                "Connection name must be between 1 and 100 characters"
-            )
+            raise ValueError("Connection name must be between 1 and 100 characters")
 
         if provider not in SUPPORTED_PROVIDERS:
             raise ValueError("Unsupported AI provider")
@@ -103,9 +100,7 @@ class AIProviderConnectionService:
             name = name.strip()
 
             if not name or len(name) > 100:
-                raise ValueError(
-                    "Connection name must be between 1 and 100 characters"
-                )
+                raise ValueError("Connection name must be between 1 and 100 characters")
 
         if api_key is not None:
             if not api_key.strip():
@@ -176,12 +171,9 @@ class AIProviderConnectionService:
         if connection.status != "active":
             raise ValueError("AI connection is inactive")
 
-        api_key = self.encryption.decrypt(
-            connection.encrypted_api_key
-        )
+        api_key = self.encryption.decrypt(connection.encrypted_api_key)
 
         return connection.provider, api_key
-
 
     async def test_connection(
         self,
@@ -200,7 +192,6 @@ class AIProviderConnectionService:
             api_key=api_key,
         )
 
-    
     async def list_models(
         self,
         connection_id: uuid.UUID,
@@ -217,4 +208,3 @@ class AIProviderConnectionService:
             provider=provider,
             api_key=api_key,
         )
-

@@ -13,9 +13,7 @@ async def register_user(
     data: RegisterRequest,
     session: AsyncSession,
 ):
-    result = await session.execute(
-        select(User).where(User.email == data.email)
-    )
+    result = await session.execute(select(User).where(User.email == data.email))
 
     existing_user = result.scalar_one_or_none()
 
@@ -24,9 +22,7 @@ async def register_user(
 
     password_hash = hash_password(data.password)
 
-    workspace = Workspace(
-        name=data.workspace_name
-    )
+    workspace = Workspace(name=data.workspace_name)
 
     try:
         session.add(workspace)
@@ -43,10 +39,7 @@ async def register_user(
 
         await session.flush()
 
-        verification_token = await create_verification_token(
-            user_id=user.id,
-            session=session
-        )
+        verification_token = await create_verification_token(user_id=user.id, session=session)
 
         await session.commit()
         await session.refresh(user)
@@ -61,18 +54,12 @@ async def login_user(
     data: LoginRequest,
     session: AsyncSession,
 ):
-    result = await session.execute(
-        select(User).where(
-            User.email == data.email
-        )
-    )
+    result = await session.execute(select(User).where(User.email == data.email))
 
     user = result.scalar_one_or_none()
 
     if not user:
-        raise ValueError(
-            "Invalid email or password"
-        )
+        raise ValueError("Invalid email or password")
 
     # Verify password before sending a new
     # verification email.
@@ -80,18 +67,13 @@ async def login_user(
         data.password,
         user.password_hash,
     ):
-        raise ValueError(
-            "Invalid email or password"
-        )
+        raise ValueError("Invalid email or password")
 
     if user.email_verified_at is None:
-
         try:
-            verification_token = (
-                await create_verification_token(
-                    user_id=user.id,
-                    session=session,
-                )
+            verification_token = await create_verification_token(
+                user_id=user.id,
+                session=session,
             )
 
             await session.commit()
@@ -124,5 +106,3 @@ async def refresh_access_token(
     session: AsyncSession,
 ) -> tuple[str, str]:
     return await rotate_refresh_token(refresh_token, session)
-    
-    

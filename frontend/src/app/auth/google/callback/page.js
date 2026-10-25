@@ -25,7 +25,9 @@ function GoogleCallbackContent() {
   const { login } = useAuth();
 
   const code = searchParams.get("code");
-  const [error, setError] = useState(() => (!code ? "Google login code is missing." : null));
+  const [error, setError] = useState(() =>
+    !code ? "Google login code is missing." : null,
+  );
   const hasExecutedRef = useRef(false);
 
   useEffect(() => {
@@ -63,14 +65,19 @@ function GoogleCallbackContent() {
           lowerMsg.includes("session has already")
         ) {
           setError(
-            "This Google login session has already been used. Please try signing in again."
+            "This Google login session has already been used. Please try signing in again.",
           );
-        } else if (lowerMsg.includes("expired") || lowerMsg.includes("invalid")) {
+        } else if (
+          lowerMsg.includes("expired") ||
+          lowerMsg.includes("invalid")
+        ) {
           setError(
-            "Your Google login session has expired or is invalid. Please sign in again."
+            "Your Google login session has expired or is invalid. Please sign in again.",
           );
         } else {
-          setError(msg || "Google login could not be completed. Please try again.");
+          setError(
+            msg || "Google login could not be completed. Please try again.",
+          );
         }
       }
     }

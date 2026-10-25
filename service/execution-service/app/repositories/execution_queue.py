@@ -1,11 +1,11 @@
 from uuid import UUID
 
-from sqlalchemy import select, update, func, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engine.status import ExecutionStatus
 from app.models.execution import Execution
 from app.models.idempotency_key import IdempotencyKey
-from app.engine.status import ExecutionStatus
 
 
 class ExecutionQueueRepository:
@@ -70,7 +70,6 @@ class ExecutionQueueRepository:
 
         return execution
 
-
     async def claim_pending(
         self,
         execution_id: UUID,
@@ -88,9 +87,7 @@ class ExecutionQueueRepository:
             raise ValueError("Invalid worker ID")
 
         if lease_seconds < 1:
-            raise ValueError(
-                "lease_seconds must be positive"
-            )
+            raise ValueError("lease_seconds must be positive")
 
         statement = (
             update(Execution)
@@ -106,12 +103,7 @@ class ExecutionQueueRepository:
                     func.now(),
                 ),
                 heartbeat_at=func.now(),
-                lease_expires_at=(
-                    func.now()
-                    + text(
-                        f"INTERVAL '{lease_seconds} seconds'"
-                    )
-                ),
+                lease_expires_at=(func.now() + text(f"INTERVAL '{lease_seconds} seconds'")),
             )
             .returning(Execution.id)
         )
@@ -120,8 +112,6 @@ class ExecutionQueueRepository:
 
         return result.scalar_one_or_none() is not None
 
-
-    
     async def renew_lease(
         self,
         execution_id: UUID,
@@ -149,12 +139,7 @@ class ExecutionQueueRepository:
             )
             .values(
                 heartbeat_at=func.now(),
-                lease_expires_at=(
-                    func.now()
-                    + func.make_interval(
-                        0, 0, 0, 0, 0, 0, lease_seconds
-                    )
-                ),
+                lease_expires_at=(func.now() + func.make_interval(0, 0, 0, 0, 0, 0, lease_seconds)),
             )
             .returning(Execution.id)
         )
@@ -162,7 +147,6 @@ class ExecutionQueueRepository:
         result = await self.session.execute(statement)
 
         return result.scalar_one_or_none() is not None
-
 
     async def list_expired_executions(
         self,
@@ -188,7 +172,6 @@ class ExecutionQueueRepository:
 
         return list(result.scalars().all())
 
-    
     async def mark_expired_as_failed(
         self,
         execution_id: UUID,
@@ -217,10 +200,7 @@ class ExecutionQueueRepository:
                 completed_at=func.now(),
                 error={
                     "error_code": "WORKER_INTERRUPTED",
-                    "message": (
-                        "Execution stopped because the "
-                        "worker lease expired"
-                    ),
+                    "message": ("Execution stopped because the worker lease expired"),
                     "retryable": False,
                     "requires_review": True,
                 },
@@ -231,8 +211,6 @@ class ExecutionQueueRepository:
         result = await self.session.execute(statement)
 
         return result.scalar_one_or_none() is not None
-
-
 
     async def list_pending_executions(
         self,
@@ -255,4 +233,3 @@ class ExecutionQueueRepository:
         result = await self.session.execute(statement)
 
         return list(result.scalars().all())
-

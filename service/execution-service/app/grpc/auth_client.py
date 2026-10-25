@@ -1,24 +1,15 @@
 import grpc
 
-from app.grpc.generated.auth import auth_pb2
-from app.grpc.generated.auth import auth_pb2_grpc
-
+from app.grpc.generated.auth import auth_pb2, auth_pb2_grpc
 
 AUTH_SERVICE_ADDRESS = "auth-service:50051"
 
 
 class AuthGrpcClient:
-
     def __init__(self):
-        self.channel = grpc.aio.insecure_channel(
-            AUTH_SERVICE_ADDRESS
-        )
+        self.channel = grpc.aio.insecure_channel(AUTH_SERVICE_ADDRESS)
 
-        self.stub = (
-            auth_pb2_grpc.AuthInternalServiceStub(
-                self.channel
-            )
-        )
+        self.stub = auth_pb2_grpc.AuthInternalServiceStub(self.channel)
 
     async def validate_token(
         self,
@@ -28,9 +19,7 @@ class AuthGrpcClient:
             access_token=access_token,
         )
 
-        return await self.stub.ValidateToken(
-            request
-        )
+        return await self.stub.ValidateToken(request)
 
     async def resolve_workspace(
         self,
@@ -40,9 +29,7 @@ class AuthGrpcClient:
             user_id=user_id,
         )
 
-        return await self.stub.ResolveWorkspace(
-            request
-        )
+        return await self.stub.ResolveWorkspace(request)
 
     async def close(self):
         await self.channel.close()

@@ -4,21 +4,20 @@ import grpc
 from sqlalchemy import delete, select
 
 from app.db.database import AsyncSessionLocal
+from app.grpc.generated.execution import approval_lifecycle_pb2, approval_lifecycle_pb2_grpc
 from app.models.execution import Execution
 from app.models.human_approval import HumanApproval
-from app.grpc.generated.execution import approval_lifecycle_pb2
-from app.grpc.generated.execution import approval_lifecycle_pb2_grpc
 
 
-class ExecutionInternalService(
-    approval_lifecycle_pb2_grpc.ExecutionInternalServiceServicer
-):
+class ExecutionInternalService(approval_lifecycle_pb2_grpc.ExecutionInternalServiceServicer):
     async def DeleteWorkflowApprovals(self, request, context):
         try:
             workflow_id = UUID(request.workflow_id)
             workspace_id = UUID(request.workspace_id)
         except ValueError:
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Invalid workflow or workspace ID")
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, "Invalid workflow or workspace ID"
+            )
 
         async with AsyncSessionLocal() as session:
             execution_ids = select(Execution.id).where(

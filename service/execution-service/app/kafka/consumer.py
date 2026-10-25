@@ -8,7 +8,6 @@ from app.services.execution_queue import (
     create_pending_execution,
 )
 
-
 KAFKA_BOOTSTRAP_SERVERS = os.getenv(
     "KAFKA_BOOTSTRAP_SERVERS",
     "kafka:9092",
@@ -51,20 +50,14 @@ async def consume_workflow_triggered():
     """
 
     if consumer is None:
-        raise RuntimeError(
-            "Kafka consumer is not started"
-        )
+        raise RuntimeError("Kafka consumer is not started")
 
     async for message in consumer:
         try:
-            event = json.loads(
-                message.value.decode("utf-8")
-            )
+            event = json.loads(message.value.decode("utf-8"))
 
             if not isinstance(event, dict):
-                raise ValueError(
-                    "Kafka event must be a JSON object"
-                )
+                raise ValueError("Kafka event must be a JSON object")
 
             # Persist execution + idempotency key atomically.
             await create_pending_execution(event)
@@ -75,9 +68,11 @@ async def consume_workflow_triggered():
                 message.partition,
             )
 
-            await consumer.commit({
-                partition: message.offset + 1,
-            })
+            await consumer.commit(
+                {
+                    partition: message.offset + 1,
+                }
+            )
 
         except asyncio.CancelledError:
             raise

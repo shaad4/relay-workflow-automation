@@ -1,17 +1,16 @@
-import httpx
 from uuid import UUID
 
-from sqlalchemy import select, update, delete
+import httpx
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import CredentialEncryption
 from app.models.connection import Connection
 from app.schemas.connection import (
     ConnectionCreate,
-    ConnectionUpdate,
     ConnectionTestResponse,
+    ConnectionUpdate,
 )
-
 
 SENSITIVE_FIELDS = {
     "authorization",
@@ -46,18 +45,14 @@ def redact_response(
         return {
             key: (
                 "[REDACTED]"
-                if str(key).lower().replace("-", "_")
-                in SENSITIVE_FIELDS
+                if str(key).lower().replace("-", "_") in SENSITIVE_FIELDS
                 else redact_response(item, credential)
             )
             for key, item in value.items()
         }
 
     if isinstance(value, list):
-        return [
-            redact_response(item, credential)
-            for item in value
-        ]
+        return [redact_response(item, credential) for item in value]
 
     if isinstance(value, str):
         if credential:
@@ -147,9 +142,7 @@ async def update_connection(
 
         if credential is not None:
             encryption = CredentialEncryption()
-            update_data["credential"] = encryption.encrypt(
-                credential
-            )
+            update_data["credential"] = encryption.encrypt(credential)
 
     try:
         result = await session.execute(
@@ -218,32 +211,24 @@ async def test_connection(
         raise ValueError("Connection not found")
 
     if connection.provider != "http":
-        raise ValueError(
-            f"Unsupported connection provider: {connection.provider}"
-        )
+        raise ValueError(f"Unsupported connection provider: {connection.provider}")
 
     config = connection.config or {}
 
     test_url = config.get("test_url")
 
     if not test_url:
-        raise ValueError(
-            "config.test_url is required to test this connection"
-        )
+        raise ValueError("config.test_url is required to test this connection")
 
     # Decrypt credentials only when needed.
     credential = None
 
     if connection.auth_type != "none":
         if not connection.credential:
-            raise ValueError(
-                "Credential is required for authentication"
-            )
+            raise ValueError("Credential is required for authentication")
 
         encryption = CredentialEncryption()
-        credential = encryption.decrypt(
-            connection.credential
-        )
+        credential = encryption.decrypt(connection.credential)
 
     headers: dict[str, str] = {}
     params: dict[str, str] = {}
@@ -258,9 +243,7 @@ async def test_connection(
         auth_header = config.get("auth_header")
 
         if not auth_header:
-            raise ValueError(
-                "config.auth_header is required for api_key_header"
-            )
+            raise ValueError("config.auth_header is required for api_key_header")
 
         headers[auth_header] = credential
 
@@ -268,16 +251,12 @@ async def test_connection(
         auth_param = config.get("auth_param")
 
         if not auth_param:
-            raise ValueError(
-                "config.auth_param is required for api_key_query"
-            )
+            raise ValueError("config.auth_param is required for api_key_query")
 
         params[auth_param] = credential
 
     else:
-        raise ValueError(
-            f"Unsupported auth_type: {connection.auth_type}"
-        )
+        raise ValueError(f"Unsupported auth_type: {connection.auth_type}")
 
     try:
         async with httpx.AsyncClient(
@@ -318,9 +297,6 @@ async def test_connection(
     return ConnectionTestResponse(
         success=False,
         status_code=response.status_code,
-        message=(
-            "Connection test failed with status code "
-            f"{response.status_code}"
-        ),
+        message=(f"Connection test failed with status code {response.status_code}"),
         response=safe_response,
     )

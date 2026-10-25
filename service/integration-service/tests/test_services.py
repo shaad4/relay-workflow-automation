@@ -13,7 +13,6 @@ from app.models.webhook import Webhook
 from app.schemas.webhook import WebhookCreate, WebhookUpdate
 from app.services import webhook_service as service
 
-
 WORKSPACE_ID = uuid4()
 WORKFLOW_ID = uuid4()
 VERSION_ID = uuid4()
@@ -89,7 +88,14 @@ def test_validate_workflow_version_closes_client(monkeypatch):
     monkeypatch.setattr(service, "WorkflowGrpcClient", WorkflowClient)
     asyncio.run(service.validate_workflow_version(WORKFLOW_ID, VERSION_ID, WORKSPACE_ID))
     assert calls == [
-        ("validate", {"workflow_id": str(WORKFLOW_ID), "version_id": str(VERSION_ID), "workspace_id": str(WORKSPACE_ID)}),
+        (
+            "validate",
+            {
+                "workflow_id": str(WORKFLOW_ID),
+                "version_id": str(VERSION_ID),
+                "workspace_id": str(WORKSPACE_ID),
+            },
+        ),
         ("close",),
     ]
 
@@ -168,7 +174,9 @@ def test_create_webhook_with_secret_and_without(monkeypatch):
 
     monkeypatch.setattr(service, "password_hash", Hasher())
     secured_session = FakeSession()
-    secured, secret = asyncio.run(service.create_webhook(create_data("secret"), WORKSPACE_ID, secured_session))
+    secured, secret = asyncio.run(
+        service.create_webhook(create_data("secret"), WORKSPACE_ID, secured_session)
+    )
     assert secured.workspace_id == WORKSPACE_ID
     assert secured.secret_hash == "hashed-secret"
     assert secured.public_token == "public"
@@ -176,7 +184,9 @@ def test_create_webhook_with_secret_and_without(monkeypatch):
     assert secured_session.commits == 1
 
     open_session = FakeSession()
-    open_webhook, no_secret = asyncio.run(service.create_webhook(create_data(), WORKSPACE_ID, open_session))
+    open_webhook, no_secret = asyncio.run(
+        service.create_webhook(create_data(), WORKSPACE_ID, open_session)
+    )
     assert open_webhook.secret_hash is None
     assert no_secret is None
 
@@ -207,7 +217,9 @@ def test_create_webhook_rolls_back_integrity_error(monkeypatch):
 
 def test_list_and_find_webhooks():
     expected = SimpleNamespace(id=WEBHOOK_ID)
-    session = FakeSession([Result(values=[expected]), Result(scalar=expected), Result(scalar=expected)])
+    session = FakeSession(
+        [Result(values=[expected]), Result(scalar=expected), Result(scalar=expected)]
+    )
     assert asyncio.run(service.list_webhooks(WORKSPACE_ID, session)) == [expected]
     assert asyncio.run(service.get_webhook(WEBHOOK_ID, WORKSPACE_ID, session)) is expected
     assert asyncio.run(service.get_webhook_by_public_token("token", session)) is expected
@@ -216,18 +228,29 @@ def test_list_and_find_webhooks():
 def test_update_webhook_updates_only_set_fields_and_returns_missing():
     current = SimpleNamespace(name="Before", is_active=True)
     session = FakeSession([Result(scalar=current)])
-    updated = asyncio.run(service.update_webhook(WEBHOOK_ID, WebhookUpdate(name="After"), WORKSPACE_ID, session))
+    updated = asyncio.run(
+        service.update_webhook(WEBHOOK_ID, WebhookUpdate(name="After"), WORKSPACE_ID, session)
+    )
     assert updated.name == "After"
     assert updated.is_active is True
     assert session.commits == 1
-    assert asyncio.run(service.update_webhook(WEBHOOK_ID, WebhookUpdate(), WORKSPACE_ID, FakeSession([Result()]))) is None
+    assert (
+        asyncio.run(
+            service.update_webhook(
+                WEBHOOK_ID, WebhookUpdate(), WORKSPACE_ID, FakeSession([Result()])
+            )
+        )
+        is None
+    )
 
 
 def test_update_webhook_integrity_error_rolls_back():
     failure = IntegrityError("update", {}, RuntimeError("conflict"))
     session = FakeSession([Result(scalar=SimpleNamespace(name="Before"))], fail_commit=failure)
     with pytest.raises(IntegrityError):
-        asyncio.run(service.update_webhook(WEBHOOK_ID, WebhookUpdate(name="After"), WORKSPACE_ID, session))
+        asyncio.run(
+            service.update_webhook(WEBHOOK_ID, WebhookUpdate(name="After"), WORKSPACE_ID, session)
+        )
     assert session.rollbacks == 1
 
 
@@ -247,12 +270,14 @@ def test_update_webhook_rejects_unpublished_version_without_mutating(monkeypatch
     monkeypatch.setattr(service, "validate_workflow_version", validate)
     session = FakeSession([Result(scalar=current)])
     with pytest.raises(service.UnpublishedWorkflowVersionError):
-        asyncio.run(service.update_webhook(
-            WEBHOOK_ID,
-            WebhookUpdate(workflow_version_id=uuid4()),
-            WORKSPACE_ID,
-            session,
-        ))
+        asyncio.run(
+            service.update_webhook(
+                WEBHOOK_ID,
+                WebhookUpdate(workflow_version_id=uuid4()),
+                WORKSPACE_ID,
+                session,
+            )
+        )
     assert current.workflow_version_id == VERSION_ID
     assert session.commits == 0
     assert calls[0]["workflow_id"] == WORKFLOW_ID
@@ -264,7 +289,10 @@ def test_delete_webhook_and_rollback_on_failure():
     session = FakeSession([Result(scalar=item)])
     assert asyncio.run(service.delete_webhook(WEBHOOK_ID, WORKSPACE_ID, session)) is True
     assert session.deleted == [item]
-    assert asyncio.run(service.delete_webhook(WEBHOOK_ID, WORKSPACE_ID, FakeSession([Result()]))) is False
+    assert (
+        asyncio.run(service.delete_webhook(WEBHOOK_ID, WORKSPACE_ID, FakeSession([Result()])))
+        is False
+    )
 
     session = FakeSession([Result(scalar=item)], fail_commit=RuntimeError("db failure"))
     with pytest.raises(RuntimeError, match="db failure"):
@@ -276,9 +304,16 @@ def test_regenerate_webhook_token_and_integrity_error(monkeypatch):
     current = SimpleNamespace(public_token="old")
     monkeypatch.setattr(service, "generate_public_token", lambda: "new")
     session = FakeSession([Result(scalar=current)])
-    assert asyncio.run(service.regenerate_webhook_token(WEBHOOK_ID, WORKSPACE_ID, session)) is current
+    assert (
+        asyncio.run(service.regenerate_webhook_token(WEBHOOK_ID, WORKSPACE_ID, session)) is current
+    )
     assert current.public_token == "new"
-    assert asyncio.run(service.regenerate_webhook_token(WEBHOOK_ID, WORKSPACE_ID, FakeSession([Result()]))) is None
+    assert (
+        asyncio.run(
+            service.regenerate_webhook_token(WEBHOOK_ID, WORKSPACE_ID, FakeSession([Result()]))
+        )
+        is None
+    )
 
     failure = IntegrityError("update", {}, RuntimeError("duplicate"))
     session = FakeSession([Result(scalar=SimpleNamespace(public_token="old"))], fail_commit=failure)

@@ -92,16 +92,22 @@ export default function WorkflowValidation({
             <div className="p-3 bg-[var(--canvas)] border border-[var(--border-subtle)] rounded-lg max-h-48 overflow-y-auto space-y-2">
               {errors.length > 0 ? (
                 errors.map((err, idx) => (
-                  <div key={idx} className="flex items-start gap-2 text-[12px] text-red-500 dark:text-red-400">
+                  <div
+                    key={idx}
+                    className="flex items-start gap-2 text-[12px] text-red-500 dark:text-red-400"
+                  >
                     <span className="font-mono text-[10px] bg-red-500/10 px-1 py-0.5 rounded border border-red-500/20 shrink-0">
                       {err.code || "ERR"}
                     </span>
-                    <span className="leading-snug">{err.message || String(err)}</span>
+                    <span className="leading-snug">
+                      {err.message || String(err)}
+                    </span>
                   </div>
                 ))
               ) : (
                 <div className="text-[12px] text-red-500 dark:text-red-400">
-                  Workflow must contain at least one trigger node and one connected action.
+                  Workflow must contain at least one trigger node and one
+                  connected action.
                 </div>
               )}
             </div>

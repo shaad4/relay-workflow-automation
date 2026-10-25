@@ -1,4 +1,3 @@
-
 from anthropic import AsyncAnthropic
 from google import genai
 from google.genai import types
@@ -52,10 +51,12 @@ async def list_provider_models(
                 if model_id.startswith("models/"):
                     model_id = model_id.removeprefix("models/")
 
-                models.append({
-                    "id": model_id,
-                    "name": model.display_name or model_id,
-                })
+                models.append(
+                    {
+                        "id": model_id,
+                        "name": model.display_name or model_id,
+                    }
+                )
 
         finally:
             await client.aio.aclose()

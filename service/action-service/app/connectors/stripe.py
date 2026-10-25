@@ -5,17 +5,28 @@ import stripe
 
 from app.connectors.base import Connector
 
-
 ZERO_DECIMAL_CURRENCIES = {
-    "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg",
-    "rwf", "vnd", "vuv", "xaf", "xof", "xpf",
+    "bif",
+    "clp",
+    "djf",
+    "gnf",
+    "jpy",
+    "kmf",
+    "krw",
+    "mga",
+    "pyg",
+    "rwf",
+    "vnd",
+    "vuv",
+    "xaf",
+    "xof",
+    "xpf",
 }
 TWO_DECIMAL_CURRENCIES = {"usd", "inr", "huf", "twd"}
 WHOLE_AMOUNT_TWO_DECIMAL_CURRENCIES = {"isk", "ugx"}
 
 
 class StripeConnector(Connector):
-
     async def execute(
         self,
         action: str,
@@ -24,9 +35,7 @@ class StripeConnector(Connector):
     ) -> dict[str, Any]:
 
         if action != "refund_payment":
-            raise ValueError(
-                f"Unsupported Stripe action: {action}"
-            )
+            raise ValueError(f"Unsupported Stripe action: {action}")
 
         api_key = config.get("api_key")
         payment_id = input_data.get("payment_id")
@@ -60,15 +69,24 @@ class StripeConnector(Connector):
 
         try:
             payment = stripe.PaymentIntent.retrieve(
-                payment_id, expand=["latest_charge"], api_key=api_key,
+                payment_id,
+                expand=["latest_charge"],
+                api_key=api_key,
             )
             currency = payment.currency.lower()
             charge = payment.latest_charge
             if not charge or isinstance(charge, str):
                 raise ValueError("Payment has no refundable charge")
-            if currency not in (ZERO_DECIMAL_CURRENCIES | TWO_DECIMAL_CURRENCIES | WHOLE_AMOUNT_TWO_DECIMAL_CURRENCIES):
+            if currency not in (
+                ZERO_DECIMAL_CURRENCIES
+                | TWO_DECIMAL_CURRENCIES
+                | WHOLE_AMOUNT_TWO_DECIMAL_CURRENCIES
+            ):
                 raise ValueError(f"Unsupported refund currency: {currency}")
-            if currency in WHOLE_AMOUNT_TWO_DECIMAL_CURRENCIES and amount_decimal != amount_decimal.to_integral_value():
+            if (
+                currency in WHOLE_AMOUNT_TWO_DECIMAL_CURRENCIES
+                and amount_decimal != amount_decimal.to_integral_value()
+            ):
                 raise ValueError("Refund amount must be a whole currency unit")
             multiplier = 1 if currency in ZERO_DECIMAL_CURRENCIES else 100
             units = amount_decimal * multiplier
@@ -87,11 +105,7 @@ class StripeConnector(Connector):
             )
 
         except stripe.StripeError as exc:
-            message = (
-                getattr(exc, "user_message", None)
-                or str(exc)
-                or "Stripe refund failed"
-            )
+            message = getattr(exc, "user_message", None) or str(exc) or "Stripe refund failed"
 
             raise ValueError(message) from exc
 

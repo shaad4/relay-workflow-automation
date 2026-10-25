@@ -1,21 +1,15 @@
 import logging
 from uuid import UUID
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    UploadFile,
-    HTTPException
-)
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.tasks.ingestion import ingest_document_task
 from starlette.concurrency import run_in_threadpool
 
 from app.db.database import get_db
 from app.dependencies import get_current_identity
 from app.schemas.document import DocumentResponse
 from app.services.document import DocumentService
+from app.tasks.ingestion import ingest_document_task
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +18,6 @@ router = APIRouter(
     prefix="/knowledge-bases",
     tags=["Documents"],
 )
-
 
 
 @router.post(
@@ -67,15 +60,11 @@ async def upload_document(
         # Never report that ingestion was queued successfully.
         raise HTTPException(
             status_code=503,
-            detail=(
-                "Document uploaded successfully, "
-                "but ingestion could not be queued"
-            ),
+            detail=("Document uploaded successfully, but ingestion could not be queued"),
         )
 
     # 3. Return pending document
     return document
-
 
 
 @router.get(
@@ -93,7 +82,6 @@ async def list_documents(
         workspace_id=UUID(identity["workspace_id"]),
         knowledge_base_id=knowledge_base_id,
     )
-
 
 
 @router.delete(
@@ -121,7 +109,6 @@ async def delete_document(
         )
 
     return None
-
 
 
 @router.post(
@@ -157,6 +144,7 @@ async def retry_document(
         # Restore failed only if the document is still pending.
         # The broker may have accepted the task before an error.
         from sqlalchemy import update
+
         from app.models.document import Document
 
         try:

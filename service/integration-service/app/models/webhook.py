@@ -60,10 +60,7 @@ class Webhook(Base):
         nullable=False,
     )
 
-    secret_hash: Mapped[str | None] = mapped_column(
-        Text, 
-        nullable=True
-    )
+    secret_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     is_active: Mapped[bool] = mapped_column(
         Boolean,

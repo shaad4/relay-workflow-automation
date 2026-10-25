@@ -4,16 +4,19 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from cryptography.fernet import Fernet
-
 from app.services.ai_provider_connection import AIProviderConnectionService
+from cryptography.fernet import Fernet
 
 
 def service(monkeypatch):
     monkeypatch.setenv("AI_CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
     db = AsyncMock()
     instance = AIProviderConnectionService(db)
-    connection = SimpleNamespace(provider="openai", encrypted_api_key=instance.encryption.encrypt("synthetic-key"), status="active")
+    connection = SimpleNamespace(
+        provider="openai",
+        encrypted_api_key=instance.encryption.encrypt("synthetic-key"),
+        status="active",
+    )
     instance.repository.create = AsyncMock(return_value=connection)
     instance.repository.get_by_id = AsyncMock(return_value=connection)
     instance.repository.list_by_workspace = AsyncMock(return_value=[connection])
@@ -25,7 +28,10 @@ def service(monkeypatch):
 def test_connection_create_encrypts_key_and_commits(monkeypatch):
     instance, connection = service(monkeypatch)
     workspace = uuid4()
-    assert asyncio.run(instance.create(workspace, "  Primary  ", " OpenAI ", "synthetic-key")) is connection
+    assert (
+        asyncio.run(instance.create(workspace, "  Primary  ", " OpenAI ", "synthetic-key"))
+        is connection
+    )
     args = instance.repository.create.await_args.kwargs
     assert args["workspace_id"] == workspace
     assert args["name"] == "Primary" and args["provider"] == "openai"
@@ -34,7 +40,15 @@ def test_connection_create_encrypts_key_and_commits(monkeypatch):
     instance.db.refresh.assert_awaited_once_with(connection)
 
 
-@pytest.mark.parametrize("name,provider,key", [("", "openai", "key"), ("x" * 101, "openai", "key"), ("name", "unknown", "key"), ("name", "openai", "")])
+@pytest.mark.parametrize(
+    "name,provider,key",
+    [
+        ("", "openai", "key"),
+        ("x" * 101, "openai", "key"),
+        ("name", "unknown", "key"),
+        ("name", "openai", ""),
+    ],
+)
 def test_connection_create_rejects_invalid_data(monkeypatch, name, provider, key):
     instance, _ = service(monkeypatch)
     with pytest.raises(ValueError):
@@ -47,9 +61,16 @@ def test_connection_reads_and_writes_are_workspace_scoped(monkeypatch):
     workspace, connection_id = uuid4(), uuid4()
     assert asyncio.run(instance.get(connection_id, workspace)) is connection
     assert asyncio.run(instance.list(workspace)) == [connection]
-    assert asyncio.run(instance.update(connection_id, workspace, name=" Renamed ", status="inactive")) is connection
-    instance.repository.get_by_id.assert_awaited_with(connection_id=connection_id, workspace_id=workspace)
-    instance.repository.update.assert_awaited_once_with(connection=connection, name="Renamed", encrypted_api_key=None, status="inactive")
+    assert (
+        asyncio.run(instance.update(connection_id, workspace, name=" Renamed ", status="inactive"))
+        is connection
+    )
+    instance.repository.get_by_id.assert_awaited_with(
+        connection_id=connection_id, workspace_id=workspace
+    )
+    instance.repository.update.assert_awaited_once_with(
+        connection=connection, name="Renamed", encrypted_api_key=None, status="inactive"
+    )
     assert asyncio.run(instance.delete(connection_id, workspace)) is True
     instance.repository.delete.assert_awaited_once_with(connection)
 
@@ -68,9 +89,13 @@ def test_connection_missing_or_inactive_cannot_be_used(monkeypatch):
 
 def test_connection_execution_credentials_and_provider_queries(monkeypatch):
     from app.services import ai_provider_connection
+
     instance, _ = service(monkeypatch)
     connection_id, workspace = uuid4(), uuid4()
-    assert asyncio.run(instance.get_execution_credentials(connection_id, workspace)) == ("openai", "synthetic-key")
+    assert asyncio.run(instance.get_execution_credentials(connection_id, workspace)) == (
+        "openai",
+        "synthetic-key",
+    )
     check = AsyncMock(return_value=True)
     models = AsyncMock(return_value=[{"id": "synthetic-model", "name": "Synthetic"}])
     monkeypatch.setattr(ai_provider_connection, "test_ai_provider_connection", check)

@@ -63,7 +63,7 @@ export default function NodeLibrary({ onAddNode, onClose }) {
           n.name.toLowerCase().includes(query) ||
           n.typeId.toLowerCase().includes(query) ||
           n.description.toLowerCase().includes(query) ||
-          n.category.toLowerCase().includes(query)
+          n.category.toLowerCase().includes(query),
       );
       return {
         ...cat,
@@ -73,7 +73,10 @@ export default function NodeLibrary({ onAddNode, onClose }) {
   }, [searchQuery]);
 
   const onDragStart = (event, nodeDef) => {
-    event.dataTransfer.setData("application/reactflow", JSON.stringify(nodeDef));
+    event.dataTransfer.setData(
+      "application/reactflow",
+      JSON.stringify(nodeDef),
+    );
     event.dataTransfer.effectAllowed = "move";
   };
 
@@ -158,7 +161,9 @@ export default function NodeLibrary({ onAddNode, onClose }) {
                       className="group flex items-center justify-between p-2 rounded-[6px] bg-[var(--canvas)] hover:bg-[var(--elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] transition-all duration-100 ease-out cursor-grab active:cursor-grabbing"
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[14px] shrink-0">{node.icon}</span>
+                        <span className="text-[14px] shrink-0">
+                          {node.icon}
+                        </span>
                         <div className="min-w-0">
                           <div className="text-[12px] font-medium text-[var(--text-primary)] truncate group-hover:text-[var(--accent)] transition-colors leading-tight">
                             {node.name}

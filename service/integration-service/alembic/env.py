@@ -1,14 +1,12 @@
-from logging.config import fileConfig
 import asyncio
 import os
+from logging.config import fileConfig
 
 from alembic import context
+from app.db.database import Base
 from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
-
-from app.db.database import Base
-from app.models.webhook import Webhook
 
 load_dotenv()
 

@@ -41,7 +41,8 @@ export function isPasswordValid(password = "") {
 }
 
 export function getPasswordError(password = "") {
-  if (password.length < 8) return "Password must be at least 8 characters long.";
+  if (password.length < 8)
+    return "Password must be at least 8 characters long.";
   if (password.length > 128) return "Password must not exceed 128 characters.";
   if (!/[A-Z]/.test(password)) {
     return "Password must contain at least one uppercase letter.";
@@ -62,13 +63,13 @@ export function isEmailValid(email = "") {
   const [localPart, domain, ...extraParts] = email.trim().split("@");
   return Boolean(
     localPart &&
-      domain &&
-      extraParts.length === 0 &&
-      !/\s/.test(localPart) &&
-      !/\s/.test(domain) &&
-      domain.includes(".") &&
-      !domain.startsWith(".") &&
-      !domain.endsWith(".")
+    domain &&
+    extraParts.length === 0 &&
+    !/\s/.test(localPart) &&
+    !/\s/.test(domain) &&
+    domain.includes(".") &&
+    !domain.startsWith(".") &&
+    !domain.endsWith("."),
   );
 }
 
@@ -130,8 +131,8 @@ export default function RegisterForm() {
     ? !formData.email.trim()
       ? "Email is required."
       : !isEmailValid(formData.email)
-      ? "Please enter a valid email address."
-      : null
+        ? "Please enter a valid email address."
+        : null
     : null;
 
   const workspaceNameError = touched.workspace_name
@@ -148,19 +149,19 @@ export default function RegisterForm() {
     ? !formData.confirmPassword
       ? "Please confirm your password."
       : formData.confirmPassword !== formData.password
-      ? "Passwords do not match."
-      : null
+        ? "Passwords do not match."
+        : null
     : null;
 
   const isStep1Valid = Boolean(
-    !getLengthError(formData.name, "Full name") && isEmailValid(formData.email)
+    !getLengthError(formData.name, "Full name") && isEmailValid(formData.email),
   );
   const isStep2Valid = Boolean(
-    !getLengthError(formData.workspace_name, "Workspace name")
+    !getLengthError(formData.workspace_name, "Workspace name"),
   );
   const isStep3Valid = Boolean(
     isPasswordValid(formData.password) &&
-      formData.confirmPassword === formData.password
+    formData.confirmPassword === formData.password,
   );
 
   const handleNextStep1 = (e) => {
@@ -574,8 +575,8 @@ export default function RegisterForm() {
                     isPasswordFocused || formData.password.length > 0
                       ? "password-requirements password-error"
                       : passwordError
-                      ? "password-error"
-                      : undefined
+                        ? "password-error"
+                        : undefined
                   }
                   className={`w-full h-11 pl-3.5 pr-11 text-[15px] bg-[var(--input-bg)] text-[var(--text-primary)] placeholder-[var(--text-disabled)] rounded-[6px] border ${
                     passwordError

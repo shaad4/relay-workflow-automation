@@ -1,11 +1,9 @@
 import asyncio
 import json
 import sys
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from pathlib import Path
+from types import SimpleNamespace
 
-import pytest
 import grpc
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -54,9 +52,7 @@ class FakeContext:
 
 
 def install_session_factory(monkeypatch, *results):
-    monkeypatch.setattr(
-        workflow_server, "AsyncSessionLocal", lambda: FakeSession(results)
-    )
+    monkeypatch.setattr(workflow_server, "AsyncSessionLocal", lambda: FakeSession(results))
 
 
 def test_get_published_version_not_found(monkeypatch):
@@ -202,13 +198,21 @@ def test_get_workflow_definition_serializes_nodes_and_edges(monkeypatch):
         id="version-id", workflow_id="workflow-id", version=3, status="published"
     )
     node = SimpleNamespace(
-        id="node-id", workflow_version_id="version-id", node_id="start",
-        node_type="trigger", label="Start", position_x=1, position_y=2,
+        id="node-id",
+        workflow_version_id="version-id",
+        node_id="start",
+        node_type="trigger",
+        label="Start",
+        position_x=1,
+        position_y=2,
         configuration={"key": "value"},
     )
     edge = SimpleNamespace(
-        id="edge-id", workflow_version_id="version-id", source_node_id="start",
-        target_node_id="finish", condition="ok",
+        id="edge-id",
+        workflow_version_id="version-id",
+        source_node_id="start",
+        target_node_id="finish",
+        condition="ok",
     )
     install_session_factory(
         monkeypatch,
@@ -266,7 +270,9 @@ def test_start_grpc_server_registers_service_and_starts(monkeypatch):
     monkeypatch.setattr(
         server.workflow_pb2_grpc,
         "add_WorkflowInternalServiceServicer_to_server",
-        lambda servicer, target: calls.append(("register", isinstance(servicer, WorkflowInternalService), target)),
+        lambda servicer, target: calls.append(
+            ("register", isinstance(servicer, WorkflowInternalService), target)
+        ),
     )
     result = asyncio.run(server.start_grpc_server())
     assert result is fake_server

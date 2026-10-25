@@ -1,4 +1,3 @@
-
 import os
 
 from dotenv import load_dotenv
@@ -9,7 +8,6 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
-
 
 load_dotenv()
 

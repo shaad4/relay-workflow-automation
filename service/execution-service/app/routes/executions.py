@@ -7,15 +7,14 @@ from app.db.database import AsyncSessionLocal
 from app.dependencies import get_current_identity
 from app.repositories.execution import ExecutionRepository
 from app.schemas.executions import (
-    ExecutionListResponse,
     ExecutionDetailResponse,
+    ExecutionListResponse,
     ExecutionStepsListResponse,
 )
-from app.services.execution_history import ExecutionHistoryService
 from app.services.execution_cancellation import (
     ExecutionCancellationService,
 )
-
+from app.services.execution_history import ExecutionHistoryService
 
 router = APIRouter(
     prefix="/executions",
@@ -45,7 +44,10 @@ async def list_executions(
         service = ExecutionHistoryService(repository)
 
         if group_id is not None and (group_replays or status is not None):
-            raise HTTPException(status_code=422, detail="Attempt history cannot be combined with group or status filters")
+            raise HTTPException(
+                status_code=422,
+                detail="Attempt history cannot be combined with group or status filters",
+            )
 
         result = await service.list_executions(
             workspace_id=workspace_id,
@@ -64,7 +66,6 @@ async def list_executions(
             status_code=500,
             detail="Unable to retrieve execution history",
         ) from exc
-
 
 
 @router.get(
@@ -102,8 +103,6 @@ async def get_execution_details(
         ) from exc
 
 
-
-
 @router.get(
     "/{execution_id}/steps/",
     response_model=ExecutionStepsListResponse,
@@ -137,7 +136,6 @@ async def get_execution_steps(
             status_code=500,
             detail="Unable to retrieve execution steps",
         ) from exc
-
 
 
 @router.post("/{execution_id}/cancel/")

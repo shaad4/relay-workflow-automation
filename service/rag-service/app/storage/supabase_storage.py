@@ -1,11 +1,9 @@
-
 import os
 
 from supabase import Client, create_client
 
 
 class SupabaseStorage:
-
     def __init__(self):
         self.bucket = os.environ["SUPABASE_STORAGE_BUCKET"]
 
@@ -32,26 +30,17 @@ class SupabaseStorage:
         return storage_path
 
     def download(self, storage_path: str) -> bytes:
-        return self.client.storage.from_(
-            self.bucket
-        ).download(storage_path)
+        return self.client.storage.from_(self.bucket).download(storage_path)
 
     def delete(self, storage_path: str) -> None:
-        self.client.storage.from_(
-            self.bucket
-        ).remove([storage_path])
+        self.client.storage.from_(self.bucket).remove([storage_path])
 
     def exists(self, storage_path: str) -> bool:
         folder, filename = storage_path.rsplit("/", 1)
 
-        objects = self.client.storage.from_(
-            self.bucket
-        ).list(
+        objects = self.client.storage.from_(self.bucket).list(
             path=folder,
             options={"search": filename},
         )
 
-        return any(
-            obj["name"] == filename
-            for obj in objects
-        )
+        return any(obj["name"] == filename for obj in objects)

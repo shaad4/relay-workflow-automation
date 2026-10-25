@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")

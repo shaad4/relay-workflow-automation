@@ -19,5 +19,6 @@ class ApprovalResponse(BaseModel):
         "from_attributes": True,
     }
 
+
 class ApprovalListResponse(BaseModel):
     approvals: list[ApprovalResponse]

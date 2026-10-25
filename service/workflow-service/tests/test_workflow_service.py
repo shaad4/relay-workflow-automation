@@ -1,5 +1,5 @@
-import sys
 import asyncio
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -12,7 +12,6 @@ from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 from app.schemas.workflow_edge import WorkflowEdgeUpdate
 from app.schemas.workflow_node import WorkflowNodeUpdate
 from app.services import workflow_service as service
-
 
 WORKFLOW_ID = uuid4()
 WORKSPACE_ID = uuid4()
@@ -28,7 +27,9 @@ class Result:
         return self.scalar
 
     def scalars(self):
-        return SimpleNamespace(all=lambda: self.values, first=lambda: self.values[0] if self.values else None)
+        return SimpleNamespace(
+            all=lambda: self.values, first=lambda: self.values[0] if self.values else None
+        )
 
 
 class FakeSession:
@@ -89,11 +90,7 @@ def test_create_workflow_rolls_back_when_commit_fails():
 
     session = FakeSession(fail_commit=True)
     with pytest.raises(RuntimeError, match="commit failed"):
-        asyncio.run(
-            service.create_workflow(
-                WorkflowCreate(name="Orders"), WORKSPACE_ID, session
-            )
-        )
+        asyncio.run(service.create_workflow(WorkflowCreate(name="Orders"), WORKSPACE_ID, session))
     assert session.rollbacks == 1
 
 
@@ -127,9 +124,7 @@ def test_create_draft_version_copies_nodes_and_edges():
         position_y=8,
         configuration={"key": "value"},
     )
-    source_edge = SimpleNamespace(
-        source_node_id="start", target_node_id="finish", condition="ok"
-    )
+    source_edge = SimpleNamespace(source_node_id="start", target_node_id="finish", condition="ok")
     session = FakeSession(
         [
             Result(scalar=SimpleNamespace(id=WORKFLOW_ID)),
@@ -139,9 +134,7 @@ def test_create_draft_version_copies_nodes_and_edges():
         ]
     )
 
-    new_version = asyncio.run(
-        service.create_draft_version(WORKFLOW_ID, WORKSPACE_ID, session)
-    )
+    new_version = asyncio.run(service.create_draft_version(WORKFLOW_ID, WORKSPACE_ID, session))
     copied_node, copied_edge = session.added[1:]
     assert new_version.version == 3
     assert new_version.status == "draft"
@@ -277,9 +270,7 @@ def test_validate_workflow_reports_empty_workflow_and_invalid_edges():
             Result(scalars=[bad_edge]),
         ]
     )
-    result = asyncio.run(
-        service.validate_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, session)
-    )
+    result = asyncio.run(service.validate_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, session))
     assert result["valid"] is False
     assert {error["code"] for error in result["errors"]} == {
         "NO_NODES",
@@ -293,23 +284,23 @@ def test_publish_workflow_updates_version_and_workflow(integration_client):
     import asyncio
 
     draft = SimpleNamespace(id=VERSION_ID, version=3, status="draft")
-    active_workflow = SimpleNamespace(
-        id=WORKFLOW_ID, status="inactive", published_version_id=None
-    )
+    active_workflow = SimpleNamespace(id=WORKFLOW_ID, status="inactive", published_version_id=None)
     session = FakeSession(
         [
             Result(scalar=active_workflow),
             Result(scalar=draft),
             Result(scalar=active_workflow),
             Result(scalar=draft),
-            Result(scalars=[SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={})]),
+            Result(
+                scalars=[
+                    SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={})
+                ]
+            ),
             Result(scalars=[]),
             Result(scalar=None),  # Published version has no Scheduled Trigger.
         ]
     )
-    published = asyncio.run(
-        service.publish_workflow(WORKFLOW_ID, 3, WORKSPACE_ID, session)
-    )
+    published = asyncio.run(service.publish_workflow(WORKFLOW_ID, 3, WORKSPACE_ID, session))
     assert published["status"] == "published"
     assert draft.status == "published"
     assert active_workflow.status == "active"
@@ -317,28 +308,28 @@ def test_publish_workflow_updates_version_and_workflow(integration_client):
     assert session.commits == 1
 
     integration_client.sync_workflow_schedule.assert_awaited_once_with(
-        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
-        workflow_version_id=VERSION_ID, has_schedule_trigger=False, workflow_active=True,
+        workflow_id=WORKFLOW_ID,
+        workspace_id=WORKSPACE_ID,
+        workflow_version_id=VERSION_ID,
+        has_schedule_trigger=False,
+        workflow_active=True,
     )
     integration_client.close.assert_awaited_once()
 
 
 def test_delete_workflow_returns_false_when_missing_and_deletes_when_found(integration_client):
     missing_session = FakeSession([Result(scalar=None)])
-    assert asyncio.run(
-        service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, missing_session)
-    ) is False
+    assert asyncio.run(service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, missing_session)) is False
 
     found = SimpleNamespace(id=WORKFLOW_ID, status="draft")
     session = FakeSession([Result(scalar=found), Result(), Result(), Result(), Result()])
-    assert asyncio.run(
-        service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, session)
-    ) is True
+    assert asyncio.run(service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, session)) is True
     assert session.deleted == [found]
     assert session.commits == 1
 
     integration_client.delete_workflow_schedule.assert_awaited_once_with(
-        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
+        workflow_id=WORKFLOW_ID,
+        workspace_id=WORKSPACE_ID,
     )
     integration_client.close.assert_awaited_once()
 
@@ -348,16 +339,14 @@ def test_delete_workflow_accepts_draft_and_inactive(status, integration_client):
     workflow = SimpleNamespace(id=WORKFLOW_ID, status=status)
     session = FakeSession([Result(scalar=workflow), Result(), Result(), Result(), Result()])
 
-    assert asyncio.run(
-        service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, session)
-    ) is True
+    assert asyncio.run(service.delete_workflow(WORKFLOW_ID, WORKSPACE_ID, session)) is True
     assert session.deleted == [workflow]
     assert session.commits == 1
     integration_client.delete_workflow_schedule.assert_awaited_once_with(
-        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
+        workflow_id=WORKFLOW_ID,
+        workspace_id=WORKSPACE_ID,
     )
     integration_client.close.assert_awaited_once()
-
 
 
 def test_delete_workflow_rolls_back_if_cascade_delete_fails():
@@ -411,9 +400,7 @@ def test_create_workflow_node_rejects_non_draft_and_adds_valid_node():
         )
 
     draft = SimpleNamespace(id=VERSION_ID, status="draft")
-    session = FakeSession(
-        [Result(scalar=workflow_row), Result(scalar=draft), Result(scalar=None)]
-    )
+    session = FakeSession([Result(scalar=workflow_row), Result(scalar=draft), Result(scalar=None)])
     created = asyncio.run(
         service.create_workflow_node(
             WORKFLOW_ID,
@@ -459,7 +446,11 @@ def test_create_workflow_edge_checks_nodes_then_creates_edge():
         [
             Result(scalar=SimpleNamespace(id=WORKFLOW_ID)),
             Result(scalar=draft),
-            Result(scalar=SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={})),
+            Result(
+                scalar=SimpleNamespace(
+                    node_id="start", node_type="trigger.webhook", configuration={}
+                )
+            ),
             Result(scalar=SimpleNamespace(node_id="finish")),
         ]
     )
@@ -490,9 +481,7 @@ def test_validate_workflow_reports_duplicate_node_ids():
             Result(scalars=[]),
         ]
     )
-    result = asyncio.run(
-        service.validate_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, session)
-    )
+    result = asyncio.run(service.validate_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, session))
     assert result["valid"] is False
     assert result["errors"][0]["code"] == "DUPLICATE_NODE_ID"
 
@@ -510,14 +499,13 @@ def test_activate_and_deactivate_require_published_version(integration_client):
 
     published.status = "active"
     session = FakeSession([Result(scalar=published)])
-    deactivated = asyncio.run(
-        service.deactivate_workflow(WORKFLOW_ID, WORKSPACE_ID, session)
-    )
+    deactivated = asyncio.run(service.deactivate_workflow(WORKFLOW_ID, WORKSPACE_ID, session))
     assert deactivated.status == "inactive"
     assert session.commits == 1
 
     integration_client.suspend_workflow_schedule.assert_awaited_once_with(
-        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
+        workflow_id=WORKFLOW_ID,
+        workspace_id=WORKSPACE_ID,
     )
     integration_client.close.assert_awaited_once()
 
@@ -559,14 +547,15 @@ def test_service_returns_none_for_missing_workflow(function, results, args):
 def test_get_and_list_versions_missing_version():
     workflow = SimpleNamespace(id=WORKFLOW_ID)
     get_session = FakeSession([Result(scalar=workflow), Result(scalar=None)])
-    assert asyncio.run(
-        service.get_workflow_version(WORKFLOW_ID, 4, WORKSPACE_ID, get_session)
-    ) == (workflow, None)
+    assert asyncio.run(service.get_workflow_version(WORKFLOW_ID, 4, WORKSPACE_ID, get_session)) == (
+        workflow,
+        None,
+    )
 
     list_session = FakeSession([Result(scalar=workflow), Result(scalars=[])])
-    assert asyncio.run(
-        service.list_workflow_versions(WORKFLOW_ID, WORKSPACE_ID, list_session)
-    ) == []
+    assert (
+        asyncio.run(service.list_workflow_versions(WORKFLOW_ID, WORKSPACE_ID, list_session)) == []
+    )
 
 
 def test_create_draft_version_returns_none_when_no_previous_version():
@@ -576,14 +565,15 @@ def test_create_draft_version_returns_none_when_no_previous_version():
             Result(scalars=[]),
         ]
     )
-    assert asyncio.run(
-        service.create_draft_version(WORKFLOW_ID, WORKSPACE_ID, session)
-    ) is None
+    assert asyncio.run(service.create_draft_version(WORKFLOW_ID, WORKSPACE_ID, session)) is None
 
 
 @pytest.mark.parametrize("function", [service.update_workflow_node, service.delete_workflow_node])
 def test_node_mutations_reject_ambiguous_duplicate_ids(function):
-    nodes = [SimpleNamespace(id=uuid4(), node_id="same"), SimpleNamespace(id=uuid4(), node_id="same")]
+    nodes = [
+        SimpleNamespace(id=uuid4(), node_id="same"),
+        SimpleNamespace(id=uuid4(), node_id="same"),
+    ]
     session = FakeSession(
         [
             Result(scalar=SimpleNamespace(id=WORKFLOW_ID)),
@@ -594,7 +584,9 @@ def test_node_mutations_reject_ambiguous_duplicate_ids(function):
     with pytest.raises(ValueError, match="ambiguous"):
         if function is service.update_workflow_node:
             asyncio.run(
-                function(WORKFLOW_ID, 1, "same", WORKSPACE_ID, WorkflowNodeUpdate(label="x"), session)
+                function(
+                    WORKFLOW_ID, 1, "same", WORKSPACE_ID, WorkflowNodeUpdate(label="x"), session
+                )
             )
         else:
             asyncio.run(function(WORKFLOW_ID, 1, "same", WORKSPACE_ID, session))
@@ -610,7 +602,9 @@ def test_create_edge_rejects_missing_source_and_target():
     with pytest.raises(ValueError, match="Source node not found"):
         asyncio.run(
             service.create_workflow_edge(
-                WORKFLOW_ID, 1, WORKSPACE_ID,
+                WORKFLOW_ID,
+                1,
+                WORKSPACE_ID,
                 WorkflowEdgeCreate(source_node_id="missing", target_node_id="target"),
                 FakeSession([*base_results, Result(scalar=None)]),
             )
@@ -618,7 +612,9 @@ def test_create_edge_rejects_missing_source_and_target():
     with pytest.raises(ValueError, match="Target node not found"):
         asyncio.run(
             service.create_workflow_edge(
-                WORKFLOW_ID, 1, WORKSPACE_ID,
+                WORKFLOW_ID,
+                1,
+                WORKSPACE_ID,
                 WorkflowEdgeCreate(source_node_id="source", target_node_id="missing"),
                 FakeSession([*base_results, Result(scalar=object()), Result(scalar=None)]),
             )
@@ -628,19 +624,21 @@ def test_create_edge_rejects_missing_source_and_target():
 def test_delete_node_and_edge_return_none_when_not_found():
     workflow = SimpleNamespace(id=WORKFLOW_ID)
     draft = SimpleNamespace(id=VERSION_ID, status="draft")
-    node_session = FakeSession(
-        [Result(scalar=workflow), Result(scalar=draft), Result(scalars=[])]
+    node_session = FakeSession([Result(scalar=workflow), Result(scalar=draft), Result(scalars=[])])
+    assert (
+        asyncio.run(
+            service.delete_workflow_node(WORKFLOW_ID, 1, "missing", WORKSPACE_ID, node_session)
+        )
+        is None
     )
-    assert asyncio.run(
-        service.delete_workflow_node(WORKFLOW_ID, 1, "missing", WORKSPACE_ID, node_session)
-    ) is None
 
-    edge_session = FakeSession(
-        [Result(scalar=workflow), Result(scalar=draft), Result(scalar=None)]
+    edge_session = FakeSession([Result(scalar=workflow), Result(scalar=draft), Result(scalar=None)])
+    assert (
+        asyncio.run(
+            service.delete_workflow_edge(WORKFLOW_ID, 1, uuid4(), WORKSPACE_ID, edge_session)
+        )
+        is None
     )
-    assert asyncio.run(
-        service.delete_workflow_edge(WORKFLOW_ID, 1, uuid4(), WORKSPACE_ID, edge_session)
-    ) is None
 
 
 @pytest.mark.parametrize(
@@ -663,18 +661,60 @@ def test_mutation_failures_roll_back(operation, result_count):
     results_by_operation = {
         "workflow": [Result(scalar=workflow)],
         "node": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=None)],
-        "edge": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=object()), Result(scalar=object())],
-        "draft": [Result(scalar=workflow), Result(scalars=[draft]), Result(scalars=[]), Result(scalars=[])],
-        "publish": [Result(scalar=workflow), Result(scalar=draft), Result(scalar=workflow), Result(scalar=draft), Result(scalars=[SimpleNamespace(node_id="ok", node_type="trigger.webhook", configuration={})]), Result(scalars=[]), Result(scalar=None)],
+        "edge": [
+            Result(scalar=workflow),
+            Result(scalar=draft),
+            Result(scalar=object()),
+            Result(scalar=object()),
+        ],
+        "draft": [
+            Result(scalar=workflow),
+            Result(scalars=[draft]),
+            Result(scalars=[]),
+            Result(scalars=[]),
+        ],
+        "publish": [
+            Result(scalar=workflow),
+            Result(scalar=draft),
+            Result(scalar=workflow),
+            Result(scalar=draft),
+            Result(
+                scalars=[
+                    SimpleNamespace(node_id="ok", node_type="trigger.webhook", configuration={})
+                ]
+            ),
+            Result(scalars=[]),
+            Result(scalar=None),
+        ],
     }
     session = FakeSession(results_by_operation[operation], fail_commit=True)
     with pytest.raises(RuntimeError, match="commit failed"):
         if operation == "workflow":
-            asyncio.run(service.update_workflow(WORKFLOW_ID, WORKSPACE_ID, WorkflowUpdate(name="After"), session))
+            asyncio.run(
+                service.update_workflow(
+                    WORKFLOW_ID, WORKSPACE_ID, WorkflowUpdate(name="After"), session
+                )
+            )
         elif operation == "node":
-            asyncio.run(service.create_workflow_node(WORKFLOW_ID, 1, WORKSPACE_ID, WorkflowNodeCreate(node_id="x", node_type="task"), session))
+            asyncio.run(
+                service.create_workflow_node(
+                    WORKFLOW_ID,
+                    1,
+                    WORKSPACE_ID,
+                    WorkflowNodeCreate(node_id="x", node_type="task"),
+                    session,
+                )
+            )
         elif operation == "edge":
-            asyncio.run(service.create_workflow_edge(WORKFLOW_ID, 1, WORKSPACE_ID, WorkflowEdgeCreate(source_node_id="a", target_node_id="b"), session))
+            asyncio.run(
+                service.create_workflow_edge(
+                    WORKFLOW_ID,
+                    1,
+                    WORKSPACE_ID,
+                    WorkflowEdgeCreate(source_node_id="a", target_node_id="b"),
+                    session,
+                )
+            )
         elif operation == "draft":
             asyncio.run(service.create_draft_version(WORKFLOW_ID, WORKSPACE_ID, session))
         else:
@@ -691,9 +731,14 @@ def test_list_get_workflows_and_missing_update():
     assert asyncio.run(service.get_workflow(WORKFLOW_ID, WORKSPACE_ID, found_session)) is rows[0]
 
     missing_session = FakeSession([Result(scalar=None)])
-    assert asyncio.run(
-        service.update_workflow(WORKFLOW_ID, WORKSPACE_ID, WorkflowUpdate(name="X"), missing_session)
-    ) is None
+    assert (
+        asyncio.run(
+            service.update_workflow(
+                WORKFLOW_ID, WORKSPACE_ID, WorkflowUpdate(name="X"), missing_session
+            )
+        )
+        is None
+    )
 
 
 def test_list_nodes_and_missing_version():
@@ -703,12 +748,15 @@ def test_list_nodes_and_missing_version():
     session = FakeSession(
         [Result(scalar=workflow), Result(scalar=version), Result(scalars=node_rows)]
     )
-    assert asyncio.run(service.list_workflow_nodes(WORKFLOW_ID, 1, WORKSPACE_ID, session)) == node_rows
+    assert (
+        asyncio.run(service.list_workflow_nodes(WORKFLOW_ID, 1, WORKSPACE_ID, session)) == node_rows
+    )
 
     missing_version = FakeSession([Result(scalar=workflow), Result(scalar=None)])
-    assert asyncio.run(
-        service.list_workflow_nodes(WORKFLOW_ID, 1, WORKSPACE_ID, missing_version)
-    ) is None
+    assert (
+        asyncio.run(service.list_workflow_nodes(WORKFLOW_ID, 1, WORKSPACE_ID, missing_version))
+        is None
+    )
 
 
 def test_update_and_delete_node_missing_and_readonly_cases():
@@ -719,23 +767,36 @@ def test_update_and_delete_node_missing_and_readonly_cases():
     missing_node_session = FakeSession(
         [Result(scalar=workflow), Result(scalar=draft), Result(scalars=[])]
     )
-    assert asyncio.run(
-        service.update_workflow_node(
-            WORKFLOW_ID, 1, "missing", WORKSPACE_ID, WorkflowNodeUpdate(label="X"), missing_node_session
+    assert (
+        asyncio.run(
+            service.update_workflow_node(
+                WORKFLOW_ID,
+                1,
+                "missing",
+                WORKSPACE_ID,
+                WorkflowNodeUpdate(label="X"),
+                missing_node_session,
+            )
         )
-    ) is None
+        is None
+    )
 
     readonly = SimpleNamespace(id=VERSION_ID, status="published")
     readonly_session = FakeSession([Result(scalar=workflow), Result(scalar=readonly)])
     with pytest.raises(ValueError, match="Only draft"):
-        asyncio.run(service.delete_workflow_node(WORKFLOW_ID, 1, "start", WORKSPACE_ID, readonly_session))
+        asyncio.run(
+            service.delete_workflow_node(WORKFLOW_ID, 1, "start", WORKSPACE_ID, readonly_session)
+        )
 
     delete_session = FakeSession(
         [Result(scalar=workflow), Result(scalar=draft), Result(scalars=[import_node])]
     )
-    assert asyncio.run(
-        service.delete_workflow_node(WORKFLOW_ID, 1, "start", WORKSPACE_ID, delete_session)
-    ) is True
+    assert (
+        asyncio.run(
+            service.delete_workflow_node(WORKFLOW_ID, 1, "start", WORKSPACE_ID, delete_session)
+        )
+        is True
+    )
     assert delete_session.deleted == [import_node]
 
 
@@ -748,7 +809,11 @@ def test_update_and_delete_edge_successful_paths():
             Result(scalar=workflow),
             Result(scalar=draft),
             Result(scalar=edge),
-            Result(scalar=SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={})),
+            Result(
+                scalar=SimpleNamespace(
+                    node_id="start", node_type="trigger.webhook", configuration={}
+                )
+            ),
             Result(scalar=SimpleNamespace(node_id="finish")),
         ]
     )
@@ -769,9 +834,12 @@ def test_update_and_delete_edge_successful_paths():
     delete_session = FakeSession(
         [Result(scalar=workflow), Result(scalar=draft), Result(scalar=edge)]
     )
-    assert asyncio.run(
-        service.delete_workflow_edge(WORKFLOW_ID, 1, edge.id, WORKSPACE_ID, delete_session)
-    ) is True
+    assert (
+        asyncio.run(
+            service.delete_workflow_edge(WORKFLOW_ID, 1, edge.id, WORKSPACE_ID, delete_session)
+        )
+        is True
+    )
     assert delete_session.deleted == [edge]
 
 
@@ -782,12 +850,20 @@ def test_list_edges_and_validation_missing_workflow_or_version():
     session = FakeSession(
         [Result(scalar=workflow), Result(scalar=version), Result(scalars=edge_rows)]
     )
-    assert asyncio.run(service.list_workflow_edges(WORKFLOW_ID, 1, WORKSPACE_ID, session)) == edge_rows
+    assert (
+        asyncio.run(service.list_workflow_edges(WORKFLOW_ID, 1, WORKSPACE_ID, session)) == edge_rows
+    )
 
     missing_workflow = FakeSession([Result(scalar=None)])
-    assert asyncio.run(service.validate_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, missing_workflow)) is None
+    assert (
+        asyncio.run(service.validate_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, missing_workflow))
+        is None
+    )
     missing_version = FakeSession([Result(scalar=workflow), Result(scalar=None)])
-    assert asyncio.run(service.validate_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, missing_version)) is None
+    assert (
+        asyncio.run(service.validate_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, missing_version))
+        is None
+    )
 
 
 def test_publish_requires_draft_and_activation_transitions(integration_client):
@@ -809,20 +885,32 @@ def test_publish_requires_draft_and_activation_transitions(integration_client):
     assert session.commits == 1
 
     integration_client.sync_workflow_schedule.assert_awaited_once_with(
-        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
-        workflow_version_id=VERSION_ID, has_schedule_trigger=False, workflow_active=True,
+        workflow_id=WORKFLOW_ID,
+        workspace_id=WORKSPACE_ID,
+        workflow_version_id=VERSION_ID,
+        has_schedule_trigger=False,
+        workflow_active=True,
     )
     integration_client.close.assert_awaited_once()
 
 
 @pytest.mark.parametrize("has_schedule", [False, True])
-def test_restore_historical_publication_after_live_version_deleted(monkeypatch, integration_client, has_schedule):
+def test_restore_historical_publication_after_live_version_deleted(
+    monkeypatch, integration_client, has_schedule
+):
     from unittest.mock import AsyncMock
+
     workflow = SimpleNamespace(id=WORKFLOW_ID, status="inactive", published_version_id=None)
     version = SimpleNamespace(id=VERSION_ID, version=5, status="published")
     validate = AsyncMock(return_value={"valid": True, "errors": []})
     monkeypatch.setattr(service, "validate_workflow", validate)
-    session = FakeSession([Result(scalar=workflow), Result(scalar=version), Result(scalar=uuid4() if has_schedule else None)])
+    session = FakeSession(
+        [
+            Result(scalar=workflow),
+            Result(scalar=version),
+            Result(scalar=uuid4() if has_schedule else None),
+        ]
+    )
     result = asyncio.run(service.publish_workflow(WORKFLOW_ID, 5, WORKSPACE_ID, session))
     assert result["id"] == VERSION_ID
     assert workflow.published_version_id == VERSION_ID
@@ -830,13 +918,17 @@ def test_restore_historical_publication_after_live_version_deleted(monkeypatch, 
     assert session.commits == 1
     validate.assert_awaited_once()
     integration_client.sync_workflow_schedule.assert_awaited_once_with(
-        workflow_id=WORKFLOW_ID, workspace_id=WORKSPACE_ID,
-        workflow_version_id=VERSION_ID, has_schedule_trigger=has_schedule, workflow_active=True,
+        workflow_id=WORKFLOW_ID,
+        workspace_id=WORKSPACE_ID,
+        workflow_version_id=VERSION_ID,
+        has_schedule_trigger=has_schedule,
+        workflow_active=True,
     )
 
 
 def test_restore_requires_valid_historical_version(monkeypatch, integration_client):
     from unittest.mock import AsyncMock
+
     workflow = SimpleNamespace(id=WORKFLOW_ID, status="inactive", published_version_id=None)
     version = SimpleNamespace(id=VERSION_ID, version=5, status="published")
     monkeypatch.setattr(service, "validate_workflow", AsyncMock(return_value={"valid": False}))

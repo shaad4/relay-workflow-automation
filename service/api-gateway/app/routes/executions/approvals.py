@@ -11,6 +11,7 @@ EXECUTION_SERVICE_URL = "http://execution-service:8000"
 async def list_approvals(request: Request):
     return await proxy_execution_request(request, "")
 
+
 @router.get("/{approval_id}/")
 async def get_approval(request: Request, approval_id: str):
     return await proxy_execution_request(
@@ -18,12 +19,14 @@ async def get_approval(request: Request, approval_id: str):
         approval_id,
     )
 
+
 @router.post("/{approval_id}/approve/")
 async def approve_approval(request: Request, approval_id: str):
     return await proxy_execution_request(
         request,
         f"{approval_id}/approve",
     )
+
 
 @router.post("/{approval_id}/reject/")
 async def reject_approval(request: Request, approval_id: str):
@@ -59,11 +62,7 @@ async def proxy_execution_request(
             method=request.method,
             url=url,
             content=body,
-            headers={
-                key: value
-                for key, value in request.headers.items()
-                if key.lower() != "host"
-            },
+            headers={key: value for key, value in request.headers.items() if key.lower() != "host"},
             params=request.query_params,
         )
 

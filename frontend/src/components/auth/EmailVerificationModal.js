@@ -67,7 +67,8 @@ export default function EmailVerificationModal({ open, email, onClose }) {
         setResendSuccess("Verification email sent.");
         setCooldown(60);
       } else {
-        let message = "Unable to resend the verification email. Please try again.";
+        let message =
+          "Unable to resend the verification email. Please try again.";
         if (
           err?.message &&
           !err.message.includes("422") &&
@@ -86,9 +87,7 @@ export default function EmailVerificationModal({ open, email, onClose }) {
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-[100] bg-black/75 flex items-center justify-center p-4 transition-opacity duration-180 ease-out"
-    >
+    <div className="fixed inset-0 z-[100] bg-black/75 flex items-center justify-center p-4 transition-opacity duration-180 ease-out">
       <div
         role="dialog"
         aria-modal="true"
@@ -156,17 +155,24 @@ export default function EmailVerificationModal({ open, email, onClose }) {
 
         {/* Instructions */}
         <p className="text-[13px] leading-[20px] text-[var(--text-tertiary)] mb-6">
-          Click the link in your email to verify your Relay account and continue.
+          Click the link in your email to verify your Relay account and
+          continue.
         </p>
 
         {/* Resend Status Alerts */}
         {resendSuccess && (
-          <p role="status" className="mb-3 text-[12px] text-[#3FB950] font-medium">
+          <p
+            role="status"
+            className="mb-3 text-[12px] text-[#3FB950] font-medium"
+          >
             {resendSuccess}
           </p>
         )}
         {resendError && (
-          <p role="alert" className="mb-3 text-[12px] text-red-500 dark:text-red-400 font-medium">
+          <p
+            role="alert"
+            className="mb-3 text-[12px] text-red-500 dark:text-red-400 font-medium"
+          >
             {resendError}
           </p>
         )}
@@ -190,7 +196,9 @@ export default function EmailVerificationModal({ open, email, onClose }) {
         {/* Spam Folder Note */}
         <div className="mt-5 text-[12px] leading-[16px] text-[var(--text-tertiary)]">
           <p>Didn&apos;t receive the email?</p>
-          <p className="mt-0.5 text-[var(--text-secondary)]">Check your spam folder.</p>
+          <p className="mt-0.5 text-[var(--text-secondary)]">
+            Check your spam folder.
+          </p>
         </div>
       </div>
     </div>

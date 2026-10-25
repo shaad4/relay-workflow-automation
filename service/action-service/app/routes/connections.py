@@ -5,16 +5,20 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_identity, get_db
-from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate, ConnectionTestResponse
-from app.services.connection_service import(
+from app.schemas.connection import (
+    ConnectionCreate,
+    ConnectionResponse,
+    ConnectionTestResponse,
+    ConnectionUpdate,
+)
+from app.services.connection_service import (
     create_connection,
-    get_connections,
-    get_connection,
-    update_connection,
     delete_connection,
+    get_connection,
+    get_connections,
     test_connection,
-) 
-
+    update_connection,
+)
 
 router = APIRouter(
     prefix="/connections",
@@ -165,7 +169,6 @@ async def update_connection_route(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update connection",
         ) from exc
-
 
 
 @router.delete(

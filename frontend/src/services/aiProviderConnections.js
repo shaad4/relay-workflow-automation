@@ -3,7 +3,10 @@ import { apiRequest } from "@/lib/api";
 const path = (id) => `/ai/connections/${encodeURIComponent(id)}/`;
 
 export function createAIConnection(data) {
-  return apiRequest("/ai/connections/", { method: "POST", body: JSON.stringify(data) });
+  return apiRequest("/ai/connections/", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 export function listAIConnections() {
   return apiRequest("/ai/connections/", { method: "GET" });

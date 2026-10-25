@@ -7,10 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 export default function ProtectedRoute({ children }) {
   const router = useRouter();
 
-  const {
-    accessToken,
-    isInitializing,
-  } = useAuth();
+  const { accessToken, isInitializing } = useAuth();
 
   useEffect(() => {
     if (!isInitializing && !accessToken) {

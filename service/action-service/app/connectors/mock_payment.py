@@ -4,7 +4,6 @@ from app.connectors.base import Connector
 
 
 class MockPaymentConnector(Connector):
-
     async def execute(
         self,
         action: str,
@@ -13,9 +12,7 @@ class MockPaymentConnector(Connector):
     ) -> dict:
 
         if action != "refund_payment":
-            raise ValueError(
-                f"Unsupported payment action: {action}"
-            )
+            raise ValueError(f"Unsupported payment action: {action}")
 
         payment_id = input_data.get("payment_id")
         amount = input_data.get("amount")
@@ -35,4 +32,3 @@ class MockPaymentConnector(Connector):
             "amount": amount,
             "status": "refunded",
         }
-    

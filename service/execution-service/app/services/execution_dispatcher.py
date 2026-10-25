@@ -3,15 +3,12 @@ import os
 from uuid import UUID
 
 from app.services.execution_queue import (
+    cleanup_expired_executions,
     execute_pending_execution,
     inspect_recoverable_executions,
-    cleanup_expired_executions,
 )
 
-
-EXECUTION_MAX_CONCURRENCY = int(
-    os.getenv("EXECUTION_MAX_CONCURRENCY", "5")
-)
+EXECUTION_MAX_CONCURRENCY = int(os.getenv("EXECUTION_MAX_CONCURRENCY", "5"))
 
 DISPATCH_INTERVAL_SECONDS = 2
 
@@ -19,13 +16,9 @@ DISPATCH_INTERVAL_SECONDS = 2
 class ExecutionDispatcher:
     def __init__(self):
         if EXECUTION_MAX_CONCURRENCY < 1:
-            raise ValueError(
-                "EXECUTION_MAX_CONCURRENCY must be positive"
-            )
+            raise ValueError("EXECUTION_MAX_CONCURRENCY must be positive")
 
-        self.semaphore = asyncio.Semaphore(
-            EXECUTION_MAX_CONCURRENCY
-        )
+        self.semaphore = asyncio.Semaphore(EXECUTION_MAX_CONCURRENCY)
 
         self.active_tasks: set[asyncio.Task] = set()
         self.active_ids: set[UUID] = set()
@@ -54,17 +47,12 @@ class ExecutionDispatcher:
     async def dispatch_pending(self):
         """Dispatch pending executions up to the concurrency limit."""
 
-        available_slots = (
-            EXECUTION_MAX_CONCURRENCY
-            - len(self.active_tasks)
-        )
+        available_slots = EXECUTION_MAX_CONCURRENCY - len(self.active_tasks)
 
         if available_slots <= 0:
             return
 
-        recovery = await inspect_recoverable_executions(
-            limit=min(available_slots, 100)
-        )
+        recovery = await inspect_recoverable_executions(limit=min(available_slots, 100))
 
         for item in recovery["pending"]:
             execution_id = UUID(item["execution_id"])
@@ -77,15 +65,11 @@ class ExecutionDispatcher:
             self.active_ids.add(execution_id)
 
             try:
-                task = asyncio.create_task(
-                    self._execute(execution_id)
-                )
+                task = asyncio.create_task(self._execute(execution_id))
 
                 self.active_tasks.add(task)
 
-                task.add_done_callback(
-                    self._on_task_done
-                )
+                task.add_done_callback(self._on_task_done)
 
             except BaseException:
                 self.active_ids.discard(execution_id)
@@ -105,9 +89,7 @@ class ExecutionDispatcher:
                 self.wakeup_event.clear()
 
                 # 1. Finalize expired running executions.
-                await cleanup_expired_executions(
-                    limit=100
-                )
+                await cleanup_expired_executions(limit=100)
 
                 # 2. Dispatch new pending executions.
                 await self.dispatch_pending()

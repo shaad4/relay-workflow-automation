@@ -1,4 +1,3 @@
-
 import uuid
 
 from sqlalchemy import select, update
@@ -8,7 +7,6 @@ from app.models.document import Document
 
 
 class DocumentRepository:
-
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -42,7 +40,6 @@ class DocumentRepository:
 
         return document
 
-
     async def update_status(
         self,
         document: Document,
@@ -62,12 +59,9 @@ class DocumentRepository:
     ) -> Document | None:
         """Retrieve a document belonging to a workspace."""
 
-        statement = (
-            select(Document)
-            .where(
-                Document.id == document_id,
-                Document.workspace_id == workspace_id,
-            )
+        statement = select(Document).where(
+            Document.id == document_id,
+            Document.workspace_id == workspace_id,
         )
 
         result = await self.db.execute(statement)
@@ -95,7 +89,6 @@ class DocumentRepository:
         result = await self.db.execute(statement)
 
         return result.scalar_one_or_none() is not None
-
 
     async def list_by_knowledge_base(
         self,
@@ -125,13 +118,10 @@ class DocumentRepository:
     ) -> bool:
         """Delete a document belonging to a workspace and knowledge base."""
 
-        statement = (
-            select(Document)
-            .where(
-                Document.id == document_id,
-                Document.workspace_id == workspace_id,
-                Document.knowledge_base_id == knowledge_base_id,
-            )
+        statement = select(Document).where(
+            Document.id == document_id,
+            Document.workspace_id == workspace_id,
+            Document.knowledge_base_id == knowledge_base_id,
         )
 
         result = await self.db.execute(statement)
@@ -144,7 +134,6 @@ class DocumentRepository:
         await self.db.flush()
 
         return True
-
 
     async def reset_failed_document(
         self,
@@ -171,7 +160,6 @@ class DocumentRepository:
 
         return result.scalar_one_or_none() is not None
 
-
     async def complete_ingestion(
         self,
         document_id: uuid.UUID,
@@ -197,7 +185,6 @@ class DocumentRepository:
 
         return result.scalar_one_or_none() is not None
 
-
     async def fail_ingestion(
         self,
         document_id: uuid.UUID,
@@ -211,11 +198,13 @@ class DocumentRepository:
             .where(
                 Document.id == document_id,
                 Document.workspace_id == workspace_id,
-                Document.status.in_([
-                    "parsing",
-                    "chunking",
-                    "embedding",
-                ]),
+                Document.status.in_(
+                    [
+                        "parsing",
+                        "chunking",
+                        "embedding",
+                    ]
+                ),
             )
             .values(
                 status="failed",

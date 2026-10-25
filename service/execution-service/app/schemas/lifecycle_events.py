@@ -21,10 +21,6 @@ class WorkflowLifecycleEvent(BaseModel):
     workflow_id: UUID
     workflow_version_id: UUID
 
-    timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    metadata: dict[str, Any] = Field(
-        default_factory=dict
-    )
+    metadata: dict[str, Any] = Field(default_factory=dict)

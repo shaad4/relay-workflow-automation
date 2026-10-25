@@ -9,10 +9,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.dependencies import get_current_identity
 
-
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
-EXECUTION_URL = 'http://execution-service:8000/dashboard/summary'
-WORKFLOW_URL = 'http://workflow-service:8000/dashboard/summary'
+EXECUTION_URL = "http://execution-service:8000/dashboard/summary"
+WORKFLOW_URL = "http://workflow-service:8000/dashboard/summary"
 
 
 class RecentExecution(BaseModel):

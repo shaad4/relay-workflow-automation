@@ -20,14 +20,20 @@ def test_test_sessions_create_get_publish_and_validate_scope():
         created = await sessions.create_session("webhook-a", "workspace-a")
         session_id = created["session_id"]
         assert created["timeout_seconds"] == 120
-        assert (await sessions.get_session(session_id, "webhook-a", "workspace-a")) == {"status": "waiting", "result": None}
+        assert (await sessions.get_session(session_id, "webhook-a", "workspace-a")) == {
+            "status": "waiting",
+            "result": None,
+        }
         assert await sessions.get_session(session_id, "webhook-b", "workspace-a") is None
         assert await sessions.get_session(session_id, "webhook-a", "workspace-b") is None
         assert await sessions.publish_result(session_id, "webhook-b", "success", {}) is False
         result = {"received": True, "payload": {"id": 3}}
         assert await sessions.publish_result(session_id, "webhook-a", "success", result) is True
         assert await sessions.publish_result(session_id, "webhook-a", "failed", {}) is False
-        assert await sessions.get_session(session_id, "webhook-a", "workspace-a") == {"status": "success", "result": result}
+        assert await sessions.get_session(session_id, "webhook-a", "workspace-a") == {
+            "status": "success",
+            "result": result,
+        }
 
     asyncio.run(run())
 
@@ -36,17 +42,26 @@ def test_test_sessions_publish_missing_webhook_and_expiration(monkeypatch):
     async def run():
         created = await sessions.create_session("webhook-a", "workspace-a")
         session_id = created["session_id"]
-        assert await sessions.publish_session_result(session_id, "failed", {"status_code": 404}) is True
+        assert (
+            await sessions.publish_session_result(session_id, "failed", {"status_code": 404})
+            is True
+        )
         assert await sessions.get_session(session_id, "webhook-a", "workspace-a") == {
-            "status": "failed", "result": {"status_code": 404}
+            "status": "failed",
+            "result": {"status_code": 404},
         }
         assert await sessions.publish_session_result(session_id, "failed", {}) is False
 
         expiring = await sessions.create_session("webhook-b", "workspace-a")
         entry = sessions._sessions[expiring["session_id"]]
         entry["expires_at"] = 0
-        assert await sessions.get_session(expiring["session_id"], "webhook-b", "workspace-a") is None
-        assert await sessions.publish_result(expiring["session_id"], "webhook-b", "failed", {}) is False
+        assert (
+            await sessions.get_session(expiring["session_id"], "webhook-b", "workspace-a") is None
+        )
+        assert (
+            await sessions.publish_result(expiring["session_id"], "webhook-b", "failed", {})
+            is False
+        )
 
     asyncio.run(run())
 
@@ -74,7 +89,14 @@ def test_workflow_triggered_event_defaults_and_validation():
     assert event.event_type == "workflow.triggered"
     assert event.payload == {"order": "ORD-1"}
     with pytest.raises(Exception):
-        WorkflowTriggeredEvent(event_id="bad", workspace_id=uuid4(), workflow_id=uuid4(), workflow_version_id=uuid4(), webhook_id=uuid4(), payload={})
+        WorkflowTriggeredEvent(
+            event_id="bad",
+            workspace_id=uuid4(),
+            workflow_id=uuid4(),
+            workflow_version_id=uuid4(),
+            webhook_id=uuid4(),
+            payload={},
+        )
 
 
 def test_kafka_lifecycle_and_publish(monkeypatch):
@@ -96,8 +118,12 @@ def test_kafka_lifecycle_and_publish(monkeypatch):
     monkeypatch.setattr(kafka, "AIOKafkaProducer", FakeProducer)
     monkeypatch.setattr(kafka, "producer", None)
     event = WorkflowTriggeredEvent(
-        event_id=uuid4(), workspace_id=uuid4(), workflow_id=uuid4(),
-        workflow_version_id=uuid4(), webhook_id=uuid4(), payload={"ok": True},
+        event_id=uuid4(),
+        workspace_id=uuid4(),
+        workflow_id=uuid4(),
+        workflow_version_id=uuid4(),
+        webhook_id=uuid4(),
+        payload={"ok": True},
     )
     with pytest.raises(RuntimeError, match="not started"):
         asyncio.run(kafka.publish_workflow_triggered(event))
@@ -178,30 +204,49 @@ def test_grpc_clients_forward_requests_and_close_channels(monkeypatch):
             calls.append(("channel-close",))
 
     channel = Channel()
-    monkeypatch.setattr(auth_client.grpc.aio, "insecure_channel", lambda address: calls.append(("auth-channel", address)) or channel)
+    monkeypatch.setattr(
+        auth_client.grpc.aio,
+        "insecure_channel",
+        lambda address: calls.append(("auth-channel", address)) or channel,
+    )
+
     class AuthStub:
         def __init__(self, received):
             assert received is channel
+
         async def ValidateToken(self, request):
             calls.append(("validate", request.access_token))
             return "valid"
+
         async def ResolveWorkspace(self, request):
             calls.append(("resolve", request.user_id))
             return "workspace"
+
     monkeypatch.setattr(auth_client.auth_pb2_grpc, "AuthInternalServiceStub", AuthStub)
     auth = auth_client.AuthGrpcClient()
     assert asyncio.run(auth.validate_token("token")) == "valid"
     assert asyncio.run(auth.resolve_workspace("user")) == "workspace"
     asyncio.run(auth.close())
 
-    monkeypatch.setattr(workflow_client.grpc.aio, "insecure_channel", lambda address: calls.append(("workflow-channel", address)) or channel)
+    monkeypatch.setattr(
+        workflow_client.grpc.aio,
+        "insecure_channel",
+        lambda address: calls.append(("workflow-channel", address)) or channel,
+    )
+
     class WorkflowStub:
         def __init__(self, received):
             assert received is channel
+
         async def ValidateWorkflowVersion(self, request):
-            calls.append(("workflow-validate", request.workflow_id, request.version_id, request.workspace_id))
+            calls.append(
+                ("workflow-validate", request.workflow_id, request.version_id, request.workspace_id)
+            )
             return "ok"
-    monkeypatch.setattr(workflow_client.workflow_pb2_grpc, "WorkflowInternalServiceStub", WorkflowStub)
+
+    monkeypatch.setattr(
+        workflow_client.workflow_pb2_grpc, "WorkflowInternalServiceStub", WorkflowStub
+    )
     workflow = workflow_client.WorkflowGrpcClient()
     assert asyncio.run(workflow.validate_workflow_version("w", "v", "ws")) == "ok"
     asyncio.run(workflow.close())

@@ -1,8 +1,6 @@
 import httpx
-
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
-
 
 router = APIRouter(
     prefix="/ai/connections",
@@ -122,6 +120,7 @@ async def delete_ai_connection(
         connection_id,
     )
 
+
 @router.post("/{connection_id}/test/")
 async def test_ai_connection(
     connection_id: str,
@@ -131,7 +130,6 @@ async def test_ai_connection(
         request,
         f"{connection_id}/test",
     )
-
 
 
 @router.get("/{connection_id}/models/")

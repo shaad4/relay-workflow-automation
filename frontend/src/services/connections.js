@@ -11,11 +11,17 @@ export function startGmailOAuth() {
 }
 
 export function createConnection(data) {
-  return apiRequest("/connections/", { method: "POST", body: JSON.stringify(data) });
+  return apiRequest("/connections/", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 export function updateConnection(id, data) {
-  return apiRequest(`/connections/${id}/`, { method: "PATCH", body: JSON.stringify(data) });
+  return apiRequest(`/connections/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
 }
 
 export function deleteConnection(id) {

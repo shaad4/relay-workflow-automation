@@ -2,7 +2,6 @@ import os
 
 from celery import Celery
 
-
 REDIS_URL = os.getenv(
     "CELERY_BROKER_URL",
     "redis://rag-redis:6379/1",

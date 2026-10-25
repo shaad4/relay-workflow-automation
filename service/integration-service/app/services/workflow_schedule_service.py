@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import grpc
 from croniter import croniter
 from fastapi import HTTPException
-from sqlalchemy import select, delete, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +41,7 @@ def calculate_next_run(
             )
 
         from datetime import timedelta
+
         return now + timedelta(minutes=interval_minutes)
 
     if not cron_expression or interval_minutes is not None:
@@ -49,10 +50,7 @@ def calculate_next_run(
             detail="Invalid cron configuration",
         )
 
-    if (
-        len(cron_expression.split()) != 5
-        or not croniter.is_valid(cron_expression)
-    ):
+    if len(cron_expression.split()) != 5 or not croniter.is_valid(cron_expression):
         raise HTTPException(
             status_code=422,
             detail="Invalid five-field cron expression",
@@ -133,10 +131,7 @@ async def create_schedule(
         and node["node_type"].startswith("trigger.")
     ]
 
-    if (
-        len(triggers) != 1
-        or triggers[0]["node_type"] != "trigger.schedule"
-    ):
+    if len(triggers) != 1 or triggers[0]["node_type"] != "trigger.schedule":
         raise HTTPException(
             status_code=409,
             detail="Published workflow does not have a Scheduled Trigger",
@@ -181,7 +176,6 @@ async def create_schedule(
     return schedule
 
 
-
 async def list_schedules(
     workspace_id: UUID,
     session: AsyncSession,
@@ -190,9 +184,7 @@ async def list_schedules(
 
     result = await session.execute(
         select(WorkflowSchedule)
-        .where(
-            WorkflowSchedule.workspace_id == workspace_id
-        )
+        .where(WorkflowSchedule.workspace_id == workspace_id)
         .order_by(WorkflowSchedule.created_at.desc())
     )
 
@@ -255,17 +247,24 @@ async def update_schedule(
     client = WorkflowGrpcClient()
     try:
         published = await client.get_published_version(
-            workflow_id=str(schedule.workflow_id), workspace_id=str(workspace_id),
+            workflow_id=str(schedule.workflow_id),
+            workspace_id=str(workspace_id),
         )
         definition = await client.get_workflow_definition(
-            workflow_id=str(schedule.workflow_id), version_id=published.version_id,
+            workflow_id=str(schedule.workflow_id),
+            version_id=published.version_id,
             workspace_id=str(workspace_id),
         )
         nodes = json.loads(definition.nodes_json)
-        triggers = [node for node in nodes if isinstance(node, dict) and str(node.get("node_type", "")).startswith("trigger.")]
+        triggers = [
+            node
+            for node in nodes
+            if isinstance(node, dict) and str(node.get("node_type", "")).startswith("trigger.")
+        ]
         compatible = (
             str(schedule.workflow_version_id) == str(published.version_id)
-            and len(triggers) == 1 and triggers[0]["node_type"] == "trigger.schedule"
+            and len(triggers) == 1
+            and triggers[0]["node_type"] == "trigger.schedule"
         )
     except grpc.aio.AioRpcError as exc:
         if exc.code() not in {grpc.StatusCode.NOT_FOUND, grpc.StatusCode.FAILED_PRECONDITION}:
@@ -274,17 +273,28 @@ async def update_schedule(
                 detail="Workflow eligibility could not be confirmed. Refresh before retrying.",
             ) from exc
     except (ValueError, TypeError, KeyError) as exc:
-        raise HTTPException(status_code=502, detail="Invalid published workflow definition") from exc
+        raise HTTPException(
+            status_code=502, detail="Invalid published workflow definition"
+        ) from exc
     finally:
         await client.close()
 
     explicit_resume = changes.get("enabled") is True
     if explicit_resume and not compatible:
-        raise HTTPException(status_code=409, detail="Activate a compatible published workflow and synchronize its schedule before resuming.")
+        raise HTTPException(
+            status_code=409,
+            detail="Activate a compatible published workflow and synchronize its schedule before resuming.",
+        )
 
-    configuration = {field: changes.get(field, getattr(schedule, field)) for field in (
-        "schedule_type", "interval_minutes", "cron_expression", "timezone",
-    )}
+    configuration = {
+        field: changes.get(field, getattr(schedule, field))
+        for field in (
+            "schedule_type",
+            "interval_minutes",
+            "cron_expression",
+            "timezone",
+        )
+    }
     next_run = calculate_next_run(
         schedule_type=configuration["schedule_type"],
         interval_minutes=configuration["interval_minutes"],
@@ -319,7 +329,6 @@ async def delete_schedule(
 
     await session.delete(schedule)
     await session.commit()
-
 
 
 async def sync_workflow_schedule(
@@ -364,7 +373,6 @@ async def sync_workflow_schedule(
 
     await session.commit()
     return 1
-
 
 
 async def suspend_workflow_schedule(

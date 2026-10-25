@@ -17,9 +17,7 @@ def clean_text(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
 
     # Remove trailing and leading spaces per line
-    text = "\n".join(
-        line.strip() for line in text.split("\n")
-    )
+    text = "\n".join(line.strip() for line in text.split("\n"))
 
     # Limit excessive blank lines
     text = re.sub(r"\n{3,}", "\n\n", text)

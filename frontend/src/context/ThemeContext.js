@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
 
 const ThemeContext = createContext(null);
 
@@ -29,7 +35,9 @@ export function ThemeProvider({ children }) {
     } else if (mode === "dark") {
       root.classList.add("dark");
     } else if (mode === "system") {
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)",
+      ).matches;
       if (prefersDark) {
         root.classList.add("dark");
       } else {
@@ -48,7 +56,7 @@ export function ThemeProvider({ children }) {
       }
       applyTheme(newTheme);
     },
-    [applyTheme]
+    [applyTheme],
   );
 
   useEffect(() => {

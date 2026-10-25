@@ -44,12 +44,8 @@ elif "127.0.0.1" in frontend_url:
 
 @app.middleware("http")
 async def enforce_cookie_origin(request: Request, call_next):
-    if (
-        request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"}
-        and (
-            request.cookies.get("relay_access_token")
-            or request.cookies.get("relay_refresh_token")
-        )
+    if request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"} and (
+        request.cookies.get("relay_access_token") or request.cookies.get("relay_refresh_token")
     ):
         origin = request.headers.get("origin")
         fetch_site = request.headers.get("sec-fetch-site")
@@ -61,6 +57,7 @@ async def enforce_cookie_origin(request: Request, call_next):
                 content={"detail": "Untrusted request origin"},
             )
     return await call_next(request)
+
 
 app.include_router(auth_router)
 

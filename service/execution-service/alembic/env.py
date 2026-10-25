@@ -3,16 +3,10 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
+from app.db.base import Base
 from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
-
-from app.db.base import Base
-from app.models.execution import Execution
-from app.models.execution_step import ExecutionStep
-from app.models.ai_provider_connection import AIProviderConnection
-from app.models.idempotency_key import IdempotencyKey
-from app.models.dead_letter_event import DeadLetterEvent
 
 config = context.config
 

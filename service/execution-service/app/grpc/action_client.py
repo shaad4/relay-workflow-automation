@@ -1,24 +1,15 @@
 import grpc
 
-from app.grpc.generated.action import action_pb2
-from app.grpc.generated.action import action_pb2_grpc
-
+from app.grpc.generated.action import action_pb2, action_pb2_grpc
 
 ACTION_SERVICE_ADDRESS = "action-service:50054"
 
 
 class ActionClient:
-
     def __init__(self):
-        self.channel = grpc.aio.insecure_channel(
-            ACTION_SERVICE_ADDRESS
-        )
+        self.channel = grpc.aio.insecure_channel(ACTION_SERVICE_ADDRESS)
 
-        self.stub = (
-            action_pb2_grpc.ActionInternalServiceStub(
-                self.channel
-            )
-        )
+        self.stub = action_pb2_grpc.ActionInternalServiceStub(self.channel)
 
     async def execute_action(
         self,
@@ -38,9 +29,7 @@ class ActionClient:
             input_data_json=input_data_json,
         )
 
-        return await self.stub.ExecuteAction(
-            request
-        )
+        return await self.stub.ExecuteAction(request)
 
     async def close(self):
         await self.channel.close()

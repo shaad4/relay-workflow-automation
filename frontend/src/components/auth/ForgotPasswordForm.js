@@ -8,13 +8,13 @@ export function isEmailValid(email = "") {
   const [localPart, domain, ...extraParts] = email.trim().split("@");
   return Boolean(
     localPart &&
-      domain &&
-      extraParts.length === 0 &&
-      !/\s/.test(localPart) &&
-      !/\s/.test(domain) &&
-      domain.includes(".") &&
-      !domain.startsWith(".") &&
-      !domain.endsWith(".")
+    domain &&
+    extraParts.length === 0 &&
+    !/\s/.test(localPart) &&
+    !/\s/.test(domain) &&
+    domain.includes(".") &&
+    !domain.startsWith(".") &&
+    !domain.endsWith("."),
   );
 }
 
@@ -30,8 +30,8 @@ export default function ForgotPasswordForm() {
     ? !email.trim()
       ? "Email is required."
       : !isEmailValid(email)
-      ? "Please enter a valid email address."
-      : null
+        ? "Please enter a valid email address."
+        : null
     : null;
 
   const handleSubmit = async (e) => {
@@ -69,7 +69,7 @@ export default function ForgotPasswordForm() {
       } else {
         // Display generic server error without breaking account enumeration protection
         setBackendError(
-          "Unable to process your request right now. Please try again."
+          "Unable to process your request right now. Please try again.",
         );
       }
     }

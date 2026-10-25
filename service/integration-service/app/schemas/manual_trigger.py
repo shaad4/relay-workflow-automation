@@ -8,6 +8,4 @@ class ManualRunRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    input: dict[str, Any] = Field(
-        default_factory=dict
-    )
+    input: dict[str, Any] = Field(default_factory=dict)

@@ -3,12 +3,12 @@ from uuid import UUID
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.input_validation import validate_resolved_ai_inputs
 from app.ai.schemas import AIDecisionInput
 from app.ai.structured_generation import StructuredAIGeneration
 from app.services.ai_provider_connection import (
     AIProviderConnectionService,
 )
-from app.ai.input_validation import validate_resolved_ai_inputs
 
 
 async def execute_ai_decision(
@@ -22,28 +22,18 @@ async def execute_ai_decision(
         raise ValueError("Invalid AI Decision configuration")
 
     try:
-        connection_id = UUID(
-            str(configuration["connection_id"])
-        )
+        connection_id = UUID(str(configuration["connection_id"]))
 
         workspace_uuid = UUID(workspace_id)
 
     except (KeyError, ValueError, TypeError) as exc:
-        raise ValueError(
-            "Invalid AI connection or workspace ID"
-        ) from exc
+        raise ValueError("Invalid AI connection or workspace ID") from exc
 
     model = configuration.get("model")
     instructions = configuration.get("instructions")
-    input_mappings = configuration.get(
-        "input_mappings", {}
-    )
-    rag_context = configuration.get(
-        "rag_context", ""
-    )
-    allowed_decisions = configuration.get(
-        "allowed_decisions"
-    )
+    input_mappings = configuration.get("input_mappings", {})
+    rag_context = configuration.get("rag_context", "")
+    allowed_decisions = configuration.get("allowed_decisions")
 
     if not isinstance(model, str) or not model.strip():
         raise ValueError("AI model is required")
@@ -68,19 +58,13 @@ async def execute_ai_decision(
         )
 
     except ValidationError as exc:
-        raise ValueError(
-            "Invalid AI Decision input configuration"
-        ) from exc
+        raise ValueError("Invalid AI Decision input configuration") from exc
 
-    connection_service = AIProviderConnectionService(
-        session
-    )
+    connection_service = AIProviderConnectionService(session)
 
-    provider, api_key = (
-        await connection_service.get_execution_credentials(
-            connection_id=connection_id,
-            workspace_id=workspace_uuid,
-        )
+    provider, api_key = await connection_service.get_execution_credentials(
+        connection_id=connection_id,
+        workspace_id=workspace_uuid,
     )
 
     generator = StructuredAIGeneration()

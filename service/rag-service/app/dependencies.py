@@ -1,5 +1,5 @@
-from fastapi import Cookie, Header, HTTPException
 import grpc
+from fastapi import Cookie, Header, HTTPException
 
 from app.grpc.auth_client import AuthGrpcClient
 

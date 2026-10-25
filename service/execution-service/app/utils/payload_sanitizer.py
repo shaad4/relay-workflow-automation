@@ -2,7 +2,6 @@ import json
 import re
 from typing import Any
 
-
 REDACTED = "[REDACTED]"
 TRUNCATED = "[TRUNCATED]"
 
@@ -35,9 +34,7 @@ SENSITIVE_KEYS = {
 }
 
 SENSITIVE_PATTERNS = (
-    re.compile(
-        r"(?i)\bBearer\s+[A-Za-z0-9._~+/\-=]+"
-    ),
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/\-=]+"),
     re.compile(
         r"-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----"
         r"[\s\S]*?"
@@ -106,9 +103,7 @@ def sanitize_payload(
     if isinstance(payload, dict):
         sanitized = {}
 
-        for index, (key, value) in enumerate(
-            payload.items()
-        ):
+        for index, (key, value) in enumerate(payload.items()):
             if index >= MAX_ITEMS:
                 sanitized["_truncated"] = TRUNCATED
                 break
@@ -126,10 +121,7 @@ def sanitize_payload(
         return sanitized
 
     if isinstance(payload, (list, tuple)):
-        sanitized = [
-            sanitize_payload(item, depth + 1)
-            for item in payload[:MAX_ITEMS]
-        ]
+        sanitized = [sanitize_payload(item, depth + 1) for item in payload[:MAX_ITEMS]]
 
         if len(payload) > MAX_ITEMS:
             sanitized.append(TRUNCATED)
@@ -144,9 +136,7 @@ def sanitize_payload(
 
     # Convert supported custom objects to JSON-safe values.
     try:
-        converted = json.loads(
-            json.dumps(payload, default=str)
-        )
+        converted = json.loads(json.dumps(payload, default=str))
     except (TypeError, ValueError):
         return TRUNCATED
 

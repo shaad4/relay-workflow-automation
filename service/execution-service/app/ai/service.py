@@ -2,49 +2,58 @@ import asyncio
 import os
 
 from anthropic import (
-    AuthenticationError as AnthropicAuthenticationError,
-    RateLimitError as AnthropicRateLimitError,
-    APITimeoutError as AnthropicTimeoutError,
     APIConnectionError as AnthropicConnectionError,
+)
+from anthropic import (
     APIStatusError as AnthropicStatusError,
+)
+from anthropic import (
+    APITimeoutError as AnthropicTimeoutError,
+)
+from anthropic import (
+    AuthenticationError as AnthropicAuthenticationError,
+)
+from anthropic import (
+    RateLimitError as AnthropicRateLimitError,
+)
+from google.genai import errors as gemini_errors
+from openai import (
+    APIConnectionError as OpenAIConnectionError,
+)
+from openai import (
+    APIStatusError as OpenAIStatusError,
+)
+from openai import (
+    APITimeoutError as OpenAITimeoutError,
 )
 from openai import (
     AuthenticationError as OpenAIAuthenticationError,
-    RateLimitError as OpenAIRateLimitError,
-    APITimeoutError as OpenAITimeoutError,
-    APIConnectionError as OpenAIConnectionError,
-    APIStatusError as OpenAIStatusError,
 )
-from google.genai import errors as gemini_errors
+from openai import (
+    RateLimitError as OpenAIRateLimitError,
+)
 
 from app.ai.base import AIResponse
 from app.ai.exceptions import (
     AIAuthenticationError,
     AIRateLimitError,
-    AITimeoutError,
-    AIServiceUnavailableError,
     AIResponseError,
+    AIServiceUnavailableError,
+    AITimeoutError,
 )
-from app.ai.providers.openai import OpenAIProvider
-from app.ai.providers.gemini import GeminiProvider
 from app.ai.providers.anthropic import AnthropicProvider
+from app.ai.providers.gemini import GeminiProvider
+from app.ai.providers.openai import OpenAIProvider
 
-MAX_CONCURRENT_AI_REQUESTS = int(
-    os.getenv("MAX_CONCURRENT_AI_REQUESTS", "10")
-)
+MAX_CONCURRENT_AI_REQUESTS = int(os.getenv("MAX_CONCURRENT_AI_REQUESTS", "10"))
 
 if MAX_CONCURRENT_AI_REQUESTS < 1:
-    raise ValueError(
-        "MAX_CONCURRENT_AI_REQUESTS must be positive"
-    )
+    raise ValueError("MAX_CONCURRENT_AI_REQUESTS must be positive")
 
-ai_semaphore = asyncio.Semaphore(
-    MAX_CONCURRENT_AI_REQUESTS
-)
+ai_semaphore = asyncio.Semaphore(MAX_CONCURRENT_AI_REQUESTS)
 
 
 class AIService:
-
     def __init__(self):
         self.providers = {
             "openai": OpenAIProvider(),
@@ -82,57 +91,41 @@ class AIService:
             OpenAIAuthenticationError,
             AnthropicAuthenticationError,
         ) as exc:
-            raise AIAuthenticationError(
-                "AI provider authentication failed"
-            ) from exc
+            raise AIAuthenticationError("AI provider authentication failed") from exc
 
         except (
             OpenAIRateLimitError,
             AnthropicRateLimitError,
         ) as exc:
-            raise AIRateLimitError(
-                "AI provider rate limit or quota exceeded"
-            ) from exc
+            raise AIRateLimitError("AI provider rate limit or quota exceeded") from exc
 
         except (
             OpenAITimeoutError,
             AnthropicTimeoutError,
             asyncio.TimeoutError,
         ) as exc:
-            raise AITimeoutError(
-                "AI provider request timed out"
-            ) from exc
+            raise AITimeoutError("AI provider request timed out") from exc
 
         except (
             OpenAIConnectionError,
             AnthropicConnectionError,
         ) as exc:
-            raise AIServiceUnavailableError(
-                "AI provider connection failed"
-            ) from exc
+            raise AIServiceUnavailableError("AI provider connection failed") from exc
 
         except (
             OpenAIStatusError,
             AnthropicStatusError,
         ) as exc:
             if exc.status_code in {401, 403}:
-                raise AIAuthenticationError(
-                    "AI provider access denied"
-                ) from exc
+                raise AIAuthenticationError("AI provider access denied") from exc
 
             if exc.status_code == 429:
-                raise AIRateLimitError(
-                    "AI provider rate limit exceeded"
-                ) from exc
+                raise AIRateLimitError("AI provider rate limit exceeded") from exc
 
             if exc.status_code in {408, 504}:
-                raise AITimeoutError(
-                    "AI provider request timed out"
-                ) from exc
+                raise AITimeoutError("AI provider request timed out") from exc
 
-            raise AIServiceUnavailableError(
-                "AI provider request failed"
-            ) from exc
+            raise AIServiceUnavailableError("AI provider request failed") from exc
 
         except (
             gemini_errors.ClientError,
@@ -141,25 +134,15 @@ class AIService:
             status_code = getattr(exc, "code", None)
 
             if status_code in {401, 403}:
-                raise AIAuthenticationError(
-                    "Gemini authentication failed"
-                ) from exc
+                raise AIAuthenticationError("Gemini authentication failed") from exc
 
             if status_code == 429:
-                raise AIRateLimitError(
-                    "Gemini rate limit exceeded"
-                ) from exc
+                raise AIRateLimitError("Gemini rate limit exceeded") from exc
 
             if status_code in {408, 504}:
-                raise AITimeoutError(
-                    "Gemini request timed out"
-                ) from exc
+                raise AITimeoutError("Gemini request timed out") from exc
 
-            raise AIServiceUnavailableError(
-                "Gemini request failed"
-            ) from exc
+            raise AIServiceUnavailableError("Gemini request failed") from exc
 
         except RuntimeError as exc:
-            raise AIResponseError(
-                "AI provider returned an invalid response"
-            ) from exc
+            raise AIResponseError("AI provider returned an invalid response") from exc

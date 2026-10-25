@@ -17,7 +17,11 @@ export default function SidebarNavItem({
       href={href}
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      title={collapsed ? `${label}${badgeCount > 0 ? ` (${badgeCount} ${badgeLabel})` : ""}` : undefined}
+      title={
+        collapsed
+          ? `${label}${badgeCount > 0 ? ` (${badgeCount} ${badgeLabel})` : ""}`
+          : undefined
+      }
       className={`relay-sidebar-link group relative flex items-center ${
         collapsed ? "justify-center p-2" : "gap-3 px-3 py-2"
       } text-[13px] font-medium rounded-[7px] transition-colors duration-150 ease-out select-none ${
@@ -32,15 +36,30 @@ export default function SidebarNavItem({
       </div>
 
       {/* Label */}
-      {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
+      {!collapsed && (
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      )}
 
-      {badgeCount > 0 && !collapsed && <span aria-label={`${badgeCount} ${badgeLabel}`} className="sidebar-attention-badge">{badgeCount > 99 ? "99+" : badgeCount}</span>}
-      {badgeCount > 0 && collapsed && <span aria-label={`${badgeCount} ${badgeLabel}`} className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[var(--text-secondary)] ring-2 ring-[var(--surface)]"/>}
+      {badgeCount > 0 && !collapsed && (
+        <span
+          aria-label={`${badgeCount} ${badgeLabel}`}
+          className="sidebar-attention-badge"
+        >
+          {badgeCount > 99 ? "99+" : badgeCount}
+        </span>
+      )}
+      {badgeCount > 0 && collapsed && (
+        <span
+          aria-label={`${badgeCount} ${badgeLabel}`}
+          className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[var(--text-secondary)] ring-2 ring-[var(--surface)]"
+        />
+      )}
 
       {/* Hover Tooltip when Collapsed */}
       {collapsed && (
         <div className="hidden md:block pointer-events-none absolute left-full ml-2 px-2.5 py-1 bg-[var(--elevated)] border border-[var(--border-default)] text-[var(--text-primary)] text-[12px] font-medium rounded-[6px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 shadow-sm">
-          {label}{badgeCount > 0 ? ` · ${badgeCount} ${badgeLabel}` : ""}
+          {label}
+          {badgeCount > 0 ? ` · ${badgeCount} ${badgeLabel}` : ""}
         </div>
       )}
     </Link>

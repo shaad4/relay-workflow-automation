@@ -4,7 +4,6 @@ from app.connectors.base import Connector
 
 
 class HTTPConnector(Connector):
-
     async def execute(
         self,
         action: str,
@@ -25,10 +24,7 @@ class HTTPConnector(Connector):
         params = input_data.get("params")
         body = input_data.get("body")
 
-        async with httpx.AsyncClient(
-            timeout=config.get("timeout", 10)
-        ) as client:
-
+        async with httpx.AsyncClient(timeout=config.get("timeout", 10)) as client:
             response = await client.request(
                 method=method,
                 url=url,

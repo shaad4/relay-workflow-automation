@@ -1,4 +1,3 @@
-
 import json
 
 from app.engine.graph import ExecutionGraph
@@ -25,9 +24,7 @@ async def resolve_approval_branch(
     """
 
     if decision not in {"approved", "rejected"}:
-        raise ValueError(
-            f"Unsupported approval decision: {decision}"
-        )
+        raise ValueError(f"Unsupported approval decision: {decision}")
 
     workflow_client = WorkflowClient()
 
@@ -49,18 +46,16 @@ async def resolve_approval_branch(
         approval_node = graph.get_node(approval_node_id)
 
         if approval_node is None:
-            raise ValueError(
-                f"Approval node not found: {approval_node_id}"
-            )
+            raise ValueError(f"Approval node not found: {approval_node_id}")
 
         if approval_node.get("node_type") != "human.approval":
-            raise ValueError(
-                f"Node {approval_node_id} is not a human approval node"
-            )
+            raise ValueError(f"Node {approval_node_id} is not a human approval node")
 
         branches = graph.get_next_nodes(approval_node_id)
         conditions = [edge.condition for edge in branches]
-        if any(value not in {"approved", "rejected"} for value in conditions) or len(set(conditions)) != len(conditions):
+        if any(value not in {"approved", "rejected"} for value in conditions) or len(
+            set(conditions)
+        ) != len(conditions):
             raise ValueError("Invalid human approval branch configuration")
 
         # Publishing permits either decision branch to be unconnected.

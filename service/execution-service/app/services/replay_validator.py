@@ -1,6 +1,5 @@
 from app.engine.graph import ExecutionGraph
 
-
 SAFE_NODE_TYPES = {
     "ai.rag_search",
     "ai.generate",
@@ -42,10 +41,7 @@ def validate_replay_path(
 
             method = config.get("method", "GET")
 
-            if (
-                not isinstance(method, str)
-                or method.upper() not in SAFE_HTTP_METHODS
-            ):
+            if not isinstance(method, str) or method.upper() not in SAFE_HTTP_METHODS:
                 return False
 
         elif node_type not in SAFE_NODE_TYPES:

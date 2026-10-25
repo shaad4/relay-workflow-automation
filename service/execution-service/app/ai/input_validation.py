@@ -1,7 +1,6 @@
 import re
 from typing import Any
 
-
 EXPRESSION_MARKERS = re.compile(r"\{\{|\}\}")
 
 
@@ -19,15 +18,11 @@ def validate_resolved_ai_inputs(
 
     def validate_value(value: Any, path: str) -> None:
         if value is None:
-            raise ValueError(
-                f"Missing AI input: {path}"
-            )
+            raise ValueError(f"Missing AI input: {path}")
 
         if isinstance(value, str):
             if EXPRESSION_MARKERS.search(value):
-                raise ValueError(
-                    f"Unresolved AI expression: {path}"
-                )
+                raise ValueError(f"Unresolved AI expression: {path}")
 
         elif isinstance(value, dict):
             for key, item in value.items():
@@ -41,6 +36,4 @@ def validate_resolved_ai_inputs(
         validate_value(value, name)
 
     if EXPRESSION_MARKERS.search(rag_context):
-        raise ValueError(
-            "Unresolved RAG context expression"
-        )
+        raise ValueError("Unresolved RAG context expression")

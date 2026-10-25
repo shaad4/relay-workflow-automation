@@ -19,28 +19,49 @@ class ExecutionHistoryService:
     ) -> dict | None:
         if group_id is not None:
             result = await self.repository.list_execution_attempts(
-                workspace_id, group_id, page, page_size,
+                workspace_id,
+                group_id,
+                page,
+                page_size,
             )
             if result is None:
                 return None
             executions, total, root_id = result
-            items = [self.serialize_execution(execution) | {
-                "execution_group_id": root_id, "attempt_count": total,
-            } for execution in executions]
+            items = [
+                self.serialize_execution(execution)
+                | {
+                    "execution_group_id": root_id,
+                    "attempt_count": total,
+                }
+                for execution in executions
+            ]
         elif group_replays:
             groups, total = await self.repository.list_execution_groups(
-                workspace_id, page, page_size, status,
+                workspace_id,
+                page,
+                page_size,
+                status,
             )
-            items = [self.serialize_execution(execution) | {
-                "execution_group_id": root_id, "attempt_count": count,
-            } for execution, root_id, count in groups]
+            items = [
+                self.serialize_execution(execution)
+                | {
+                    "execution_group_id": root_id,
+                    "attempt_count": count,
+                }
+                for execution, root_id, count in groups
+            ]
         else:
             executions, total = await self.repository.list_executions(
-                workspace_id=workspace_id, page=page, page_size=page_size, status=status,
+                workspace_id=workspace_id,
+                page=page,
+                page_size=page_size,
+                status=status,
             )
             items = [self.serialize_execution(execution) for execution in executions]
 
-        recovery = await self.repository.get_recovery_events(workspace_id, [item["id"] for item in items])
+        recovery = await self.repository.get_recovery_events(
+            workspace_id, [item["id"] for item in items]
+        )
         items = [item | recovery.get(item["id"], {}) for item in items]
         return {
             "items": items,
@@ -64,17 +85,24 @@ class ExecutionHistoryService:
 
         lineage = await self.repository.get_execution_lineage(workspace_id, execution_id)
         recovery = await self.repository.get_recovery_events(workspace_id, [execution_id])
-        return self.serialize_execution(execution) | lineage | recovery.get(execution_id, {}) | {
-            "workspace_id": execution.workspace_id,
-            "cancel_requested_at": execution.cancel_requested_at,
-            "error": sanitize_payload(execution.error),
-        }
+        return (
+            self.serialize_execution(execution)
+            | lineage
+            | recovery.get(execution_id, {})
+            | {
+                "workspace_id": execution.workspace_id,
+                "cancel_requested_at": execution.cancel_requested_at,
+                "error": sanitize_payload(execution.error),
+            }
+        )
 
     @staticmethod
     def serialize_execution(execution):
         duration_ms = None
         if execution.started_at is not None and execution.completed_at is not None:
-            duration_ms = max(0, int((execution.completed_at - execution.started_at).total_seconds() * 1000))
+            duration_ms = max(
+                0, int((execution.completed_at - execution.started_at).total_seconds() * 1000)
+            )
         return {
             "id": execution.id,
             "workflow_id": execution.workflow_id,
@@ -88,7 +116,6 @@ class ExecutionHistoryService:
             "duration_ms": duration_ms,
             "replay_of_execution_id": execution.replay_of_execution_id,
         }
-
 
     async def list_execution_steps(
         self,

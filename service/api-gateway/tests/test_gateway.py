@@ -1,8 +1,8 @@
-import sys
 import asyncio
 import gzip
-from types import SimpleNamespace
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlparse
 
 import httpx
@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import main
 from app.core import proxy, security
-
 
 ASGI_HTTPX_CLIENT = httpx.AsyncClient
 
@@ -74,12 +73,15 @@ def fake_upstream(monkeypatch, *, status_code=200, headers=None, content=b'{"ok"
 def test_knowledge_base_proxy_preserves_scope_and_filters_hop_headers(gateway_client, monkeypatch):
     from uuid import uuid4
 
-    calls = fake_upstream(monkeypatch, headers={
-        "content-type": "application/json",
-        "connection": "x-internal",
-        "x-internal": "private",
-        "x-request-id": "request-1",
-    })
+    calls = fake_upstream(
+        monkeypatch,
+        headers={
+            "content-type": "application/json",
+            "connection": "x-internal",
+            "x-internal": "private",
+            "x-request-id": "request-1",
+        },
+    )
     knowledge_base = uuid4()
     response = gateway_client.post(
         f"/knowledge-bases/{knowledge_base}/search/?trace=1",
@@ -101,15 +103,22 @@ def test_knowledge_base_proxy_rejects_invalid_id_before_upstream(gateway_client,
     assert calls == []
 
 
-@pytest.mark.parametrize("method,path,upstream_path", [
-    ("GET", "/approvals/", "/approvals/"),
-    ("GET", "/approvals/review-1/", "/approvals/review-1/"),
-    ("POST", "/approvals/review-1/approve/", "/approvals/review-1/approve/"),
-    ("POST", "/approvals/review-1/reject/", "/approvals/review-1/reject/"),
-])
-def test_approval_routes_proxy_to_execution(gateway_client, monkeypatch, method, path, upstream_path):
+@pytest.mark.parametrize(
+    "method,path,upstream_path",
+    [
+        ("GET", "/approvals/", "/approvals/"),
+        ("GET", "/approvals/review-1/", "/approvals/review-1/"),
+        ("POST", "/approvals/review-1/approve/", "/approvals/review-1/approve/"),
+        ("POST", "/approvals/review-1/reject/", "/approvals/review-1/reject/"),
+    ],
+)
+def test_approval_routes_proxy_to_execution(
+    gateway_client, monkeypatch, method, path, upstream_path
+):
     calls = fake_upstream(monkeypatch, status_code=202)
-    response = gateway_client.request(method, path, headers={"x-workspace-id": "synthetic-workspace"})
+    response = gateway_client.request(
+        method, path, headers={"x-workspace-id": "synthetic-workspace"}
+    )
     assert response.status_code == 202
     assert calls[-1]["url"].endswith(upstream_path)
     assert calls[-1]["headers"]["x-workspace-id"] == "synthetic-workspace"
@@ -135,7 +144,6 @@ def test_health_and_cors(gateway_client):
     )
     assert cors.status_code == 200
     assert "http://localhost:3000" in cors.headers["access-control-allow-origin"]
-
 
 
 def test_gmail_oauth_start_preserves_google_redirect(gateway_client, monkeypatch):
@@ -186,24 +194,27 @@ def test_gmail_oauth_callback_reports_failure(gateway_client, monkeypatch):
     assert response.status_code == 303
     assert response.headers["location"] == "http://localhost:3000/connections?gmail=error"
 
+
 def test_auth_me_validates_token_and_calls_auth_service(gateway_client, monkeypatch):
     token = access_token(monkeypatch)
     monkeypatch.setattr(
         "app.dependencies.verify_access_token",
-        lambda received: {
-            "sub": "user-1",
-            "workspace_id": "workspace-1",
-            "type": "access",
-        } if received == token else (_ for _ in ()).throw(ValueError("invalid token")),
+        lambda received: (
+            {
+                "sub": "user-1",
+                "workspace_id": "workspace-1",
+                "type": "access",
+            }
+            if received == token
+            else (_ for _ in ()).throw(ValueError("invalid token"))
+        ),
     )
     calls = fake_upstream(
         monkeypatch,
         status_code=200,
         headers={"content-type": "application/json", "x-auth-service": "auth"},
     )
-    response = gateway_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = gateway_client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert response.json() == {"ok": True}
     assert calls[-1]["url"].endswith("/auth/me")
@@ -215,8 +226,11 @@ def test_auth_me_accepts_access_cookie_and_forwards_bearer(gateway_client, monke
     token = access_token(monkeypatch)
     monkeypatch.setattr(
         "app.dependencies.verify_access_token",
-        lambda received: {"sub": "user-1", "workspace_id": "workspace-1", "type": "access"}
-        if received == token else (_ for _ in ()).throw(ValueError("invalid token")),
+        lambda received: (
+            {"sub": "user-1", "workspace_id": "workspace-1", "type": "access"}
+            if received == token
+            else (_ for _ in ()).throw(ValueError("invalid token"))
+        ),
     )
     calls = fake_upstream(monkeypatch)
 
@@ -274,18 +288,22 @@ def test_cookie_auth_rejects_cross_site_fetch_without_origin(gateway_client, mon
 
 
 def test_gateway_to_auth_service_me_integration(monkeypatch):
-    from fastapi import FastAPI, Header
     from app import dependencies
+    from fastapi import FastAPI, Header
 
     token = access_token(monkeypatch)
     monkeypatch.setattr(
         dependencies,
         "verify_access_token",
-        lambda received: {
-            "sub": "user-1",
-            "workspace_id": "workspace-1",
-            "type": "access",
-        } if received == token else (_ for _ in ()).throw(ValueError("invalid token")),
+        lambda received: (
+            {
+                "sub": "user-1",
+                "workspace_id": "workspace-1",
+                "type": "access",
+            }
+            if received == token
+            else (_ for _ in ()).throw(ValueError("invalid token"))
+        ),
     )
     auth_app = FastAPI()
 
@@ -338,7 +356,9 @@ def test_gateway_to_auth_service_me_integration(monkeypatch):
         ("Bearer bad-token", "Invalid or expired access token"),
     ],
 )
-def test_auth_me_rejects_invalid_authorization(gateway_client, monkeypatch, authorization, expected_detail):
+def test_auth_me_rejects_invalid_authorization(
+    gateway_client, monkeypatch, authorization, expected_detail
+):
     fake_upstream(monkeypatch)
     headers = {} if authorization is None else {"Authorization": authorization}
     response = gateway_client.get("/auth/me", headers=headers)
@@ -353,9 +373,13 @@ def test_security_requires_access_token_and_identity(monkeypatch):
     monkeypatch.setattr(
         security,
         "jwt",
-        SimpleNamespace(decode=lambda value, *_args, **_kwargs: {
-            "sub": "user-1", "workspace_id": "workspace-1", "type": "access"
-        }),
+        SimpleNamespace(
+            decode=lambda value, *_args, **_kwargs: {
+                "sub": "user-1",
+                "workspace_id": "workspace-1",
+                "type": "access",
+            }
+        ),
     )
     assert verify_access_token(token)["sub"] == "user-1"
 
@@ -398,7 +422,9 @@ def test_public_auth_routes_proxy_to_auth_service(
     gateway_client, monkeypatch, method, path, expected_path
 ):
     calls = fake_upstream(monkeypatch, status_code=202, headers={"x-upstream": "auth"})
-    response = gateway_client.request(method, path, json={"payload": "value"} if method == "POST" else None)
+    response = gateway_client.request(
+        method, path, json={"payload": "value"} if method == "POST" else None
+    )
     assert response.status_code == 202
     assert response.headers["x-upstream"] == "auth"
     forwarded = calls[-1]
@@ -422,11 +448,19 @@ def test_public_auth_routes_proxy_to_auth_service(
         ("POST", "/workflows/wf-1/versions/2/nodes/", "/workflows/wf-1/versions/2/nodes/"),
         ("GET", "/workflows/wf-1/versions/2/nodes/", "/workflows/wf-1/versions/2/nodes/"),
         ("PATCH", "/workflows/wf-1/versions/2/nodes/n-1/", "/workflows/wf-1/versions/2/nodes/n-1/"),
-        ("DELETE", "/workflows/wf-1/versions/2/nodes/n-1/", "/workflows/wf-1/versions/2/nodes/n-1/"),
+        (
+            "DELETE",
+            "/workflows/wf-1/versions/2/nodes/n-1/",
+            "/workflows/wf-1/versions/2/nodes/n-1/",
+        ),
         ("POST", "/workflows/wf-1/versions/2/edges/", "/workflows/wf-1/versions/2/edges/"),
         ("GET", "/workflows/wf-1/versions/2/edges/", "/workflows/wf-1/versions/2/edges/"),
         ("PATCH", "/workflows/wf-1/versions/2/edges/e-1/", "/workflows/wf-1/versions/2/edges/e-1/"),
-        ("DELETE", "/workflows/wf-1/versions/2/edges/e-1/", "/workflows/wf-1/versions/2/edges/e-1/"),
+        (
+            "DELETE",
+            "/workflows/wf-1/versions/2/edges/e-1/",
+            "/workflows/wf-1/versions/2/edges/e-1/",
+        ),
         ("POST", "/workflows/wf-1/versions/2/validate/", "/workflows/wf-1/versions/2/validate/"),
         ("POST", "/workflows/wf-1/versions/2/publish/", "/workflows/wf-1/versions/2/publish/"),
         ("POST", "/workflows/wf-1/deactivate/", "/workflows/wf-1/deactivate/"),
@@ -496,22 +530,39 @@ def test_build_proxy_response_preserves_cookies_and_strips_response_headers():
 
 
 def test_proxy_request_preserves_redirect_response(gateway_client, monkeypatch):
-    calls = fake_upstream(monkeypatch, status_code=302, headers={"location": "https://accounts.google.test"})
+    calls = fake_upstream(
+        monkeypatch, status_code=302, headers={"location": "https://accounts.google.test"}
+    )
     response = gateway_client.get("/auth/google", follow_redirects=False)
     assert response.status_code == 302
     assert response.headers["location"] == "https://accounts.google.test"
     assert calls[0]["client_options"].get("follow_redirects") is False
 
 
-@pytest.mark.parametrize("method,path", [
-    ("POST", "/ai/connections/"), ("GET", "/ai/connections/"),
-    ("GET", "/ai/connections/test-id/"), ("PATCH", "/ai/connections/test-id/"),
-    ("DELETE", "/ai/connections/test-id/"), ("POST", "/ai/connections/test-id/test/"),
-    ("GET", "/ai/connections/test-id/models/"),
-])
-def test_ai_connection_proxy_preserves_request_and_response(gateway_client, monkeypatch, method, path):
-    calls = fake_upstream(monkeypatch, status_code=202, headers={"x-request-id": "upstream", "connection": "close"})
-    response = gateway_client.request(method, path + "?trace=1", content=b'{"name":"test"}', headers={"x-workspace-id": "workspace"})
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("POST", "/ai/connections/"),
+        ("GET", "/ai/connections/"),
+        ("GET", "/ai/connections/test-id/"),
+        ("PATCH", "/ai/connections/test-id/"),
+        ("DELETE", "/ai/connections/test-id/"),
+        ("POST", "/ai/connections/test-id/test/"),
+        ("GET", "/ai/connections/test-id/models/"),
+    ],
+)
+def test_ai_connection_proxy_preserves_request_and_response(
+    gateway_client, monkeypatch, method, path
+):
+    calls = fake_upstream(
+        monkeypatch, status_code=202, headers={"x-request-id": "upstream", "connection": "close"}
+    )
+    response = gateway_client.request(
+        method,
+        path + "?trace=1",
+        content=b'{"name":"test"}',
+        headers={"x-workspace-id": "workspace"},
+    )
     assert response.status_code == 202
     assert response.json() == {"ok": True}
     assert response.headers["x-request-id"] == "upstream"
