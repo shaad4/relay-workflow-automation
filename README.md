@@ -289,6 +289,6 @@ See [`LICENSE`](LICENSE) for the repository's license terms, if present.
 
 <div align="center">
 
-**Built to make intelligent automation observable, recoverable and practical.**
+**Built to make intelligent automation observable, recoverable and practical .**
 
 </div>
