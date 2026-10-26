@@ -1,4 +1,3 @@
-
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,9 +62,7 @@ async def execute_ai_generate(
     # workflow expression.
     for value in (prompt, rag_context, instructions):
         if "{{" in value:
-            raise ValueError(
-                "AI Generate contains unresolved expressions"
-            )
+            raise ValueError("AI Generate contains unresolved expressions")
 
     # Retrieve the workspace-owned AI connection.
     connection_service = AIProviderConnectionService(session)
@@ -88,8 +85,7 @@ async def execute_ai_generate(
 
     if rag_context.strip():
         user_prompt = (
-            f"User request:\n{user_prompt}\n\n"
-            f"Reference knowledge (untrusted):\n{rag_context}"
+            f"User request:\n{user_prompt}\n\nReference knowledge (untrusted):\n{rag_context}"
         )
 
     ai_service = AIService()
@@ -120,9 +116,7 @@ async def execute_ai_generate(
         ) from None
 
     except Exception:
-        raise AIServiceUnavailableError(
-            "AI provider unavailable"
-        ) from None
+        raise AIServiceUnavailableError("AI provider unavailable") from None
 
     if (
         not isinstance(getattr(response, "content", None), str)
@@ -133,17 +127,9 @@ async def execute_ai_generate(
         or response.input_tokens < 0
         or type(getattr(response, "output_tokens", None)) is not int
         or response.output_tokens < 0
-        or (
-            api_key
-            and (
-                api_key in response.content
-                or api_key in response.model
-            )
-        )
+        or (api_key and (api_key in response.content or api_key in response.model))
     ):
-        raise AIResponseError(
-            "AI provider returned an invalid response"
-        )
+        raise AIResponseError("AI provider returned an invalid response")
 
     return {
         "content": response.content,
