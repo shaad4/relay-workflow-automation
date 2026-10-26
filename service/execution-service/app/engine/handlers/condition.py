@@ -23,7 +23,7 @@ def evaluate_condition(
         if not result:
             raise ValueError("Condition value cannot be empty")
 
-        if "{{" in result or "}}" in result:
+        if "{{" in result:
             raise ValueError("Condition contains unresolved expression")
 
         return result

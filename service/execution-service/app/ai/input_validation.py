@@ -1,7 +1,7 @@
 import re
 from typing import Any
 
-EXPRESSION_MARKERS = re.compile(r"\{\{|\}\}")
+EXPRESSION_MARKERS = re.compile(r"\{\{")
 
 
 def validate_resolved_ai_inputs(

@@ -43,7 +43,7 @@ async def execute_rag_search(
         raise ValueError("RAG query cannot exceed 2000 characters")
 
     # Do not send unresolved expressions to RAG Service
-    if "{{" in query or "}}" in query:
+    if "{{" in query:
         raise ValueError("RAG query contains unresolved expressions")
 
     top_k = configuration.get("top_k", 5)
