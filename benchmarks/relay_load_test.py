@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Relay manual-trigger benchmark. Uses HTTPX and psycopg (psycopg 3)."""
+"""Relay manual-trigger benchmark using HTTPX and psycopg 3.
+
+Automatically reads the Execution Service database URL from its .env file,
+resolves Docker Compose's published PostgreSQL port, and prompts for a token.
+Explicit CLI arguments and environment variables take precedence.
+"""
 import argparse
 import asyncio
 import csv
+import getpass
 import json
 import os
 import statistics
+import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,9 +20,59 @@ from uuid import uuid4
 
 import httpx
 import psycopg
+from dotenv import dotenv_values
 from psycopg.rows import dict_row
+from sqlalchemy.engine import make_url
 
 TERMINAL = {"completed", "failed", "cancelled", "canceled"}
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def load_benchmark_config(args):
+    """Prompt for missing credentials and derive a host-accessible DB DSN."""
+    if not args.token:
+        args.token = getpass.getpass("Enter Relay access token: ").strip()
+    if not args.token:
+        raise ValueError("Relay access token is required")
+
+    if args.db_dsn:
+        return args
+
+    env_path = PROJECT_ROOT / "service" / "execution-service" / ".env"
+    if not env_path.is_file():
+        raise ValueError(f"Execution Service .env not found: {env_path}")
+    service_env = dotenv_values(env_path)
+    database_url = service_env.get("DATABASE_URL")
+    if not database_url:
+        raise ValueError(f"DATABASE_URL is missing in {env_path}")
+
+    url = make_url(database_url)
+    if url.drivername == "postgresql+asyncpg":
+        url = url.set(drivername="postgresql")
+    elif url.drivername not in ("postgresql", "postgresql+psycopg"):
+        raise ValueError(f"Unsupported database URL driver: {url.drivername}")
+
+    if url.host in {"execution-postgres", "relay-execution-postgres"}:
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "port", "execution-postgres", "5432"],
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            )
+            published = result.stdout.strip().splitlines()[-1]
+            port = int(published.rsplit(":", 1)[-1])
+        except (OSError, subprocess.SubprocessError, ValueError, IndexError) as exc:
+            raise ValueError(
+                "Cannot discover execution-postgres host port. "
+                "Start Docker Compose or supply --db-dsn explicitly."
+            ) from exc
+        url = url.set(host="127.0.0.1", port=port)
+
+    args.db_dsn = url.render_as_string(hide_password=False)
+    return args
 
 
 def percentile(values, p):
@@ -52,7 +109,6 @@ async def main(args):
     url = f"{args.base_url.rstrip('/')}/workflows/{args.workflow_id}/run"
     headers = {"Authorization": f"Bearer {args.token}"}
     semaphore = asyncio.Semaphore(args.submit_concurrency)
-    submissions = []
     start_wall = datetime.now(timezone.utc)
     start_mono = time.monotonic()
 
@@ -157,17 +213,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--workflow-id", default="91d81817-6193-40e5-9cf1-b9213572cfe2")
     parser.add_argument("--base-url", default="http://127.0.0.1:8001")
-    parser.add_argument("--token", default=os.getenv("RELAY_BENCH_TOKEN"), required=False)
+    parser.add_argument("--token", default=os.getenv("RELAY_BENCH_TOKEN"))
     parser.add_argument("--db-dsn", default=os.getenv("RELAY_BENCH_DB_DSN"))
     parser.add_argument("--count", type=int, default=20)
     parser.add_argument("--submit-concurrency", type=int, default=5)
     parser.add_argument("--concurrency-label", default="5")
     parser.add_argument("--poll-interval", type=float, default=1.0)
     parser.add_argument("--drain-timeout", type=float, default=180.0)
-    parser.add_argument("--output-dir", default="benchmarks/results")
+    parser.add_argument("--output-dir", default=str(PROJECT_ROOT / "benchmarks" / "results"))
     args = parser.parse_args()
-    if not args.token or not args.db_dsn:
-        parser.error("Set RELAY_BENCH_TOKEN and RELAY_BENCH_DB_DSN environment variables")
+    try:
+        args = load_benchmark_config(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.count < 1 or args.submit_concurrency < 1:
         parser.error("count and submit-concurrency must be positive")
     raise SystemExit(asyncio.run(main(args)))
