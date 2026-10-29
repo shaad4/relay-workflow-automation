@@ -1,14 +1,14 @@
 import asyncio
-import os
 from uuid import UUID
 
+from app.config import integer
 from app.services.execution_queue import (
     cleanup_expired_executions,
     execute_pending_execution,
     inspect_recoverable_executions,
 )
 
-EXECUTION_MAX_CONCURRENCY = int(os.getenv("EXECUTION_MAX_CONCURRENCY", "5"))
+EXECUTION_MAX_CONCURRENCY = integer("EXECUTION_MAX_CONCURRENCY", 5)
 
 DISPATCH_INTERVAL_SECONDS = 2
 

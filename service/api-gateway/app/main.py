@@ -1,10 +1,13 @@
-import os
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.config import allowed_origins as configured_origins
+from app.config import validate_startup
+from app.core.proxy import public_redirect_location
 from app.routes.ai.knowledge_bases import router as knowledge_base_router
 from app.routes.ai.provider_connections import router as ai_provider_connections_router
 from app.routes.auth.authenticated import router as auth_router
@@ -22,17 +25,20 @@ from app.routes.workflows.workflows import router as workflows_router
 
 load_dotenv()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    validate_startup()
+    yield
+
+
 app = FastAPI(
     title="Relay API Gateway",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-allowed_origins = [frontend_url]
-if "localhost" in frontend_url:
-    allowed_origins.append(frontend_url.replace("localhost", "127.0.0.1"))
-elif "127.0.0.1" in frontend_url:
-    allowed_origins.append(frontend_url.replace("127.0.0.1", "localhost"))
+allowed_origins = configured_origins()
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,7 +65,10 @@ async def enforce_cookie_origin(request: Request, call_next):
                 status_code=403,
                 content={"detail": "Untrusted request origin"},
             )
-    return await call_next(request)
+    response = await call_next(request)
+    if "location" in response.headers:
+        response.headers["location"] = public_redirect_location(response.headers["location"])
+    return response
 
 
 app.include_router(auth_router)
@@ -86,3 +95,15 @@ async def health():
 
 
 app.include_router(dashboard_router)
+
+
+@app.get("/health/live", include_in_schema=False)
+async def liveness():
+    """Process-only probe; dependency outages must not cause restart storms."""
+    return {"status": "ok"}
+
+
+@app.get("/ready", include_in_schema=False)
+async def readiness():
+    """Gateway startup validates configuration; upstreams have their own probes."""
+    return {"status": "ready"}

@@ -574,3 +574,36 @@ def test_ai_connection_proxy_preserves_request_and_response(
     assert sent["params"]["trace"] == "1"
     assert sent["headers"]["x-workspace-id"] == "workspace"
     assert "host" not in sent["headers"]
+
+
+@pytest.mark.parametrize(
+    "location,expected",
+    [
+        (f"{proxy.AUTH_SERVICE_URL}/auth/me/", "/auth/me/"),
+        (f"{proxy.WORKFLOW_SERVICE_URL}/workflows/?page=2", "/workflows/?page=2"),
+        (
+            "https://accounts.google.com/o/oauth2/v2/auth?state=test",
+            "https://accounts.google.com/o/oauth2/v2/auth?state=test",
+        ),
+        ("https://frontend.example/connections", "https://frontend.example/connections"),
+    ],
+)
+def test_private_upstream_redirects_become_relative(location, expected):
+    assert proxy.public_redirect_location(location) == expected
+
+
+def test_slash_redirect_does_not_expose_private_service_dns(gateway_client, monkeypatch):
+    fake_upstream(
+        monkeypatch,
+        status_code=307,
+        headers={"location": f"{proxy.AUTH_SERVICE_URL}/auth/google/"},
+        content=b"",
+    )
+    response = gateway_client.get("/auth/google", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"] == "/auth/google/"
+
+
+def test_process_and_gateway_readiness_endpoints(gateway_client):
+    assert gateway_client.get("/health/live").json() == {"status": "ok"}
+    assert gateway_client.get("/ready").json() == {"status": "ready"}

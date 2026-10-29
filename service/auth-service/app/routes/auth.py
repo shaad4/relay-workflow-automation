@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, 
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import integer
 from app.core.dependencies import get_current_user
 from app.core.exceptions import EmailVerificationRequired
 from app.core.jwt import decode_token
@@ -69,7 +70,7 @@ def set_access_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         key="relay_access_token",
         value=token,
-        max_age=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")) * 60,
+        max_age=integer("ACCESS_TOKEN_EXPIRE_MINUTES", 30) * 60,
         httponly=True,
         secure=os.getenv("COOKIE_SECURE", "true").lower() == "true",
         samesite=os.getenv("COOKIE_SAMESITE", "lax").lower(),
@@ -349,7 +350,7 @@ async def google_login():
         key="google_oauth_state",
         value=state,
         httponly=True,
-        secure=False,
+        secure=os.getenv("COOKIE_SECURE", "true").lower() == "true",
         samesite="lax",
         max_age=600,
         path="/auth/google",

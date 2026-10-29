@@ -1,11 +1,11 @@
-import os
 from uuid import UUID
 
 import grpc
 
+from app.config import grpc_target
 from app.grpc.generated.execution import approval_lifecycle_pb2, approval_lifecycle_pb2_grpc
 
-EXECUTION_GRPC_URL = os.getenv("EXECUTION_GRPC_URL", "execution-service:50055")
+EXECUTION_GRPC_URL = grpc_target("EXECUTION_GRPC_URL", "execution-service:50055")
 
 
 class ExecutionGrpcClient:

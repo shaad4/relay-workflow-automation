@@ -1,283 +1,510 @@
-
+# Docker Compose >=2.24.4. Local defaults only; production adds docker-compose.production.yml.
+# Never use `down -v` on a persistent deployment. Migrations are explicit.
 name: relay-workflow-automation
-
 services:
-  # AUTH DATABASE
   auth-postgres:
     image: postgres:16
-    container_name: relay-auth-postgres
     environment:
       POSTGRES_DB: ${AUTH_DB_NAME:?required}
       POSTGRES_USER: ${AUTH_DB_USER:?required}
       POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:${AUTH_DB_PORT:-5434}:5432"
+    - 127.0.0.1:${AUTH_DB_PORT:-5434}:5432
     volumes:
-      - auth_postgres_data:/var/lib/postgresql/data
-
-  # AUTH SERVICE
+    - auth_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
   auth-service:
     build:
       context: ./service/auth-service
-    container_name: relay-auth-service
     ports:
-      - "127.0.0.1:${AUTH_SERVICE_PORT:-8000}:8000"
+    - 127.0.0.1:${AUTH_SERVICE_PORT:-8000}:8000
     env_file:
-      - ./service/auth-service/.env
+    - path: ./service/auth-service/.env.example
+    - path: ./service/auth-service/.env
+      required: false
     depends_on:
       auth-postgres:
-        condition: service_started
-
-  # API GATEWAY
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/auth-service:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    stop_grace_period: 30s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
   api-gateway:
     build:
       context: ./service/api-gateway
-    container_name: relay-api-gateway
     ports:
-      - "${API_GATEWAY_PORT:-8001}:8000"
+    - ${API_GATEWAY_BIND_IP:-127.0.0.1}:${API_GATEWAY_PORT:-8001}:8000
     env_file:
-      - ./service/api-gateway/.env
+    - path: ./service/api-gateway/.env.example
+    - path: ./service/api-gateway/.env
+      required: false
     depends_on:
       auth-service:
-        condition: service_started
+        condition: service_healthy
       rag-service:
-        condition: service_started
-
-  # WORKFLOW SERVICE
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/api-gateway:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    stop_grace_period: 30s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
   workflow-service:
     build:
       context: ./service/workflow-service
-    container_name: relay-workflow-service
     ports:
-      - "127.0.0.1:${WORKFLOW_SERVICE_PORT:-8002}:8000"
+    - 127.0.0.1:${WORKFLOW_SERVICE_PORT:-8002}:8000
     env_file:
-      - ./service/workflow-service/.env
+    - path: ./service/workflow-service/.env.example
+    - path: ./service/workflow-service/.env
+      required: false
     depends_on:
       auth-service:
-        condition: service_started
+        condition: service_healthy
       workflow-postgres:
-        condition: service_started
+        condition: service_healthy
       integration-service:
-        condition: service_started
-
-  # WORKFLOW DATABASE
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/workflow-service:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    stop_grace_period: 30s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
   workflow-postgres:
     image: postgres:16
-    container_name: relay-workflow-postgres
     environment:
       POSTGRES_DB: ${WORKFLOW_DB_NAME:?required}
       POSTGRES_USER: ${WORKFLOW_DB_USER:?required}
       POSTGRES_PASSWORD: ${WORKFLOW_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:${WORKFLOW_DB_PORT:-5433}:5432"
+    - 127.0.0.1:${WORKFLOW_DB_PORT:-5433}:5432
     volumes:
-      - workflow_postgres_data:/var/lib/postgresql/data
-
-  # INTEGRATION SERVICE
+    - workflow_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
   integration-service:
     build:
       context: ./service/integration-service
-    container_name: relay-integration-service
     ports:
-      - "127.0.0.1:${INTEGRATION_SERVICE_PORT:-8003}:8000"
+    - 127.0.0.1:${INTEGRATION_SERVICE_PORT:-8003}:8000
     env_file:
-      - ./service/integration-service/.env
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
-      CELERY_BROKER_URL: redis://rag-redis:6379/1
+    - path: ./service/integration-service/.env.example
+    - path: ./service/integration-service/.env
+      required: false
     depends_on:
       kafka-init:
         condition: service_completed_successfully
       integration-postgres:
-        condition: service_started
-
-  # INTEGRATION CELERY WORKER
+        condition: service_healthy
+      rag-redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/integration-service:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    stop_grace_period: 30s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
   integration-celery-worker:
     build:
       context: ./service/integration-service
-    container_name: relay-integration-celery-worker
-    command: >
-      celery -A app.celery_app:celery_app
-      worker
-      --loglevel=warning
-      --queues=integration
-      --concurrency=1
+    command:
+    - celery
+    - -A
+    - app.celery_app:celery_app
+    - worker
+    - --loglevel=warning
+    - --queues=integration
+    - --concurrency=${INTEGRATION_WORKER_CONCURRENCY:-1}
     env_file:
-      - ./service/integration-service/.env
-    environment:
-      CELERY_WORKER: "true"
-      CELERY_BROKER_URL: redis://rag-redis:6379/1
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+    - path: ./service/integration-service/.env.example
+    - path: ./service/integration-service/.env
+      required: false
     depends_on:
       rag-redis:
         condition: service_healthy
       integration-postgres:
-        condition: service_started
+        condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
     restart: unless-stopped
-
-  # INTEGRATION CELERY BEAT
+    networks:
+    - backend
+    - default
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/integration-service:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    stop_grace_period: 120s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      disable: true
+    environment:
+      CELERY_WORKER: 'true'
   integration-celery-beat:
     build:
       context: ./service/integration-service
-    container_name: relay-integration-celery-beat
-    command: >
-      celery -A app.celery_app:celery_app
-      beat
-      --loglevel=warning
-      --schedule=/tmp/integration-celerybeat-schedule
+    command:
+    - celery
+    - -A
+    - app.celery_app:celery_app
+    - beat
+    - --loglevel=warning
+    - --schedule=/tmp/integration-celerybeat-schedule
     env_file:
-      - ./service/integration-service/.env
-    environment:
-      CELERY_BROKER_URL: redis://rag-redis:6379/1
+    - path: ./service/integration-service/.env.example
+    - path: ./service/integration-service/.env
+      required: false
     depends_on:
       rag-redis:
         condition: service_healthy
+      integration-postgres:
+        condition: service_healthy
     restart: unless-stopped
-
-  # INTEGRATION DATABASE
+    networks:
+    - backend
+    - default
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/integration-service:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    stop_grace_period: 120s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      disable: true
   integration-postgres:
     image: postgres:16
-    container_name: relay-integration-postgres
     environment:
       POSTGRES_DB: ${INTEGRATION_DB_NAME:?required}
       POSTGRES_USER: ${INTEGRATION_DB_USER:?required}
       POSTGRES_PASSWORD: ${INTEGRATION_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:${INTEGRATION_DB_PORT:-5435}:5432"
+    - 127.0.0.1:${INTEGRATION_DB_PORT:-5435}:5432
     volumes:
-      - integration_postgres_data:/var/lib/postgresql/data
-
-  # ACTION SERVICE
+    - integration_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
   action-service:
     build:
       context: ./service/action-service
-    container_name: relay-action-service
     ports:
-      - "127.0.0.1:${ACTION_SERVICE_PORT:-8004}:8000"
+    - 127.0.0.1:${ACTION_SERVICE_PORT:-8004}:8000
     env_file:
-      - ./service/action-service/.env
+    - path: ./service/action-service/.env.example
+    - path: ./service/action-service/.env
+      required: false
     depends_on:
       action-postgres:
-        condition: service_started
-
-  # ACTION DATABASE
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/action-service:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    stop_grace_period: 30s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
   action-postgres:
     image: postgres:16
-    container_name: relay-action-postgres
     environment:
       POSTGRES_DB: ${ACTION_DB_NAME:?required}
       POSTGRES_USER: ${ACTION_DB_USER:?required}
       POSTGRES_PASSWORD: ${ACTION_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:${ACTION_DB_PORT:-5436}:5432"
+    - 127.0.0.1:${ACTION_DB_PORT:-5436}:5432
     volumes:
-      - action_postgres_data:/var/lib/postgresql/data
-
-  # EXECUTION SERVICE
+    - action_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
   execution-service:
     build:
       context: ./service/execution-service
-    container_name: relay-execution-service
     ports:
-      - "127.0.0.1:${EXECUTION_SERVICE_PORT:-8005}:8000"
+    - 127.0.0.1:${EXECUTION_SERVICE_PORT:-8005}:8000
     env_file:
-      - ./service/execution-service/.env
+    - path: ./service/execution-service/.env.example
+    - path: ./service/execution-service/.env
+      required: false
     stop_signal: SIGTERM
     stop_grace_period: 120s
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
-      RAG_GRPC_ADDRESS: rag-service:50056
     depends_on:
       action-service:
-        condition: service_started
+        condition: service_healthy
       execution-postgres:
-        condition: service_started
+        condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
       rag-service:
-        condition: service_started
-
-  # EXECUTION DATABASE
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/execution-service:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
   execution-postgres:
     image: postgres:16
-    container_name: relay-execution-postgres
     environment:
       POSTGRES_DB: ${EXECUTION_DB_NAME:?required}
       POSTGRES_USER: ${EXECUTION_DB_USER:?required}
       POSTGRES_PASSWORD: ${EXECUTION_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:${EXECUTION_DB_PORT:-5437}:5432"
+    - 127.0.0.1:${EXECUTION_DB_PORT:-5437}:5432
     volumes:
-      - execution_postgres_data:/var/lib/postgresql/data
-
-  # RAG SERVICE
+    - execution_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
   rag-service:
     build:
       context: ./service/rag-service
-    container_name: relay-rag-service
     ports:
-      - "127.0.0.1:${RAG_SERVICE_PORT:-8006}:8000"
+    - 127.0.0.1:${RAG_SERVICE_PORT:-8006}:8000
     env_file:
-      - ./service/rag-service/.env
+    - path: ./service/rag-service/.env.example
+    - path: ./service/rag-service/.env
+      required: false
     depends_on:
       auth-service:
-        condition: service_started
+        condition: service_healthy
       rag-postgres:
-        condition: service_started
-
-  # RAG DATABASE
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/rag-service:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    stop_grace_period: 30s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
   rag-postgres:
     image: pgvector/pgvector:pg16
-    container_name: relay-rag-postgres
     environment:
       POSTGRES_DB: ${RAG_DB_NAME:?required}
       POSTGRES_USER: ${RAG_DB_USER:?required}
       POSTGRES_PASSWORD: ${RAG_DB_PASSWORD:?required}
     ports:
-      - "127.0.0.1:${RAG_DB_PORT:-5438}:5432"
+    - 127.0.0.1:${RAG_DB_PORT:-5438}:5432
     volumes:
-      - rag_postgres_data:/var/lib/postgresql/data
-
-  # RAG CELERY BROKER
+    - rag_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+    - backend
+    - default
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
   rag-redis:
     image: redis:7-alpine
-    container_name: relay-rag-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
-      - rag_redis_data:/data
+    - rag_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+      - CMD
+      - redis-cli
+      - ping
       interval: 5s
       timeout: 3s
       retries: 5
-
-  # RAG CELERY WORKER
+    networks:
+    - backend
+    - default
   rag-celery-worker:
     build:
       context: ./service/rag-service
-    container_name: relay-rag-celery-worker
-    command: >
-      celery -A app.celery_app:celery_app
-      worker
-      --loglevel=info
-      --queues=rag_ingestion
-      --concurrency=1
+    command:
+    - celery
+    - -A
+    - app.celery_app:celery_app
+    - worker
+    - --loglevel=warning
+    - --queues=rag_ingestion
+    - --concurrency=${RAG_WORKER_CONCURRENCY:-1}
     env_file:
-      - ./service/rag-service/.env
+    - path: ./service/rag-service/.env.example
+    - path: ./service/rag-service/.env
+      required: false
     depends_on:
       rag-redis:
         condition: service_healthy
       rag-postgres:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
-
-  # KAFKA BROKER
+    networks:
+    - backend
+    - default
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/rag-service:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    stop_grace_period: 720s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      disable: true
   kafka:
     image: apache/kafka:4.0.1
-    container_name: relay-kafka
     restart: unless-stopped
     environment:
       KAFKA_NODE_ID: ${KAFKA_NODE_ID:-1}
@@ -291,56 +518,83 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: ${KAFKA_AUTO_CREATE_TOPICS_ENABLE:-false}
+      KAFKA_LOG_DIRS: ${KAFKA_LOG_DIRS:?set_after_reviewing_existing_Kafka_storage}
     volumes:
-      - kafka_data:/var/lib/kafka/data
+    - kafka_data:/var/lib/kafka/data
     healthcheck:
       test:
-        - CMD-SHELL
-        - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1
+      - CMD-SHELL
+      - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1
       interval: 5s
       timeout: 5s
       retries: 12
       start_period: 10s
-
-  # KAFKA TOPIC INITIALIZER
+    networks:
+    - backend
+    - default
   kafka-init:
     image: apache/kafka:4.0.1
-    container_name: relay-kafka-init
-    restart: "no"
+    restart: 'no'
     depends_on:
       kafka:
         condition: service_healthy
     entrypoint:
-      - /bin/sh
-      - -ec
-      - |
-        for topic in \
-          workflow.triggered \
-          workflow.started \
-          workflow.completed \
-          workflow.failed
-        do
-          /opt/kafka/bin/kafka-topics.sh \
-            --bootstrap-server kafka:9092 \
-            --create \
-            --if-not-exists \
-            --topic "$$topic" \
-            --partitions 1 \
-            --replication-factor 1
-        done
-
+    - /bin/sh
+    - -ec
+    - |
+      for topic in \
+        workflow.triggered \
+        workflow.started \
+        workflow.completed \
+        workflow.failed
+      do
         /opt/kafka/bin/kafka-topics.sh \
           --bootstrap-server kafka:9092 \
-          --list
+          --create \
+          --if-not-exists \
+          --topic "$$topic" \
+          --partitions 1 \
+          --replication-factor 1
+      done
 
-
-# PERSISTENT VOLUMES
+      /opt/kafka/bin/kafka-topics.sh \
+        --bootstrap-server kafka:9092 \
+        --list
+    networks:
+    - backend
+  frontend:
+    profiles:
+    - frontend
+    build:
+      context: ./frontend
+    image: ${RELAY_IMAGE_REGISTRY:-relay}/frontend:${RELAY_IMAGE_TAG:-dev}
+    init: true
+    restart: unless-stopped
+    ports:
+    - ${FRONTEND_BIND_IP:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000
+    environment:
+      API_GATEWAY_URL: http://api-gateway:8000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    networks:
+    - default
+    stop_grace_period: 30s
 volumes:
-  auth_postgres_data:
-  workflow_postgres_data:
-  integration_postgres_data:
-  action_postgres_data:
-  execution_postgres_data:
-  rag_postgres_data:
-  rag_redis_data:
-  kafka_data:
+  auth_postgres_data: null
+  workflow_postgres_data: null
+  integration_postgres_data: null
+  action_postgres_data: null
+  execution_postgres_data: null
+  rag_postgres_data: null
+  rag_redis_data: null
+  kafka_data: null
+networks:
+  backend:
+    internal: true
+  default: {}

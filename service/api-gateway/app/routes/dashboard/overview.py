@@ -7,11 +7,12 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, ValidationError
 
+from app.config import EXECUTION_SERVICE_URL, WORKFLOW_SERVICE_URL
 from app.dependencies import get_current_identity
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
-EXECUTION_URL = "http://execution-service:8000/dashboard/summary"
-WORKFLOW_URL = "http://workflow-service:8000/dashboard/summary"
+EXECUTION_URL = f"{EXECUTION_SERVICE_URL}/dashboard/summary"
+WORKFLOW_URL = f"{WORKFLOW_SERVICE_URL}/dashboard/summary"
 
 
 class RecentExecution(BaseModel):

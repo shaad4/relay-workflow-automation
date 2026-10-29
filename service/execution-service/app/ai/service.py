@@ -1,5 +1,4 @@
 import asyncio
-import os
 
 from anthropic import (
     APIConnectionError as AnthropicConnectionError,
@@ -44,8 +43,9 @@ from app.ai.exceptions import (
 from app.ai.providers.anthropic import AnthropicProvider
 from app.ai.providers.gemini import GeminiProvider
 from app.ai.providers.openai import OpenAIProvider
+from app.config import integer
 
-MAX_CONCURRENT_AI_REQUESTS = int(os.getenv("MAX_CONCURRENT_AI_REQUESTS", "10"))
+MAX_CONCURRENT_AI_REQUESTS = integer("MAX_CONCURRENT_AI_REQUESTS", 10)
 
 if MAX_CONCURRENT_AI_REQUESTS < 1:
     raise ValueError("MAX_CONCURRENT_AI_REQUESTS must be positive")

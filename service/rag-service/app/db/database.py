@@ -1,4 +1,3 @@
-import os
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
@@ -7,12 +6,11 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-DATABASE_URL = os.environ["DATABASE_URL"]
+from app.config import database_options, database_url
 
-engine = create_async_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-)
+DATABASE_URL = database_url()
+
+engine = create_async_engine(DATABASE_URL, **database_options())
 
 AsyncSessionLocal = async_sessionmaker(
     engine,

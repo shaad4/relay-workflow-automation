@@ -74,13 +74,15 @@ function VerifyEmailContent() {
 
         const msg = err?.message || "";
         const isNetworkOrDevError =
-          !process.env.NEXT_PUBLIC_AUTH_API_URL ||
           err?.name === "TypeError" ||
           msg.toLowerCase().includes("failed to fetch") ||
           msg.toLowerCase().includes("networkerror");
 
         if (isNetworkOrDevError) {
-          setStatus("success");
+          setStatus("error");
+          setErrorMessage(
+            "Unable to verify your email right now. Please try again.",
+          );
         } else {
           setStatus("error");
           setErrorMessage(mapVerificationError(msg, true));

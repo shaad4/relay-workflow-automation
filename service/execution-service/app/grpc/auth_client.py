@@ -1,8 +1,9 @@
 import grpc
 
+from app.config import grpc_target
 from app.grpc.generated.auth import auth_pb2, auth_pb2_grpc
 
-AUTH_SERVICE_ADDRESS = "auth-service:50051"
+AUTH_SERVICE_ADDRESS = grpc_target("AUTH_GRPC_URL", "auth-service:50051", "AUTH_GRPC_TARGET")
 
 
 class AuthGrpcClient:

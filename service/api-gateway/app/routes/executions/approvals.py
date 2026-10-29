@@ -2,9 +2,9 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-router = APIRouter(prefix="/approvals")
+from app.config import EXECUTION_SERVICE_URL
 
-EXECUTION_SERVICE_URL = "http://execution-service:8000"
+router = APIRouter(prefix="/approvals")
 
 
 @router.get("/")
