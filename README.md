@@ -242,6 +242,8 @@ relay-workflow-automation/
 
 ## ⚡ Getting Started
 
+For the audited deployment paths, start with the **[deployment guide](deploy/README.md)**: [Docker Compose](deploy/docker/README.md), [Kubernetes/K3s](deploy/kubernetes/README.md), and [verification limits](deploy/VALIDATION.md). Production deployment remains manual; these assets do not modify a running server.
+
 ### Requirements
 
 - Docker Engine and Docker Compose plugin
@@ -255,17 +257,24 @@ relay-workflow-automation/
 git clone https://github.com/shaad4/relay-workflow-automation.git
 cd relay-workflow-automation
 
-# Configure service environment variables using the service-specific setup
-# and example environment files where provided.
+# Fresh LOCAL development setup only; preserve existing env files on upgrades.
+cp .env.example .env
+./scripts/dev-up.sh
 
-# Start services
-docker compose up -d --build
+# Explicit one-time prerequisite for the fresh RAG database, then migrations.
+docker compose exec -T rag-postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector"'
+./scripts/migrate.sh
+
+# Start applications only after migrations succeed.
+docker compose up -d --wait --wait-timeout 180
+# Optional containerized frontend (or npm run dev in frontend/).
+docker compose --profile frontend up -d --build frontend
 
 # Inspect running containers
 docker compose ps
 ```
 
-The Compose stack uses separate service environment files and required database variables. Configure those before starting; integration providers may also require API keys and connection settings. Never commit live secrets.
+The Compose stack uses root `.env` for interpolation and service-specific `.env` overrides. Existing installations should follow the [upgrade/Kafka data gate](deploy/docker/README.md) instead of overwriting credentials. Integration providers may require additional settings; never commit live secrets. No migration or reset runs automatically at application startup.
 
 ## 🧪 Tests
 

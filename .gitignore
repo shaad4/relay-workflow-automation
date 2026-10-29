@@ -95,3 +95,12 @@ benchmarks/results/
 coverage.xml
 coverage.json
 test-results.xml
+
+# Local deployment secrets, database backups and rendered manifests
+/deploy/**/secrets.local.yaml
+/deploy/**/secrets.local.yml
+/deploy/**/rendered*.yaml
+/backups/
+*.dump
+*.pem
+*.key
