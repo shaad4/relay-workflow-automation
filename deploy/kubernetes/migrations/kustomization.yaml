@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: relay
+resources:
+- jobs.yaml
+images:
+- name: relay/auth-service
+  newName: relay/auth-service
+  newTag: REPLACE_WITH_RELEASE_TAG
+- name: relay/workflow-service
+  newName: relay/workflow-service
+  newTag: REPLACE_WITH_RELEASE_TAG
+- name: relay/integration-service
+  newName: relay/integration-service
+  newTag: REPLACE_WITH_RELEASE_TAG
+- name: relay/action-service
+  newName: relay/action-service
+  newTag: REPLACE_WITH_RELEASE_TAG
+- name: relay/execution-service
+  newName: relay/execution-service
+  newTag: REPLACE_WITH_RELEASE_TAG
+- name: relay/rag-service
+  newName: relay/rag-service
+  newTag: REPLACE_WITH_RELEASE_TAG
