@@ -13,7 +13,13 @@ RUN npm run build
 FROM node:24.22.1-bookworm-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 WORKDIR /app
-RUN groupadd --gid 10001 relay && useradd --uid 10001 --gid relay --no-create-home relay
+# Standalone needs Node only. Keep package managers/build tooling in build stages;
+# unused npm transitive packages otherwise enlarge the production attack surface.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+        /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+    && groupadd --gid 10001 relay \
+    && useradd --uid 10001 --gid relay --no-create-home relay
 COPY --from=builder --chown=10001:10001 /app/.next/standalone ./
 COPY --from=builder --chown=10001:10001 /app/.next/static ./.next/static
 COPY --from=builder --chown=10001:10001 /app/public ./public

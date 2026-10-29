@@ -329,6 +329,19 @@ jobs:
           tags: relay/${{ matrix.image }}:ci
           cache-from: type=gha,scope=${{ matrix.image }}-amd64
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-amd64
+      - name: Verify non-root runtime and entrypoint dependencies
+        env:
+          IMAGE: relay/${{ matrix.image }}:ci
+          SERVICE: ${{ matrix.image }}
+        run: |
+          if [ "$SERVICE" = frontend ]; then
+            docker run --rm --entrypoint node "$IMAGE" -e \
+              "if(process.getuid()===0)process.exit(1); require('next'); require('fs').accessSync('/app/server.js')"
+            docker run --rm --entrypoint sh "$IMAGE" -c '! command -v npm && ! command -v yarn'
+          else
+            docker run --rm --entrypoint python "$IMAGE" -c \
+              'import os, uvicorn; assert os.getuid() != 0'
+          fi
       - name: Scan native image for fixable high/critical vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:

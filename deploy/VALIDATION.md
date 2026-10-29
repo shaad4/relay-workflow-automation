@@ -16,7 +16,7 @@ data was accessed or changed. The checks below are not a production certificatio
 | Action pytest | 62 passed; 86.00% coverage. |
 | Execution pytest | 297 passed; 84.70% coverage, including real isolated PostgreSQL integration and gRPC tests. |
 | RAG pytest | 102 passed; 86.42% coverage, including real isolated pgvector ranking/tenant/claim tests. |
-| Backend total | **1,050 passed**. All seven suites exceeded the existing 80% coverage gate on the coverage runs (Gateway coverage run: 107 tests, 82.99%; two additional alias tests then passed). |
+| Backend total | **1,050 passed**. All seven suites exceeded the existing 80% coverage gate on the coverage runs (Gateway final coverage run: 109 tests, 82.99%). |
 | Six Alembic histories | `upgrade head` succeeded on six independent, freshly created local test databases; pgvector explicitly provisioned in RAG first. No migration files changed. |
 | Migration prerequisite | Actual-target pgvector preflight accepted installed extension and rejected absent extension. Shell orchestration test verified missing extension stops before every Alembic command. |
 | Python Ruff | `ruff check service` and `ruff format --check service` passed, plus new deployment validator. |
@@ -40,6 +40,15 @@ test tooling—not added to Relay's runtime dependencies. Environment-provided S
 proxy configuration required test-only `socksio` in the local RAG test environment;
 initial client-construction failures were environmental, then all 102 tests passed.
 No paid AI, mail, payment or storage operations were invoked.
+
+## Image CI remediation
+
+The first PR image run found six HIGH advisories in the Node base image's unused
+**npm toolchain** (`brace-expansion` and `undici`), not the application lockfile.
+The final standalone runtime removes npm/Corepack/Yarn; dependency installation
+remains in build stages. No vulnerabilities were allowlisted or scan gates relaxed.
+CI additionally verifies non-root runtime identity and entrypoint dependencies.
+The latest PR checks are the authoritative result for the final image revision.
 
 ## Checks not established locally
 
