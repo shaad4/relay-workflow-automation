@@ -1,0 +1,158 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+data:
+  server.properties: 'process.roles=broker,controller
+
+    node.id=1
+
+    controller.quorum.voters=1@kafka-0.kafka.relay.svc.cluster.local:9093
+
+    listeners=PLAINTEXT://:9092,CONTROLLER://:9093
+
+    advertised.listeners=PLAINTEXT://kafka-0.kafka.relay.svc.cluster.local:9092
+
+    controller.listener.names=CONTROLLER
+
+    listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+
+    inter.broker.listener.name=PLAINTEXT
+
+    log.dirs=/var/lib/kafka/data/logs
+
+    offsets.topic.replication.factor=1
+
+    transaction.state.log.replication.factor=1
+
+    transaction.state.log.min.isr=1
+
+    default.replication.factor=1
+
+    min.insync.replicas=1
+
+    num.partitions=1
+
+    auto.create.topics.enable=false
+
+    log.retention.hours=24
+
+    log.retention.bytes=134217728
+
+    log.segment.bytes=33554432
+
+    log.retention.check.interval.ms=300000
+
+    num.network.threads=2
+
+    num.io.threads=2
+
+    '
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+spec:
+  selector:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/part-of: relay
+  ports:
+  - name: tcp
+    port: 9092
+    targetPort: 9092
+  clusterIP: None
+  publishNotReadyAddresses: true
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        app.kubernetes.io/part-of: relay
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: kafka
+        image: apache/kafka:4.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9092
+        resources:
+          requests:
+            cpu: 25m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1536Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/kafka/data
+        - name: config
+          mountPath: /etc/relay-kafka
+          readOnly: true
+        env:
+        - name: KAFKA_HEAP_OPTS
+          value: -Xms256m -Xmx768m
+        - name: CLUSTER_ID
+          valueFrom:
+            secretKeyRef:
+              name: kafka-kraft
+              key: CLUSTER_ID
+        command:
+        - /bin/bash
+        - -ec
+        - "dir=/var/lib/kafka/data/logs\nif [ ! -f \"$dir/meta.properties\" ]; then\n\
+          \  if [ -d \"$dir\" ] && [ -n \"$(ls -A \"$dir\")\" ]; then\n    echo 'Refusing\
+          \ to format nonempty Kafka storage without metadata' >&2; exit 1\n  fi\n\
+          \  /opt/kafka/bin/kafka-storage.sh format -t \"$CLUSTER_ID\" -c /etc/relay-kafka/server.properties\n\
+          fi\ngrep -Fx \"cluster.id=$CLUSTER_ID\" \"$dir/meta.properties\" >/dev/null\
+          \ || { echo 'Kafka cluster ID mismatch' >&2; exit 1; }\nexec /opt/kafka/bin/kafka-server-start.sh\
+          \ /etc/relay-kafka/server.properties\n"
+        startupProbe:
+          tcpSocket:
+            port: 9092
+          periodSeconds: 10
+          failureThreshold: 60
+        readinessProbe:
+          exec:
+            command:
+            - /opt/kafka/bin/kafka-topics.sh
+            - --bootstrap-server
+            - localhost:9092
+            - --list
+          timeoutSeconds: 15
+          periodSeconds: 30
+      volumes:
+      - name: config
+        configMap:
+          name: kafka-config
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 2Gi

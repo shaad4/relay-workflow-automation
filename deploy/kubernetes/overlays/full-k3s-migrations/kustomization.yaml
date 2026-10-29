@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: relay
+resources:
+- ../../migrations
+images:
+- name: relay/auth-service
+  newTag: dev
+- name: relay/workflow-service
+  newTag: dev
+- name: relay/integration-service
+  newTag: dev
+- name: relay/action-service
+  newTag: dev
+- name: relay/execution-service
+  newTag: dev
+- name: relay/rag-service
+  newTag: dev

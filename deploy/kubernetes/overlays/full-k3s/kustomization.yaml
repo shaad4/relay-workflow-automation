@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: relay
+resources:
+- ../../base
+- ../../infrastructure
+components:
+- ../../components/ingress
+patches:
+- path: configmap-patch.yaml
+- target:
+    kind: NetworkPolicy
+    name: relay-private-infrastructure
+  patch: |-
+    $patch: delete
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: relay-private-infrastructure
