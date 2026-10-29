@@ -1,9 +1,11 @@
-import os
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.config import allowed_origins as configured_origins
+from app.config import validate_startup
 from app.dependencies import get_current_identity
 from app.grpc.server import start_grpc_server
 from app.routes.dashboard import router as dashboard_router
@@ -12,6 +14,7 @@ from app.routes.workflows import router as workflows_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_startup()
     grpc_server = await start_grpc_server()
 
     try:
@@ -25,12 +28,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-allowed_origins = {frontend_url.rstrip("/")}
-if "localhost" in frontend_url:
-    allowed_origins.add(frontend_url.replace("localhost", "127.0.0.1").rstrip("/"))
-elif "127.0.0.1" in frontend_url:
-    allowed_origins.add(frontend_url.replace("127.0.0.1", "localhost").rstrip("/"))
+allowed_origins = set(configured_origins())
 
 
 @app.middleware("http")
@@ -70,3 +68,25 @@ async def protected_test(
 
 
 app.include_router(dashboard_router)
+
+
+@app.get("/health/live", include_in_schema=False)
+async def liveness():
+    """Process-only probe; dependency outages must not cause restart storms."""
+    return {"status": "ok"}
+
+
+@app.get("/ready", include_in_schema=False)
+async def readiness():
+    """Bounded DB probe; no schema mutation or dependency details in responses."""
+    from sqlalchemy import text
+
+    from app.db.database import engine
+
+    try:
+        async with asyncio.timeout(3):
+            async with engine.connect() as connection:
+                await connection.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+    return {"status": "ready"}

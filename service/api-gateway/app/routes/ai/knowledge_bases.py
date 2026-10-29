@@ -1,16 +1,12 @@
-import os
 from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-router = APIRouter(prefix="/knowledge-bases")
+from app.config import RAG_SERVICE_URL
 
-RAG_SERVICE_URL = os.getenv(
-    "RAG_SERVICE_URL",
-    "http://rag-service:8000",
-).rstrip("/")
+router = APIRouter(prefix="/knowledge-bases")
 
 
 HOP_BY_HOP_HEADERS = {

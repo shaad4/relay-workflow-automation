@@ -1,19 +1,19 @@
 import asyncio
 import errno
 import json
-import os
 import socket
 from uuid import UUID
 
 import httpx
 
+from app.config import integer
 from app.connectors.registry import connector_registry
 from app.core.encryption import CredentialEncryption
 from app.db.database import AsyncSessionLocal
 from app.grpc.generated.action import action_pb2, action_pb2_grpc
 from app.services.connection_service import get_connection
 
-MAX_CONCURRENT_HTTP_REQUESTS = int(os.getenv("MAX_CONCURRENT_HTTP_REQUESTS", "10"))
+MAX_CONCURRENT_HTTP_REQUESTS = integer("MAX_CONCURRENT_HTTP_REQUESTS", 10)
 
 
 class ActionInternalService(action_pb2_grpc.ActionInternalServiceServicer):

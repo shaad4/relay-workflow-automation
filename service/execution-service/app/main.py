@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.config import validate_startup
 from app.grpc.server import start_grpc_server
 from app.kafka.consumer import (
     consume_workflow_triggered,
@@ -29,6 +30,7 @@ from app.services.execution_dispatcher import ExecutionDispatcher
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_startup()
     # 1. Start Kafka consumer.
     await start_consumer()
 
@@ -208,3 +210,28 @@ async def health(request: Request):
 
 
 app.include_router(dashboard_router)
+
+
+@app.get("/health/live", include_in_schema=False)
+async def liveness():
+    """Process-only probe; dependency outages must not cause restart storms."""
+    return {"status": "ok"}
+
+
+@app.get("/ready", include_in_schema=False)
+async def readiness(request: Request):
+    """Bounded DB probe; no schema mutation or dependency details in responses."""
+    worker_status = await health(request)
+    if isinstance(worker_status, JSONResponse):
+        return worker_status
+    from sqlalchemy import text
+
+    from app.db.database import engine
+
+    try:
+        async with asyncio.timeout(3):
+            async with engine.connect() as connection:
+                await connection.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+    return {"status": "ready"}

@@ -2,14 +2,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Request
 
+from app.config import INTEGRATION_SERVICE_URL
 from app.core.proxy import proxy_request
 
 router = APIRouter(
     prefix="/schedules",
     tags=["schedules"],
 )
-
-INTEGRATION_SERVICE_URL = "http://integration-service:8000"
 
 
 @router.post("/")

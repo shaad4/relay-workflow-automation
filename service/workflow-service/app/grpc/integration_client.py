@@ -1,11 +1,11 @@
-import os
 from uuid import UUID
 
 import grpc
 
+from app.config import grpc_target
 from app.grpc.generated.integration import webhook_lifecycle_pb2, webhook_lifecycle_pb2_grpc
 
-INTEGRATION_GRPC_URL = os.getenv("INTEGRATION_GRPC_URL", "integration-service:50053")
+INTEGRATION_GRPC_URL = grpc_target("INTEGRATION_GRPC_URL", "integration-service:50053")
 
 
 class IntegrationGrpcClient:

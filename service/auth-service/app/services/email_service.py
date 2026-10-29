@@ -6,11 +6,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from jinja2 import Template
 
+from app.config import integer
+
 load_dotenv()
 
 
 SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_PORT = integer("SMTP_PORT", 587)
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL")
@@ -67,8 +69,7 @@ def send_verification_email(
             )
 
             smtp.send_message(message)
-    except Exception as exc:
-        print(f"Error sending verification email to {email}: {exc}")
+    except Exception:
         raise
 
 
@@ -118,6 +119,5 @@ def send_password_reset_email(
 
             smtp.send_message(message)
 
-    except Exception as exc:
-        print(f"Error sending password reset email to {email}: {exc}")
+    except Exception:
         raise

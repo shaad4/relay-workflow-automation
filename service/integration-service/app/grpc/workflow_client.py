@@ -1,8 +1,9 @@
 import grpc
 
+from app.config import grpc_target
 from app.grpc.generated.workflow import workflow_pb2, workflow_pb2_grpc
 
-WORKFLOW_GRPC_URL = "workflow-service:50052"
+WORKFLOW_GRPC_URL = grpc_target("WORKFLOW_GRPC_URL", "workflow-service:50052")
 
 
 class WorkflowGrpcClient:
