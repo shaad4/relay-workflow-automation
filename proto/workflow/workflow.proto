@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package relay.workflow;
+
+service WorkflowInternalService {
+  rpc GetPublishedVersion(GetPublishedVersionRequest)
+      returns (GetPublishedVersionResponse);
+
+  rpc GetWorkflowDefinition(GetWorkflowDefinitionRequest)
+      returns (GetWorkflowDefinitionResponse);
+
+  rpc ValidateWorkflowVersion(ValidateWorkflowVersionRequest)
+      returns (ValidateWorkflowVersionResponse);
+}
+
+message GetPublishedVersionRequest {
+  string workflow_id = 1;
+  string workspace_id = 2;
+}
+
+message GetPublishedVersionResponse {
+  string version_id = 1;
+  string workflow_id = 2;
+  int32 version = 3;
+  string status = 4;
+}
+
+message GetWorkflowDefinitionRequest {
+  string workflow_id = 1;
+  string version_id = 2;
+  string workspace_id = 3;
+}
+
+message GetWorkflowDefinitionResponse {
+  string version_id = 1;
+  string workflow_id = 2;
+  int32 version = 3;
+  string status = 4;
+  string nodes_json = 5;
+  string edges_json = 6;
+  string workflow_name = 7;
+}
+
+message ValidateWorkflowVersionRequest {
+  string workflow_id = 1;
+  string version_id = 2;
+  string workspace_id = 3;
+}
+
+message ValidateWorkflowVersionResponse {
+  bool valid = 1;
+  string workflow_id = 2;
+  string version_id = 3;
+  int32 version = 4;
+  string status = 5;
+  string workflow_status = 6;
+}

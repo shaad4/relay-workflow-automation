@@ -1,0 +1,55 @@
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class WorkflowCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+
+
+class WorkflowResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    workspace_id: UUID
+    name: str
+    description: str | None
+    status: str
+    published_version_id: UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkflowUpdate(BaseModel):
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+    description: str | None = None
+
+
+class WorkflowValidationIssue(BaseModel):
+    code: str
+    message: str
+
+
+class WorkflowValidationResponse(BaseModel):
+    valid: bool
+    errors: list[WorkflowValidationIssue]
+    warnings: list[WorkflowValidationIssue]
+
+
+class WorkflowPublishResponse(BaseModel):
+    id: UUID
+    workflow_id: UUID
+    version: int
+    status: str
+
+
+class WorkflowStatusResponse(BaseModel):
+    id: UUID
+    status: str
+    published_version_id: UUID | None

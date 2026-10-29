@@ -1,0 +1,243 @@
+name: Service tests
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+  push:
+    branches:
+      - dev
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+
+  # 1. BACKEND UNIT TESTS AND COVERAGE
+  tests:
+    name: ${{ matrix.service }} tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - service/api-gateway
+          - service/auth-service
+          - service/workflow-service
+          - service/integration-service
+          - service/action-service
+          - service/execution-service
+          - service/rag-service
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://relay:relay@localhost:5432/ci_test
+      JWT_SECRET_KEY: ci-test-secret-key-that-is-long-enough-for-hs256
+      JWT_ALGORITHM: HS256
+      FRONTEND_URL: http://localhost:3000
+      AUTH_SERVICE_URL: http://localhost:8000
+      OPENAI_API_KEY: ci-synthetic-key-no-network-calls
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: relay
+          POSTGRES_PASSWORD: relay
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U relay -d ci_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ${{ matrix.service }}/requirements.txt
+
+      - name: Install service and test dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install -r ../../requirements-test.txt
+
+      - name: Create execution test schema
+        if: matrix.service == 'service/execution-service'
+        run: python -m alembic upgrade head
+
+      - name: Run tests with coverage
+        run: |
+          python -m pytest tests \
+            --cov=app \
+            --cov-branch \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-report=json:coverage.json \
+            --cov-report=html:htmlcov \
+            --cov-fail-under=80 \
+            --junitxml=test-results.xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ strategy.job-index }}
+          path: |
+            ${{ matrix.service }}/coverage.xml
+            ${{ matrix.service }}/coverage.json
+            ${{ matrix.service }}/htmlcov
+            ${{ matrix.service }}/test-results.xml
+          if-no-files-found: warn
+
+  # 2. FRONTEND UNIT TESTS
+  frontend-tests:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm test
+
+  # 3. BACKEND QUALITY - RUFF
+  backend-quality:
+    name: Backend lint and formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ruff
+        run: python -m pip install ruff==0.17.2
+
+      - name: Check Python lint
+        run: ruff check service --output-format=github
+
+      - name: Check Python formatting
+        run: ruff format --check service
+
+  # 4. FRONTEND QUALITY AND SECURITY
+  frontend-quality:
+    name: Frontend quality and security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Check Prettier formatting
+        run: npm run format:check
+
+      - name: Audit frontend dependencies
+        run: npm audit --audit-level=high
+
+  # 5. BACKEND SECURITY - BANDIT AND PIP-AUDIT
+  backend-security:
+    name: Security - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - service/api-gateway
+          - service/auth-service
+          - service/workflow-service
+          - service/integration-service
+          - service/action-service
+          - service/execution-service
+          - service/rag-service
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install security tools
+        run: |
+          python -m pip install bandit pip-audit
+
+      - name: Run Bandit security scan
+        run: |
+          python -m bandit \
+            -r "${{ matrix.service }}/app" \
+            -x "${{ matrix.service }}/app/grpc/generated" \
+            -ll -ii -q
+
+      - name: Audit Python dependencies
+        run: |
+          python -m pip_audit \
+            -r "${{ matrix.service }}/requirements.txt" \
+            --progress-spinner off

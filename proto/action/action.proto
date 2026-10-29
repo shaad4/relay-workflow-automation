@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package relay.action;
+
+service ActionInternalService {
+  rpc ExecuteAction(ExecuteActionRequest)
+      returns (ExecuteActionResponse);
+}
+
+message ExecuteActionRequest {
+  string workspace_id = 1;
+  string connection_id = 2;
+  string provider = 3;
+  string action = 4;
+  string config_json = 5;
+  string input_data_json = 6;
+}
+
+message ExecuteActionResponse {
+  bool success = 1;
+  string result_json = 2;
+  string error = 3;
+}

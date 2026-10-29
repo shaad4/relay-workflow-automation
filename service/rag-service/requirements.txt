@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+greenlet
+asyncpg
+alembic
+pgvector
+grpcio
+grpcio-tools
+protobuf
+supabase
+python-multipart
+pypdf
+langchain-text-splitters
+openai
+celery[redis]

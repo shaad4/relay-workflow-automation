@@ -1,0 +1,2253 @@
+"use client";
+
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import DashboardShell from "@/components/dashboard/DashboardShell";
+import AIProviderConnections from "@/components/connections/AIProviderConnections";
+import {
+  Modal,
+  Field,
+  inputClass,
+  buttonClass,
+  primaryClass,
+  secondaryClass,
+} from "@/components/connections/ConnectionUI";
+import Pagination from "@/components/Pagination";
+import { useAuth } from "@/context/AuthContext";
+import {
+  createConnection,
+  deleteConnection,
+  listConnections,
+  startGmailOAuth,
+  testConnection,
+  updateConnection,
+} from "@/services/connections";
+
+const rowsOf = (data) =>
+  Array.isArray(data)
+    ? data
+    : data?.connections || data?.results || data?.data || [];
+const PAGE_SIZE = 10;
+const authLabels = {
+  oauth: "Google OAuth",
+  oauth2: "Google OAuth",
+  api_key: "API key",
+  none: "No authentication",
+  bearer: "Bearer token",
+  api_key_header: "API key · Header",
+  api_key_query: "API key · Query parameter",
+};
+const authTypes = ["none", "bearer", "api_key_header", "api_key_query"];
+const initialForm = () => ({
+  name: "",
+  auth_type: "none",
+  base_url: "",
+  test_url: "",
+  auth_header: "",
+  auth_param: "",
+  credential: "",
+});
+function safeResponse(value) {
+  const sensitive =
+    /^(token|access_token|refresh_token|api_key|secret|password|authorization)$/i;
+  const clean = (item) => {
+    if (Array.isArray(item)) return item.map(clean);
+    if (item && typeof item === "object")
+      return Object.fromEntries(
+        Object.entries(item).map(([key, child]) => [
+          key,
+          sensitive.test(key) ? "[REDACTED]" : clean(child),
+        ]),
+      );
+    return item;
+  };
+  try {
+    return JSON.stringify(clean(value), null, 2);
+  } catch {
+    return "Response could not be displayed.";
+  }
+}
+
+function GmailIcon({ className = "h-5 w-5" }) {
+  return <img className={className} src="/brand/gmail.png" alt="Gmail" />;
+}
+function StripeIcon({ className = "h-5 w-5" }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 48 48"
+      role="img"
+      aria-label="Stripe"
+    >
+      <rect width="48" height="48" rx="10" fill="#635BFF" />
+      <path
+        fill="#fff"
+        d="M22.1 18.2c0-1.1.9-1.5 2.3-1.5 2.1 0 4.7.6 6.8 1.7v-6.6a18 18 0 0 0-6.8-1.3c-5.6 0-9.3 2.9-9.3 7.8 0 7.6 10.4 6.4 10.4 9.7 0 1.3-1.1 1.7-2.6 1.7-2.3 0-5.3-1-7.7-2.4v6.7c2.6 1.1 5.2 1.6 7.7 1.6 5.8 0 9.7-2.8 9.7-7.8-.1-8.2-10.5-6.8-10.5-9.6Z"
+      />
+    </svg>
+  );
+}
+function ConnectionIcon({ className = "h-5 w-5", globe = false }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {globe ? (
+        <>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0-18" />
+        </>
+      ) : (
+        <>
+          <path d="m8 12-2 2a4.2 4.2 0 0 0 6 6l3-3a4.2 4.2 0 0 0 0-6M16 12l2-2a4.2 4.2 0 0 0-6-6l-3 3a4.2 4.2 0 0 0 0 6M9 15l6-6" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function IntegrationCatalog({
+  onGmail,
+  onStripe,
+  onHttp,
+  connectingGmail,
+  error,
+}) {
+  return (
+    <aside
+      aria-label="Available integrations"
+      className="order-first xl:order-last"
+    >
+      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--surface)] xl:sticky xl:top-6">
+        <div className="border-b border-[var(--border-subtle)] px-5 py-4">
+          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-tertiary)]">
+            Add to your workspace
+          </p>
+          <h2 className="mt-1 text-[16px] font-semibold text-[var(--text-primary)]">
+            Connect a service
+          </h2>
+          <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+            Choose a tool to use in your workflows.
+          </p>
+        </div>
+        <div className="grid divide-y divide-[var(--border-subtle)]">
+          {[
+            {
+              name: "Gmail",
+              detail: "Send email from your account",
+              method: "Sign in with Google",
+              icon: <GmailIcon className="h-6 w-6" />,
+              action: onGmail,
+              busy: connectingGmail,
+            },
+            {
+              name: "Stripe",
+              detail: "Issue refunds from your workflows",
+              method: "Connect with an API key",
+              icon: <StripeIcon className="h-8 w-8" />,
+              action: onStripe,
+            },
+            {
+              name: "HTTP API",
+              detail: "Connect your own tools and services",
+              method: "Configure an endpoint",
+              icon: <ConnectionIcon globe className="h-6 w-6" />,
+              action: onHttp,
+            },
+          ].map((provider) => (
+            <button
+              key={provider.name}
+              type="button"
+              onClick={provider.action}
+              disabled={provider.busy}
+              className="group flex w-full items-start gap-3 px-5 py-4 text-left transition-colors hover:bg-[var(--elevated)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] disabled:opacity-50"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--input-bg)] text-[var(--text-secondary)]">
+                {provider.icon}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                  {provider.name}
+                  <span
+                    aria-hidden="true"
+                    className="text-[var(--text-tertiary)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--accent)]"
+                  >
+                    ↗
+                  </span>
+                </span>
+                <span className="mt-1 block text-[11px] leading-4 text-[var(--text-secondary)]">
+                  {provider.detail}
+                </span>
+                <span className="mt-2 block text-[10px] font-medium text-[var(--accent)]">
+                  {provider.busy ? "Connecting…" : provider.method}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+        {error && (
+          <p role="alert" className="px-5 pb-4 text-[12px] text-red-400">
+            {error}
+          </p>
+        )}
+        <div className="rounded-b-xl border-t border-[var(--border-subtle)] bg-[var(--elevated)]/40 px-5 py-4">
+          <p className="text-[11px] font-medium text-[var(--text-secondary)]">
+            Connect once. Reuse across workflows.
+          </p>
+          <p className="mt-1 text-[11px] leading-4 text-[var(--text-tertiary)]">
+            Choose a saved connection when configuring an action in the workflow
+            builder.
+          </p>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function ConnectionsContent() {
+  const { isInitializing, user } = useAuth();
+  const searchParams = useSearchParams();
+  const [section, setSection] = useState(() =>
+    searchParams.get("section") === "ai" ? "ai" : "integrations",
+  );
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [query, setQuery] = useState("");
+  const [authFilter, setAuthFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [modal, setModal] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [form, setForm] = useState(initialForm);
+  const [stripeForm, setStripeForm] = useState({
+    name: "Stripe",
+    credential: "",
+  });
+  const [errors, setErrors] = useState({});
+  const [credentialVisible, setCredentialVisible] = useState(false);
+  const [replaceCredential, setReplaceCredential] = useState(false);
+  const [showTestUrl, setShowTestUrl] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [connectingGmail, setConnectingGmail] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [testingId, setTestingId] = useState(null);
+  const [testResult, setTestResult] = useState(null);
+  const [notice, setNotice] = useState("");
+  const [openMenu, setOpenMenu] = useState(null);
+
+  const refresh = useCallback(() => setReload((value) => value + 1), []);
+  const flash = useCallback((message) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(""), 2800);
+  }, []);
+
+  useEffect(() => {
+    document.title = "Connections | Relay";
+  }, []);
+  const gmailStatus = searchParams.get("gmail");
+  const [handledGmailStatus, setHandledGmailStatus] = useState(null);
+  if (gmailStatus !== handledGmailStatus) {
+    setHandledGmailStatus(gmailStatus);
+    if (gmailStatus === "connected") {
+      setNotice("Gmail connected successfully.");
+      setReload((value) => value + 1);
+    } else if (gmailStatus === "error") {
+      setNotice("Unable to connect Gmail. Please try again.");
+    }
+  }
+  useEffect(() => {
+    if (gmailStatus !== "connected" && gmailStatus !== "error") return;
+    window.setTimeout(
+      () => setNotice(""),
+      gmailStatus === "connected" ? 2800 : 3500,
+    );
+    window.history.replaceState({}, "", "/connections");
+  }, [gmailStatus]);
+  const [requestInputs, setRequestInputs] = useState({
+    isInitializing,
+    reload,
+  });
+  if (
+    requestInputs.isInitializing !== isInitializing ||
+    requestInputs.reload !== reload
+  ) {
+    setRequestInputs({ isInitializing, reload });
+    setLoading(true);
+  }
+
+  useEffect(() => {
+    if (isInitializing) return;
+    let alive = true;
+    listConnections()
+      .then((data) => {
+        if (alive) {
+          setItems(rowsOf(data));
+          setLoadError(false);
+        }
+      })
+      .catch(() => {
+        if (alive) setLoadError(true);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isInitializing, reload]);
+
+  const filtered = useMemo(
+    () =>
+      items.filter((item) => {
+        const matchesQuery = `${item.name || ""} ${item.provider || ""}`
+          .toLowerCase()
+          .includes(query.trim().toLowerCase());
+        return (
+          matchesQuery &&
+          (authFilter === "all" || item.auth_type === authFilter)
+        );
+      }),
+    [items, query, authFilter],
+  );
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginatedConnections = filtered.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
+  if (page > pageCount) {
+    setPage(pageCount);
+  }
+
+  const closeModal = useCallback(() => {
+    if (!saving && !deleting) {
+      setModal(null);
+      setErrors({});
+      setCredentialVisible(false);
+      setStripeForm((current) => ({ ...current, credential: "" }));
+      setTestResult(null);
+    }
+  }, [saving, deleting]);
+
+  const openCreate = () => {
+    setSelected(null);
+    setTestResult(null);
+    setForm(initialForm());
+    setErrors({});
+    setReplaceCredential(true);
+    setCredentialVisible(false);
+    setShowTestUrl(false);
+    setModal("create");
+  };
+  const openStripeCreate = () => {
+    setSelected(null);
+    setStripeForm({ name: "Stripe", credential: "" });
+    setErrors({});
+    setCredentialVisible(false);
+    setModal("stripe-create");
+  };
+  const connectGmail = async () => {
+    setConnectingGmail(true);
+    setErrors({});
+    try {
+      window.location.assign(startGmailOAuth());
+    } catch {
+      setConnectingGmail(false);
+      setErrors({ api: "Unable to connect Gmail. Please try again." });
+    }
+  };
+  const openEdit = (item) => {
+    if (item.provider !== "http") {
+      if (item.provider === "stripe") showDetails(item);
+      return;
+    }
+    setTestResult(null);
+    const config = item.config || {};
+    setSelected(item);
+    setForm({
+      name: item.name || "",
+      auth_type: item.auth_type || "none",
+      base_url: config.base_url || "",
+      test_url: config.test_url || "",
+      auth_header: config.auth_header || "",
+      auth_param: config.auth_param || "",
+      credential: "",
+    });
+    setShowTestUrl(Boolean(config.test_url));
+    setErrors({});
+    setReplaceCredential(false);
+    setCredentialVisible(false);
+    setModal("edit");
+    setOpenMenu(null);
+  };
+
+  const showDetails = (item) => {
+    if (selected?.id !== item.id) setTestResult(null);
+    setSelected(item);
+    setModal("details");
+    setOpenMenu(null);
+    setErrors({});
+  };
+
+  const changeAuth = (value) => {
+    setForm((current) => ({
+      ...current,
+      auth_type: value,
+      credential: "",
+      auth_header: value === "api_key_header" ? current.auth_header : "",
+      auth_param: value === "api_key_query" ? current.auth_param : "",
+    }));
+    if (selected) setReplaceCredential(value !== "none");
+    setCredentialVisible(false);
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    const nextErrors = {};
+    if (!form.name.trim() || form.name.trim().length > 255)
+      nextErrors.name = "Enter a name between 1 and 255 characters.";
+    for (const field of [
+      "base_url",
+      ...(form.test_url.trim() ? ["test_url"] : []),
+    ]) {
+      try {
+        const parsed = new URL(form[field]);
+        if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+      } catch {
+        nextErrors[field] = "Enter a valid HTTP or HTTPS URL.";
+      }
+    }
+    const needsCredential =
+      form.auth_type !== "none" &&
+      (modal === "create" ||
+        (replaceCredential && form.auth_type !== selected?.auth_type));
+    if (needsCredential && !form.credential.trim())
+      nextErrors.credential = "Enter a credential.";
+    if (form.auth_type === "api_key_header" && !form.auth_header.trim())
+      nextErrors.auth_header = "Enter a header name.";
+    if (form.auth_type === "api_key_query" && !form.auth_param.trim())
+      nextErrors.auth_param = "Enter a query parameter name.";
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
+      return;
+    }
+
+    setSaving(true);
+    setErrors({});
+    const config = {
+      base_url: form.base_url.trim(),
+      test_url: form.test_url.trim(),
+    };
+    if (form.auth_type === "api_key_header")
+      config.auth_header = form.auth_header.trim();
+    if (form.auth_type === "api_key_query")
+      config.auth_param = form.auth_param.trim();
+    const editing = modal === "edit";
+    const payload = editing
+      ? {}
+      : {
+          name: form.name.trim(),
+          provider: "http",
+          auth_type: form.auth_type,
+          credential: form.auth_type === "none" ? null : form.credential.trim(),
+          config,
+        };
+    if (editing && form.name.trim() !== (selected.name || ""))
+      payload.name = form.name.trim();
+    if (
+      editing &&
+      (form.auth_type !== selected.auth_type ||
+        config.base_url !== (selected.config?.base_url || "") ||
+        config.test_url !== (selected.config?.test_url || "") ||
+        config.auth_header !== (selected.config?.auth_header || undefined) ||
+        config.auth_param !== (selected.config?.auth_param || undefined))
+    ) {
+      payload.auth_type = form.auth_type;
+      payload.config = config;
+    }
+    if (
+      editing &&
+      replaceCredential &&
+      form.auth_type !== "none" &&
+      form.credential.trim()
+    )
+      payload.credential = form.credential.trim();
+    if (editing && form.auth_type === "none" && selected.auth_type !== "none")
+      payload.credential = null;
+    try {
+      if (editing) {
+        if (Object.keys(payload).length)
+          await updateConnection(selected.id, payload);
+        setModal(null);
+        flash("Connection updated");
+      } else {
+        await createConnection(payload);
+        setModal(null);
+        flash("Connection created");
+      }
+      setForm(initialForm());
+      setReplaceCredential(false);
+      setCredentialVisible(false);
+      refresh();
+    } catch {
+      setErrors({
+        api: `Unable to ${editing ? "update" : "create"} connection. Check the details and try again.`,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitStripe = async (event) => {
+    event.preventDefault();
+    const name = stripeForm.name.trim();
+    const credential = stripeForm.credential.trim();
+    const nextErrors = {};
+    if (!name || name.length > 255)
+      nextErrors.name = "Enter a name between 1 and 255 characters.";
+    if (!credential) nextErrors.credential = "Enter a Stripe API key.";
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
+      return;
+    }
+    setSaving(true);
+    setErrors({});
+    try {
+      await createConnection({
+        name,
+        provider: "stripe",
+        auth_type: "api_key",
+        credential,
+        config: {},
+      });
+      setStripeForm({ name: "Stripe", credential: "" });
+      setModal(null);
+      flash("Stripe connection created successfully.");
+      refresh();
+    } catch {
+      setStripeForm((current) => ({ ...current, credential: "" }));
+      setErrors({
+        api: "Unable to create Stripe connection. Check the connection details and try again.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (item) => {
+    setOpenMenu(null);
+    setTestingId(item.id);
+    setTestResult(null);
+    try {
+      const result = await testConnection(item.id);
+      setTestResult({
+        connectionId: item.id,
+        success: Boolean(result?.success),
+        statusCode: result?.status_code,
+        message: result?.message,
+        response: result?.response,
+      });
+    } catch (error) {
+      setTestResult({
+        connectionId: item.id,
+        success: false,
+        message: "Unable to reach the test endpoint. Try again.",
+        response: null,
+        statusCode: null,
+        network: true,
+      });
+    } finally {
+      setTestingId(null);
+      setModal((current) => (current === "details" ? "details" : "test"));
+    }
+  };
+
+  const remove = async () => {
+    if (!selected) return;
+    setDeleting(true);
+    setErrors({});
+    try {
+      await deleteConnection(selected.id);
+      setItems((current) => current.filter((item) => item.id !== selected.id));
+      setModal(null);
+      flash("Connection deleted");
+    } catch {
+      setErrors({ api: "Unable to delete connection. Try again." });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <ProtectedRoute>
+      <DashboardShell pageTitle="Connections">
+        <div className="w-full min-w-0 space-y-7">
+          <header className="flex flex-wrap items-center justify-between gap-5">
+            <div className="flex items-center gap-4">
+              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-[var(--border-default)] bg-[var(--surface)] text-[var(--accent)]">
+                <ConnectionIcon className="h-7 w-7" />
+              </div>
+              <div>
+                <h1 className="text-[26px] font-semibold tracking-tight text-[var(--text-primary)]">
+                  Connections
+                </h1>
+                <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+                  Your tools, working together.
+                </p>
+              </div>
+            </div>
+            {section === "integrations" && !loading && !loadError && (
+              <div className="flex items-center gap-5 text-right">
+                <div>
+                  <p className="font-mono text-[22px] leading-7 text-[var(--text-primary)]">
+                    {String(items.length).padStart(2, "0")}
+                  </p>
+                  <p className="text-[10px] text-[var(--text-tertiary)]">
+                    Saved connections
+                  </p>
+                </div>
+                <div className="border-l border-[var(--border-subtle)] pl-5">
+                  <p className="font-mono text-[22px] leading-7 text-[var(--text-primary)]">
+                    {String(
+                      new Set(items.map((item) => item.provider)).size,
+                    ).padStart(2, "0")}
+                  </p>
+                  <p className="text-[10px] text-[var(--text-tertiary)]">
+                    Services in use
+                  </p>
+                </div>
+              </div>
+            )}
+          </header>
+          <nav
+            aria-label="Connection categories"
+            className="flex gap-6 border-b border-[var(--border-subtle)]"
+          >
+            {[
+              ["integrations", "Apps & services"],
+              ["ai", "AI providers"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={section === value}
+                onClick={() => {
+                  setSection(value);
+                  setOpenMenu(null);
+                }}
+                className={`-mb-px border-b-2 pb-3 text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${section === value ? "border-[var(--accent)] text-[var(--text-primary)]" : "border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          {section === "ai" ? (
+            <AIProviderConnections key={`${user?.id}:${user?.workspace_id}`} />
+          ) : (
+            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+              <div className="min-w-0 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">
+                      Your connections
+                    </h2>
+                    <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">
+                      Manage accounts and endpoints used by your workflows.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={refresh}
+                    className={`${secondaryClass} shrink-0`}
+                    aria-label="Refresh connections"
+                  >
+                    <span aria-hidden="true">↻</span> Refresh
+                  </button>
+                </div>
+
+                {!loading && !loadError && items.length > 0 && (
+                  <section className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <label className="relative min-w-0 flex-1">
+                      <span
+                        aria-hidden="true"
+                        className="absolute left-3 top-2 text-[var(--text-tertiary)]"
+                      >
+                        ⌕
+                      </span>
+                      <input
+                        aria-label="Search connections"
+                        value={query}
+                        onChange={(event) => {
+                          setQuery(event.target.value);
+                          setPage(1);
+                        }}
+                        placeholder="Search connections..."
+                        className={`${inputClass} pl-9`}
+                      />
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-[var(--text-tertiary)]">
+                        Authentication
+                      </span>
+                      <select
+                        aria-label="Filter by authentication"
+                        value={authFilter}
+                        onChange={(event) => {
+                          setAuthFilter(event.target.value);
+                          setPage(1);
+                        }}
+                        className={`${inputClass} sm:w-48`}
+                      >
+                        <option value="all">All types</option>
+                        {[
+                          ...new Set([
+                            ...authTypes,
+                            ...items
+                              .map((item) => item.auth_type)
+                              .filter(Boolean),
+                          ]),
+                        ].map((type) => (
+                          <option key={type} value={type}>
+                            {authLabels[type] || type}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <span className="whitespace-nowrap text-[11px] text-[var(--text-tertiary)]">
+                      {filtered.length}{" "}
+                      {filtered.length === 1 ? "connection" : "connections"}
+                    </span>
+                  </section>
+                )}
+
+                {loading && (
+                  <div
+                    role="status"
+                    aria-label="Loading connections"
+                    className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)]"
+                  >
+                    {[0, 1, 2].map((row) => (
+                      <div
+                        key={row}
+                        className="flex animate-pulse items-center gap-4 p-5 motion-reduce:animate-none"
+                      >
+                        <div className="h-11 w-11 rounded-lg bg-[var(--elevated)]" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 w-1/3 rounded bg-[var(--elevated)]" />
+                          <div className="h-2.5 w-2/3 rounded bg-[var(--elevated)]" />
+                        </div>
+                      </div>
+                    ))}
+                    <span className="sr-only">Loading connections…</span>
+                  </div>
+                )}
+
+                {loadError && !loading && (
+                  <div className="rounded-md border border-[var(--border-subtle)] p-8 text-center">
+                    <h2 className="text-[14px] font-semibold">
+                      Unable to load connections
+                    </h2>
+                    <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+                      We couldn’t retrieve your connections. Try again.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={refresh}
+                      className={`${secondaryClass} mt-4`}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                {!loading && !loadError && items.length === 0 && (
+                  <section className="flex min-h-[300px] flex-col justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-8 sm:px-8">
+                    <div
+                      aria-hidden="true"
+                      className="mb-7 flex items-center gap-3"
+                    >
+                      <span className="grid h-11 w-11 place-items-center rounded-xl border border-[var(--border-default)] bg-[var(--elevated)] text-[var(--text-primary)]">
+                        <ConnectionIcon />
+                      </span>
+                      <span className="w-10 border-t border-dashed border-[var(--border-strong)]" />
+                      <span className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--border-subtle)]">
+                        <GmailIcon />
+                      </span>
+                      <span className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--border-subtle)]">
+                        <StripeIcon className="h-6 w-6" />
+                      </span>
+                      <span className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--border-subtle)] text-[var(--text-tertiary)]">
+                        <ConnectionIcon globe />
+                      </span>
+                    </div>
+                    <h3 className="text-[20px] font-semibold tracking-tight text-[var(--text-primary)]">
+                      Bring your first tool into Relay.
+                    </h3>
+                    <p className="mt-2 max-w-md text-[13px] leading-6 text-[var(--text-secondary)]">
+                      Start with the account or API your workflow needs. Your
+                      saved connections will appear here, ready to use in any
+                      action.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openCreate}
+                      className="mt-5 inline-flex w-fit items-center gap-2 rounded text-[12px] font-semibold text-[var(--accent)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+                    >
+                      Choose a service <span aria-hidden="true">→</span>
+                    </button>
+                  </section>
+                )}
+
+                {!loading &&
+                  !loadError &&
+                  items.length > 0 &&
+                  filtered.length === 0 && (
+                    <div className="rounded-md border border-[var(--border-subtle)] px-6 py-14 text-center">
+                      <h2 className="text-[14px] font-semibold">
+                        No connections found
+                      </h2>
+                      <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+                        No connections match your search and filters.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuery("");
+                          setAuthFilter("all");
+                          setPage(1);
+                        }}
+                        className="mt-3 text-[13px] text-[var(--accent)]"
+                      >
+                        Clear filters
+                      </button>
+                    </div>
+                  )}
+
+                {!loading && !loadError && filtered.length > 0 && (
+                  <div className="space-y-3">
+                    <section
+                      aria-label="Your connections"
+                      className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)]"
+                    >
+                      {paginatedConnections.map((item) => {
+                        const isGmail = item.provider === "gmail";
+                        const isStripe = item.provider === "stripe";
+                        const providerName = isGmail
+                          ? "Gmail"
+                          : isStripe
+                            ? "Stripe"
+                            : (item.provider || "http").toUpperCase();
+                        return (
+                          <article
+                            key={item.id}
+                            className="group relative flex items-start gap-3.5 p-4 transition-colors first:rounded-t-xl last:rounded-b-xl hover:bg-[var(--elevated)] sm:p-5"
+                          >
+                            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--input-bg)] text-[var(--text-secondary)]">
+                              {isGmail ? (
+                                <GmailIcon />
+                              ) : isStripe ? (
+                                <StripeIcon className="h-8 w-8" />
+                              ) : (
+                                <svg
+                                  className="h-5 w-5"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  aria-hidden="true"
+                                >
+                                  <circle cx="12" cy="12" r="9" />
+                                  <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0-18" />
+                                </svg>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => showDetails(item)}
+                              className="min-w-0 flex-1 rounded text-left focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+                            >
+                              <span className="flex flex-wrap items-center gap-2">
+                                <strong className="truncate text-[14px] font-medium text-[var(--text-primary)]">
+                                  {item.name}
+                                </strong>
+                                <span className="shrink-0 rounded-full border border-[var(--border-subtle)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[var(--text-tertiary)]">
+                                  {providerName}
+                                </span>
+                              </span>
+                              <span
+                                className="mt-1.5 block truncate text-[12px] text-[var(--text-secondary)]"
+                                title={
+                                  isGmail
+                                    ? item.config?.email
+                                    : isStripe
+                                      ? "Stripe payment connection"
+                                      : item.config?.base_url
+                                }
+                              >
+                                {isGmail
+                                  ? item.config?.email || "Gmail account"
+                                  : isStripe
+                                    ? "Stripe payment connection"
+                                    : item.config?.base_url ||
+                                      "External API connection"}
+                              </span>
+                              <span className="mt-1.5 block text-[11px] text-[var(--text-tertiary)]">
+                                {isGmail
+                                  ? "Google OAuth"
+                                  : authLabels[item.auth_type] ||
+                                    item.auth_type}
+                                {item.created_at
+                                  ? ` · Added ${new Date(item.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+                                  : ""}
+                              </span>
+                              <span className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)]">
+                                <span
+                                  className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+                                  aria-hidden="true"
+                                />
+                                Connected
+                              </span>
+                            </button>
+                            <div className="relative shrink-0">
+                              <button
+                                type="button"
+                                aria-label={`Manage ${item.name}`}
+                                aria-expanded={openMenu === item.id}
+                                onClick={() =>
+                                  setOpenMenu(
+                                    openMenu === item.id ? null : item.id,
+                                  )
+                                }
+                                className="grid h-8 w-8 place-items-center rounded-md border border-[var(--border-subtle)] bg-[var(--elevated)] text-[18px] leading-none text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+                              >
+                                ···
+                              </button>
+                              {openMenu === item.id && (
+                                <div className="absolute right-0 top-10 z-20 w-44 rounded-md border border-[var(--border-default)] bg-[var(--surface)] p-1 shadow-xl">
+                                  <button
+                                    type="button"
+                                    onClick={() => showDetails(item)}
+                                    className="block w-full rounded px-2 py-1.5 text-left text-[12px] hover:bg-[var(--elevated)]"
+                                  >
+                                    View configuration
+                                  </button>
+                                  {!isGmail && !isStripe && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => openEdit(item)}
+                                        className="block w-full rounded px-2 py-1.5 text-left text-[12px] hover:bg-[var(--elevated)]"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={testingId === item.id}
+                                        onClick={() => runTest(item)}
+                                        className="block w-full rounded px-2 py-1.5 text-left text-[12px] hover:bg-[var(--elevated)] disabled:opacity-50"
+                                      >
+                                        {testingId === item.id
+                                          ? "Testing…"
+                                          : "Test connection"}
+                                      </button>
+                                    </>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelected(item);
+                                      setErrors({});
+                                      setOpenMenu(null);
+                                      setModal("delete");
+                                    }}
+                                    className="block w-full rounded px-2 py-1.5 text-left text-[12px] text-red-500 hover:bg-[var(--elevated)]"
+                                  >
+                                    Disconnect
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </section>
+                    <Pagination
+                      page={page}
+                      pageSize={PAGE_SIZE}
+                      total={filtered.length}
+                      onPageChange={setPage}
+                    />
+                  </div>
+                )}
+              </div>
+              <IntegrationCatalog
+                onGmail={connectGmail}
+                onStripe={openStripeCreate}
+                onHttp={() => {
+                  openCreate();
+                  setModal("http-create");
+                }}
+                connectingGmail={connectingGmail}
+                error={!modal ? errors.api : null}
+              />
+            </div>
+          )}
+          {notice && (
+            <div
+              role="status"
+              className="connection-toast fixed bottom-5 right-5 z-[120] rounded-md border border-[var(--border-default)] bg-[var(--surface)] px-4 py-2.5 text-[13px] text-[var(--text-primary)]"
+            >
+              <span
+                className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-[var(--accent)]"
+                aria-hidden="true"
+              />
+              {notice}
+            </div>
+          )}
+
+          {modal === "create" && (
+            <Modal
+              title="Add connection"
+              description="Connect a service to use it in your workflows."
+              onClose={closeModal}
+              wide
+            >
+              <div className="space-y-4">
+                <article className="flex flex-col gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] p-4 sm:flex-row sm:items-center">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--input-bg)]">
+                    <GmailIcon className="h-6 w-6" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[14px] font-medium text-[var(--text-primary)]">
+                      Gmail
+                    </h3>
+                    <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+                      Connect your Gmail account to send emails from Relay
+                      workflows.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={connectGmail}
+                    disabled={connectingGmail}
+                    className={`${primaryClass} shrink-0`}
+                  >
+                    {connectingGmail ? (
+                      <>
+                        <span
+                          className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                          aria-hidden="true"
+                        />
+                        Connecting Gmail…
+                      </>
+                    ) : (
+                      "Connect"
+                    )}
+                  </button>
+                </article>
+                <div className="flex items-center gap-3">
+                  <span className="h-px flex-1 bg-[var(--border-subtle)]" />
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
+                    Or configure a connection
+                  </span>
+                  <span className="h-px flex-1 bg-[var(--border-subtle)]" />
+                </div>
+                <button
+                  type="button"
+                  onClick={openStripeCreate}
+                  className="group w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] p-4 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--elevated)]"
+                >
+                  <span className="flex items-start gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--input-bg)]">
+                      <StripeIcon className="h-7 w-7" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="text-[14px] font-medium text-[var(--text-primary)]">
+                          Stripe
+                        </span>
+                        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] border border-[var(--border-default)] px-2.5 text-[11px] font-medium text-[var(--text-primary)] transition-colors group-hover:bg-[var(--surface)]">
+                          Configure <span aria-hidden="true">→</span>
+                        </span>
+                      </span>
+                      <span className="mt-1 block text-[12px] leading-5 text-[var(--text-secondary)]">
+                        Accept and manage payments with Stripe.
+                      </span>
+                      <span className="mt-2 block text-[10px] text-[var(--text-tertiary)]">
+                        Payment processing
+                      </span>
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm(initialForm());
+                    setErrors({});
+                    setModal("http-create");
+                  }}
+                  className="group w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] p-4 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--elevated)]"
+                >
+                  <span className="flex items-start gap-3">
+                    <span
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--input-bg)] text-[var(--text-secondary)]"
+                      aria-hidden="true"
+                    >
+                      <svg
+                        className="h-[18px] w-[18px]"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0-18" />
+                      </svg>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="text-[14px] font-medium text-[var(--text-primary)]">
+                          HTTP API
+                        </span>
+                        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] border border-[var(--border-default)] px-2.5 text-[11px] font-medium text-[var(--text-primary)] transition-colors group-hover:bg-[var(--surface)]">
+                          Configure <span aria-hidden="true">→</span>
+                        </span>
+                      </span>
+                      <span className="mt-1 block text-[12px] leading-5 text-[var(--text-secondary)]">
+                        Connect any REST API with a base URL and optional API
+                        key or bearer token.
+                      </span>
+                    </span>
+                  </span>
+                  <span className="mt-3 flex flex-wrap gap-1.5 pl-[52px]">
+                    <span className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">
+                      Bearer token
+                    </span>
+                    <span className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">
+                      API key
+                    </span>
+                    <span className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">
+                      No auth
+                    </span>
+                  </span>
+                </button>
+                {errors.api && (
+                  <p role="alert" className="text-[12px] text-red-500">
+                    {errors.api}
+                  </p>
+                )}
+                <div className="flex justify-end border-t border-[var(--border-subtle)] pt-4">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className={secondaryClass}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          )}
+
+          {(modal === "http-create" ||
+            (modal === "edit" && selected?.provider === "http")) && (
+            <Modal
+              title={selected ? "Edit HTTP connection" : "New HTTP connection"}
+              description={
+                selected
+                  ? "Update the name, endpoint, or authentication for this connection."
+                  : "Add an endpoint your workflows can call."
+              }
+              onClose={closeModal}
+              wide
+            >
+              <form onSubmit={submit} className="space-y-5">
+                <div className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--elevated)] p-3">
+                  <span
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface)] text-[var(--text-secondary)]"
+                    aria-hidden="true"
+                  >
+                    <svg
+                      className="h-[18px] w-[18px]"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0-18" />
+                    </svg>
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-medium text-[var(--text-primary)]">
+                      HTTP API
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
+                      REST endpoint · reusable in your workflows
+                    </p>
+                  </div>
+                  <span className="rounded border border-[var(--border-subtle)] px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
+                    HTTP
+                  </span>
+                </div>
+                <section className="space-y-3">
+                  <div>
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--text-tertiary)]">
+                      Connection details
+                    </h3>
+                    <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                      Give this connection a clear name for your team.
+                    </p>
+                  </div>
+                  <Field
+                    label="Connection name"
+                    htmlFor="connection-name"
+                    error={errors.name}
+                  >
+                    <input
+                      id="connection-name"
+                      autoFocus
+                      value={form.name}
+                      onChange={(event) =>
+                        setForm({ ...form, name: event.target.value })
+                      }
+                      placeholder="e.g. Shopify production"
+                      className={inputClass}
+                    />
+                  </Field>
+                </section>
+                <section className="space-y-3 rounded-lg border border-[var(--border-subtle)] p-3">
+                  <div>
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--text-tertiary)]">
+                      Authentication
+                    </h3>
+                    <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                      Choose how Relay should authenticate with this API.
+                    </p>
+                  </div>
+                  <Field
+                    label="Authentication method"
+                    htmlFor="connection-auth"
+                  >
+                    <select
+                      id="connection-auth"
+                      value={form.auth_type}
+                      onChange={(event) => changeAuth(event.target.value)}
+                      className={inputClass}
+                    >
+                      {authTypes.map((type) => (
+                        <option key={type} value={type}>
+                          {authLabels[type]}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  {form.auth_type !== "none" && (
+                    <Field
+                      label={
+                        form.auth_type === "bearer" ? "Bearer token" : "API key"
+                      }
+                      htmlFor="connection-credential"
+                      error={errors.credential}
+                      helper={
+                        selected && !replaceCredential
+                          ? "Stored securely"
+                          : undefined
+                      }
+                    >
+                      <div className="flex gap-2">
+                        {selected && !replaceCredential ? (
+                          <div
+                            className={`${inputClass} flex items-center justify-between`}
+                          >
+                            <span className="text-[12px] text-[var(--text-tertiary)]">
+                              Stored securely
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplaceCredential(true);
+                                setForm({ ...form, credential: "" });
+                              }}
+                              className="text-[12px] text-[var(--accent)]"
+                            >
+                              Replace
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="relative flex-1">
+                            <input
+                              id="connection-credential"
+                              type={credentialVisible ? "text" : "password"}
+                              autoComplete="new-password"
+                              value={form.credential}
+                              onChange={(event) =>
+                                setForm({
+                                  ...form,
+                                  credential: event.target.value,
+                                })
+                              }
+                              placeholder="Enter credential"
+                              className={`${inputClass} pr-16`}
+                            />
+                            <button
+                              type="button"
+                              aria-label={
+                                credentialVisible
+                                  ? "Hide credential"
+                                  : "Show credential"
+                              }
+                              onClick={() =>
+                                setCredentialVisible(!credentialVisible)
+                              }
+                              className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-[11px] text-[var(--text-tertiary)]"
+                            >
+                              {credentialVisible ? "Hide" : "Show"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </Field>
+                  )}
+                  {form.auth_type === "api_key_header" && (
+                    <Field
+                      label="Header name"
+                      htmlFor="connection-header"
+                      error={errors.auth_header}
+                    >
+                      <input
+                        id="connection-header"
+                        value={form.auth_header}
+                        onChange={(event) =>
+                          setForm({ ...form, auth_header: event.target.value })
+                        }
+                        placeholder="X-API-Key"
+                        className={inputClass}
+                      />
+                    </Field>
+                  )}
+                  {form.auth_type === "api_key_query" && (
+                    <Field
+                      label="Query parameter name"
+                      htmlFor="connection-param"
+                      error={errors.auth_param}
+                    >
+                      <input
+                        id="connection-param"
+                        value={form.auth_param}
+                        onChange={(event) =>
+                          setForm({ ...form, auth_param: event.target.value })
+                        }
+                        placeholder="api_key"
+                        className={inputClass}
+                      />
+                    </Field>
+                  )}
+                </section>
+                <section className="space-y-3">
+                  <div>
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--text-tertiary)]">
+                      API endpoint
+                    </h3>
+                    <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                      Set the base address and an optional URL Relay can use to
+                      test connectivity.
+                    </p>
+                  </div>
+                  <Field
+                    label="Base URL"
+                    htmlFor="connection-base"
+                    error={errors.base_url}
+                  >
+                    <input
+                      id="connection-base"
+                      type="url"
+                      value={form.base_url}
+                      onChange={(event) =>
+                        setForm({ ...form, base_url: event.target.value })
+                      }
+                      placeholder="https://api.example.com"
+                      className={inputClass}
+                    />
+                  </Field>
+                  <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--elevated)] p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-medium text-[var(--text-primary)]">
+                          Test endpoint{" "}
+                          <span className="ml-1 text-[10px] font-normal text-[var(--text-tertiary)]">
+                            Optional
+                          </span>
+                        </p>
+                        <p className="mt-1 text-[11px] leading-4 text-[var(--text-secondary)]">
+                          Add a lightweight health-check URL if the API has one.
+                          Relay uses it only when you choose “Test connection.”
+                        </p>
+                      </div>
+                      {!showTestUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setShowTestUrl(true)}
+                          className={secondaryClass}
+                        >
+                          ＋ Add test URL
+                        </button>
+                      )}
+                      {showTestUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setForm((current) => ({
+                              ...current,
+                              test_url: "",
+                            }));
+                            setErrors((current) => ({
+                              ...current,
+                              test_url: undefined,
+                            }));
+                            setShowTestUrl(false);
+                          }}
+                          className="text-[12px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    {showTestUrl && (
+                      <div className="mt-3">
+                        <Field
+                          label="Test URL"
+                          htmlFor="connection-test"
+                          error={errors.test_url}
+                        >
+                          <input
+                            id="connection-test"
+                            type="url"
+                            value={form.test_url}
+                            onChange={(event) =>
+                              setForm({ ...form, test_url: event.target.value })
+                            }
+                            placeholder="https://api.example.com/health"
+                            className={inputClass}
+                          />
+                        </Field>
+                      </div>
+                    )}
+                  </div>
+                </section>
+                {errors.api && (
+                  <p
+                    role="alert"
+                    className="rounded border border-red-500/30 bg-red-500/5 p-2.5 text-[12px] text-red-500"
+                  >
+                    {errors.api}
+                  </p>
+                )}
+                <div className="flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className={secondaryClass}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className={primaryClass}
+                  >
+                    {saving
+                      ? "Saving…"
+                      : selected
+                        ? "Save connection"
+                        : "Create connection"}
+                  </button>
+                </div>
+              </form>
+            </Modal>
+          )}
+
+          {modal === "stripe-create" && (
+            <Modal
+              title="Connect Stripe"
+              description="Add a Stripe credential for payment workflows."
+              onClose={closeModal}
+            >
+              <form onSubmit={submitStripe} className="space-y-5">
+                <div className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--elevated)] p-3">
+                  <StripeIcon className="h-9 w-9" />
+                  <div>
+                    <p className="text-[12px] font-medium">Stripe</p>
+                    <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
+                      Payment processing · refund actions
+                    </p>
+                  </div>
+                </div>
+                <Field
+                  label="Connection name"
+                  htmlFor="stripe-connection-name"
+                  error={errors.name}
+                >
+                  <input
+                    id="stripe-connection-name"
+                    autoFocus
+                    maxLength={255}
+                    value={stripeForm.name}
+                    onChange={(event) =>
+                      setStripeForm((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                    className={inputClass}
+                  />
+                </Field>
+                <Field
+                  label="Stripe API key"
+                  htmlFor="stripe-api-key"
+                  error={errors.credential}
+                  helper="Use a restricted test key with permission to create refunds. Your key is stored as a connection credential and is not displayed after creation."
+                >
+                  <div className="relative">
+                    <input
+                      id="stripe-api-key"
+                      type={credentialVisible ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={stripeForm.credential}
+                      onChange={(event) =>
+                        setStripeForm((current) => ({
+                          ...current,
+                          credential: event.target.value,
+                        }))
+                      }
+                      placeholder="rk_test_..."
+                      className={`${inputClass} pr-16`}
+                    />
+                    <button
+                      type="button"
+                      aria-label={
+                        credentialVisible
+                          ? "Hide Stripe API key"
+                          : "Show Stripe API key"
+                      }
+                      aria-pressed={credentialVisible}
+                      onClick={() =>
+                        setCredentialVisible((visible) => !visible)
+                      }
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-[11px] text-[var(--text-tertiary)]"
+                    >
+                      {credentialVisible ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </Field>
+                <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--elevated)] p-3 text-[11px] leading-4 text-[var(--text-secondary)]">
+                  Use a Stripe test or restricted test key for development. Test
+                  payments do not move real money.
+                </div>
+                {errors.api && (
+                  <p
+                    role="alert"
+                    className="rounded border border-red-500/30 bg-red-500/5 p-2.5 text-[12px] text-red-500"
+                  >
+                    {errors.api}
+                  </p>
+                )}
+                <div className="flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className={secondaryClass}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className={primaryClass}
+                  >
+                    {saving ? "Creating…" : "Create connection"}
+                  </button>
+                </div>
+              </form>
+            </Modal>
+          )}
+
+          {modal === "details" && selected?.provider === "stripe" && (
+            <div
+              className="connection-overlay fixed inset-0 z-[100] bg-black/50"
+              onMouseDown={(event) =>
+                event.target === event.currentTarget && closeModal()
+              }
+            >
+              <aside
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="stripe-detail-title"
+                className="connection-drawer absolute inset-y-0 right-0 flex w-full max-w-[440px] flex-col border-l border-[var(--border-default)] bg-[var(--surface)]"
+              >
+                <header className="border-b border-[var(--border-subtle)] p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--text-tertiary)]">
+                        Stripe connection
+                      </p>
+                      <h2
+                        id="stripe-detail-title"
+                        className="mt-1.5 text-[20px] font-semibold tracking-tight"
+                      >
+                        {selected.name}
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      aria-label="Close Stripe connection details"
+                      className="rounded-[6px] border border-[var(--border-subtle)] px-2 py-1 text-[18px] text-[var(--text-tertiary)] hover:bg-[var(--elevated)]"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="mt-4 flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--elevated)] p-3">
+                    <StripeIcon className="h-9 w-9" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-medium">Stripe</p>
+                      <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
+                        Payment processing · refund actions
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)]">
+                      <span
+                        className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+                        aria-hidden="true"
+                      />
+                      Connected
+                    </span>
+                  </div>
+                </header>
+                <div className="flex-1 space-y-4 overflow-y-auto p-5">
+                  <section className="space-y-3">
+                    <div>
+                      <h3 className="text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--text-tertiary)]">
+                        Connection details
+                      </h3>
+                      <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                        Stripe account settings used by Relay workflows.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface)] p-3">
+                        <p className="text-[10px] text-[var(--text-tertiary)]">
+                          Authentication
+                        </p>
+                        <p className="mt-1 text-[12px] text-[var(--text-primary)]">
+                          API key
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface)] p-3">
+                        <p className="text-[10px] text-[var(--text-tertiary)]">
+                          Stripe API key
+                        </p>
+                        <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+                          Stored securely · never displayed
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface)] p-3">
+                        <p className="text-[10px] text-[var(--text-tertiary)]">
+                          Mode
+                        </p>
+                        <p className="mt-1 text-[12px] text-[var(--text-primary)]">
+                          Set by the API key
+                        </p>
+                        <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">
+                          Use a test key during development. Test payments do
+                          not move real money.
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+                  <section className="rounded-lg border border-[var(--border-subtle)] bg-[var(--elevated)] p-3">
+                    <h3 className="text-[12px] font-medium">Refund Payment</h3>
+                    <p className="mt-1 text-[11px] leading-4 text-[var(--text-secondary)]">
+                      Choose this Stripe connection in a Refund Payment action
+                      to process refunds with Stripe.
+                    </p>
+                  </section>
+                  <section>
+                    <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                      Connection metadata
+                    </h3>
+                    <div className="flex justify-between gap-4 rounded-md border border-[var(--border-subtle)] px-3 py-2.5 text-[11px]">
+                      <span className="text-[var(--text-tertiary)]">
+                        Created
+                      </span>
+                      <span className="text-right text-[var(--text-secondary)]">
+                        {selected.created_at
+                          ? new Date(selected.created_at).toLocaleDateString(
+                              undefined,
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              },
+                            )
+                          : "—"}
+                      </span>
+                    </div>
+                  </section>
+                  {errors.api && (
+                    <p role="alert" className="text-[12px] text-red-500">
+                      {errors.api}
+                    </p>
+                  )}
+                </div>
+                <footer className="border-t border-[var(--border-subtle)] p-5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErrors({});
+                      setModal("delete");
+                    }}
+                    className={`${buttonClass} w-full justify-center border-red-500/30 text-red-500 hover:bg-red-500/5`}
+                  >
+                    Disconnect Stripe
+                  </button>
+                </footer>
+              </aside>
+            </div>
+          )}
+
+          {modal === "details" && selected && selected.provider === "gmail" && (
+            <div
+              className="connection-overlay fixed inset-0 z-[100] bg-black/50"
+              onMouseDown={(event) =>
+                event.target === event.currentTarget && closeModal()
+              }
+            >
+              <aside
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="connection-detail-title"
+                className="connection-drawer absolute inset-y-0 right-0 flex w-full max-w-[520px] flex-col border-l border-[var(--border-default)] bg-[var(--surface)]"
+              >
+                <header className="border-b border-[var(--border-subtle)] p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--text-tertiary)]">
+                        Connected account
+                      </p>
+                      <h2
+                        id="connection-detail-title"
+                        className="mt-2 text-[20px] font-semibold tracking-tight"
+                      >
+                        Gmail
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      aria-label="Close details"
+                      className="rounded-[6px] border border-[var(--border-subtle)] px-2 py-1 text-[18px] text-[var(--text-tertiary)] hover:bg-[var(--elevated)]"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="mt-5 flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--elevated)] p-3">
+                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)]">
+                      <GmailIcon className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-[var(--text-primary)]">
+                        {selected.config?.email || selected.name}
+                      </p>
+                      <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                        Gmail account
+                      </p>
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--text-secondary)]">
+                      <span
+                        className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+                        aria-hidden="true"
+                      />
+                      Connected
+                    </span>
+                  </div>
+                </header>
+                <div className="flex-1 space-y-6 overflow-y-auto p-5">
+                  <section>
+                    <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                      Connection details
+                    </h3>
+                    <div className="divide-y divide-[var(--border-subtle)] rounded-md border border-[var(--border-subtle)] px-3">
+                      {[
+                        ["Service", "Gmail"],
+                        ["Account", selected.config?.email || "—"],
+                        ["Sign-in method", "Google OAuth"],
+                        [
+                          "Connected",
+                          selected.created_at
+                            ? new Date(selected.created_at).toLocaleDateString(
+                                undefined,
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                },
+                              )
+                            : "—",
+                        ],
+                      ].map(([label, value]) => (
+                        <div
+                          key={label}
+                          className="flex justify-between gap-4 py-3 text-[12px]"
+                        >
+                          <span className="text-[var(--text-tertiary)]">
+                            {label}
+                          </span>
+                          <span className="max-w-[65%] break-all text-right text-[var(--text-secondary)]">
+                            {value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                  <section className="rounded-md border border-[var(--border-subtle)] p-3">
+                    <h3 className="text-[12px] font-medium text-[var(--text-primary)]">
+                      Used by workflows
+                    </h3>
+                    <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+                      Workflows can use this account when sending email with
+                      Gmail.
+                    </p>
+                  </section>
+                  {errors.api && (
+                    <p role="alert" className="text-[12px] text-red-500">
+                      {errors.api}
+                    </p>
+                  )}
+                </div>
+                <footer className="border-t border-[var(--border-subtle)] p-5">
+                  <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                    Manage connection
+                  </h3>
+                  <div className="grid gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setErrors({});
+                        setModal("delete");
+                      }}
+                      className={`${buttonClass} justify-start border-red-500/30 text-red-500 hover:bg-red-500/5`}
+                    >
+                      Disconnect Gmail
+                    </button>
+                  </div>
+                  <p className="mt-3 truncate font-mono text-[10px] text-[var(--text-disabled)]">
+                    ID · {selected.id}
+                  </p>
+                </footer>
+              </aside>
+            </div>
+          )}
+
+          {modal === "details" && selected && selected.provider === "http" && (
+            <div
+              className="connection-overlay fixed inset-0 z-[100] bg-black/50"
+              onMouseDown={(event) =>
+                event.target === event.currentTarget && closeModal()
+              }
+            >
+              <aside
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="connection-detail-title"
+                className="connection-drawer absolute inset-y-0 right-0 flex w-full max-w-[520px] flex-col border-l border-[var(--border-default)] bg-[var(--surface)]"
+              >
+                <header className="flex items-start justify-between border-b border-[var(--border-subtle)] p-5">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--text-tertiary)]">
+                      HTTP API connection
+                    </p>
+                    <h2
+                      id="connection-detail-title"
+                      className="mt-2 truncate text-[20px] font-semibold tracking-tight"
+                    >
+                      {selected.name}
+                    </h2>
+                    <div className="mt-2 flex items-center gap-2 text-[12px] text-[var(--text-secondary)]">
+                      <span className="font-mono">HTTP</span>
+                      <span className="text-[var(--text-disabled)]">·</span>
+                      {authLabels[selected.auth_type] || selected.auth_type}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    aria-label="Close details"
+                    className="rounded-[6px] border border-[var(--border-subtle)] px-2 py-1 text-[18px] text-[var(--text-tertiary)] hover:bg-[var(--elevated)]"
+                  >
+                    ×
+                  </button>
+                </header>
+                <div className="flex-1 space-y-6 overflow-y-auto p-5">
+                  <section>
+                    <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                      Endpoints
+                    </h3>
+                    <div className="divide-y divide-[var(--border-subtle)] rounded-md border border-[var(--border-subtle)] px-3">
+                      {[
+                        ["Base URL", selected.config?.base_url || "—"],
+                        [
+                          "Test URL",
+                          selected.config?.test_url || "Not configured",
+                        ],
+                      ].map(([label, value]) => (
+                        <div key={label} className="py-3">
+                          <span className="block text-[11px] text-[var(--text-tertiary)]">
+                            {label}
+                          </span>
+                          <code className="mt-1 block break-all font-mono text-[12px] leading-5 text-[var(--text-secondary)]">
+                            {value}
+                          </code>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                  <section>
+                    <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                      Configuration
+                    </h3>
+                    <div className="divide-y divide-[var(--border-subtle)] rounded-md border border-[var(--border-subtle)] px-3">
+                      {[
+                        ["Provider", "HTTP"],
+                        [
+                          "Authentication",
+                          authLabels[selected.auth_type] || selected.auth_type,
+                        ],
+                        ...(selected.auth_type === "api_key_header"
+                          ? [
+                              [
+                                "Header name",
+                                selected.config?.auth_header || "—",
+                              ],
+                            ]
+                          : []),
+                        ...(selected.auth_type === "api_key_query"
+                          ? [
+                              [
+                                "Query parameter",
+                                selected.config?.auth_param || "—",
+                              ],
+                            ]
+                          : []),
+                        [
+                          "Created",
+                          selected.created_at
+                            ? new Date(selected.created_at).toLocaleDateString(
+                                undefined,
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                },
+                              )
+                            : "—",
+                        ],
+                      ].map(([label, value]) => (
+                        <div
+                          key={label}
+                          className="flex justify-between gap-4 py-3 text-[12px]"
+                        >
+                          <span className="text-[var(--text-tertiary)]">
+                            {label}
+                          </span>
+                          <span className="max-w-[65%] break-all text-right text-[var(--text-secondary)]">
+                            {value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">
+                      Credentials are stored securely and are never displayed.
+                    </p>
+                  </section>
+                  {testResult && testResult.connectionId === selected.id && (
+                    <section aria-live="polite">
+                      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                        Last connection test
+                      </h3>
+                      <div
+                        className={`rounded-md border p-3 ${testResult.success ? "border-emerald-500/30 bg-emerald-500/[0.04]" : "border-red-500/30 bg-red-500/[0.04]"}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-[13px] font-medium">
+                            {testResult.success
+                              ? "Connection test successful"
+                              : "Connection test failed"}
+                          </p>
+                          {testResult.statusCode != null && (
+                            <span className="shrink-0 rounded border border-[var(--border-subtle)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]">
+                              {testResult.statusCode}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+                          {testResult.message || "Connection test completed."}
+                        </p>
+                        {testResult.response !== undefined &&
+                          testResult.response !== null && (
+                            <div className="mt-3 border-t border-[var(--border-subtle)] pt-3">
+                              <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                                Response payload
+                              </h4>
+                              <pre className="max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded border border-[var(--border-subtle)] bg-[var(--input-bg)] p-2 font-mono text-[11px] leading-5 text-[var(--text-secondary)]">
+                                {safeResponse(testResult.response)}
+                              </pre>
+                            </div>
+                          )}
+                      </div>
+                    </section>
+                  )}
+                  <section className="border-t border-[var(--border-subtle)] pt-4">
+                    <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                      Manage connection
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(selected)}
+                        className={secondaryClass}
+                      >
+                        Edit connection
+                      </button>
+                      {selected.config?.test_url ? (
+                        <button
+                          type="button"
+                          onClick={() => runTest(selected)}
+                          disabled={testingId === selected.id}
+                          className={secondaryClass}
+                        >
+                          {testingId === selected.id
+                            ? "Testing…"
+                            : "Test connection"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTestResult(null);
+                            openEdit(selected);
+                            setShowTestUrl(true);
+                          }}
+                          className={secondaryClass}
+                        >
+                          Add test URL
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setErrors({});
+                          setModal("delete");
+                        }}
+                        className={`${buttonClass} border-red-500/30 text-red-500 hover:bg-red-500/5`}
+                      >
+                        Delete connection
+                      </button>
+                    </div>
+                    {errors.api && (
+                      <p role="alert" className="mt-3 text-[12px] text-red-500">
+                        {errors.api}
+                      </p>
+                    )}
+                  </section>
+                </div>
+                <footer className="border-t border-[var(--border-subtle)] p-4">
+                  <p className="truncate font-mono text-[10px] text-[var(--text-disabled)]">
+                    ID · {selected.id}
+                  </p>
+                </footer>
+              </aside>
+            </div>
+          )}
+
+          {modal === "delete" && selected && (
+            <Modal title="Delete connection?" onClose={closeModal}>
+              <p className="text-[13px] leading-5 text-[var(--text-secondary)]">
+                This will permanently remove{" "}
+                <strong className="text-[var(--text-primary)]">
+                  {selected.name}
+                </strong>
+                . Workflows using it may no longer be able to execute their HTTP
+                actions.
+              </p>
+              {errors.api && (
+                <p role="alert" className="mt-3 text-[12px] text-red-500">
+                  {errors.api}
+                </p>
+              )}
+              <div className="mt-5 flex justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className={secondaryClass}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={remove}
+                  className={`${buttonClass} border-red-500/40 bg-red-600 text-white hover:bg-red-700`}
+                >
+                  {deleting ? "Deleting…" : "Delete connection"}
+                </button>
+              </div>
+            </Modal>
+          )}
+
+          {modal === "test" && testResult && (
+            <Modal
+              title={
+                testResult.success
+                  ? "Connection test successful"
+                  : "Connection test failed"
+              }
+              onClose={closeModal}
+              wide
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+                  <span className="text-[12px] text-[var(--text-secondary)]">
+                    Status
+                  </span>
+                  <span
+                    className={`font-mono text-[13px] ${testResult.success ? "text-[var(--text-primary)]" : "text-red-500"}`}
+                  >
+                    {testResult.statusCode ?? "Unavailable"}
+                  </span>
+                </div>
+                <p className="text-[12px] text-[var(--text-secondary)]">
+                  {testResult.message || "Connection test completed."}
+                </p>
+                {testResult.response !== undefined &&
+                  testResult.response !== null && (
+                    <div>
+                      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                        Response
+                      </h3>
+                      <pre className="max-w-full overflow-x-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-md border border-[var(--border-subtle)] bg-[var(--input-bg)] p-3 font-mono text-[11px] leading-5 text-[var(--text-secondary)]">
+                        {safeResponse(testResult.response)}
+                      </pre>
+                    </div>
+                  )}
+                <div className="flex justify-end border-t border-[var(--border-subtle)] pt-4">
+                  {!testResult.success && selected && (
+                    <button
+                      type="button"
+                      onClick={() => runTest(selected)}
+                      className={`${secondaryClass} mr-auto`}
+                    >
+                      Retry
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className={secondaryClass}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          )}
+        </div>
+        <style jsx global>{`
+          @keyframes connection-fade-in {
+            from {
+              opacity: 0;
+            }
+            to {
+              opacity: 1;
+            }
+          }
+          @keyframes connection-dialog-in {
+            from {
+              opacity: 0;
+              transform: translateY(8px) scale(0.99);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
+          }
+          @keyframes connection-drawer-in {
+            from {
+              opacity: 0.7;
+              transform: translateX(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateX(0);
+            }
+          }
+          @keyframes connection-toast-in {
+            from {
+              opacity: 0;
+              transform: translateY(8px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          .connection-overlay {
+            animation: connection-fade-in 140ms ease-out both;
+          }
+          .connection-dialog {
+            animation: connection-dialog-in 180ms ease-out both;
+          }
+          .connection-drawer {
+            animation: connection-drawer-in 180ms ease-out both;
+          }
+          .connection-toast {
+            animation: connection-toast-in 200ms ease-out both;
+          }
+          .connection-result {
+            animation: connection-dialog-in 180ms ease-out both;
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .connection-overlay,
+            .connection-dialog,
+            .connection-drawer,
+            .connection-toast,
+            .connection-result {
+              animation: none;
+            }
+          }
+        `}</style>
+      </DashboardShell>
+    </ProtectedRoute>
+  );
+}
+
+export default function ConnectionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ConnectionsContent />
+    </Suspense>
+  );
+}

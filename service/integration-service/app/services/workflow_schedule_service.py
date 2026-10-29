@@ -1,0 +1,413 @@
+import json
+from datetime import datetime, timezone
+from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+import grpc
+from croniter import croniter
+from fastapi import HTTPException
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.grpc.workflow_client import WorkflowGrpcClient
+from app.models.workflow_schedule import WorkflowSchedule
+from app.schemas.workflow_schedule import ScheduleCreate, ScheduleUpdate
+
+
+def calculate_next_run(
+    schedule_type: str,
+    interval_minutes: int | None,
+    cron_expression: str | None,
+    timezone_name: str,
+) -> datetime:
+    """Calculate the next execution time in UTC."""
+
+    now = datetime.now(timezone.utc)
+
+    try:
+        local_timezone = ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid timezone",
+        )
+
+    if schedule_type == "interval":
+        if interval_minutes is None or cron_expression is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid interval configuration",
+            )
+
+        from datetime import timedelta
+
+        return now + timedelta(minutes=interval_minutes)
+
+    if not cron_expression or interval_minutes is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid cron configuration",
+        )
+
+    if len(cron_expression.split()) != 5 or not croniter.is_valid(cron_expression):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid five-field cron expression",
+        )
+
+    local_now = now.astimezone(local_timezone)
+    next_local = croniter(
+        cron_expression,
+        local_now,
+    ).get_next(datetime)
+
+    return next_local.astimezone(timezone.utc)
+
+
+async def create_schedule(
+    data: ScheduleCreate,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> WorkflowSchedule:
+    """Create a schedule for a published workflow."""
+
+    client = WorkflowGrpcClient()
+
+    try:
+        published = await client.get_published_version(
+            workflow_id=str(data.workflow_id),
+            workspace_id=str(workspace_id),
+        )
+
+        definition = await client.get_workflow_definition(
+            workflow_id=str(data.workflow_id),
+            version_id=published.version_id,
+            workspace_id=str(workspace_id),
+        )
+
+    except grpc.aio.AioRpcError as exc:
+        if exc.code() == grpc.StatusCode.NOT_FOUND:
+            raise HTTPException(
+                status_code=404,
+                detail="Workflow or published version not found",
+            ) from exc
+
+        if exc.code() == grpc.StatusCode.FAILED_PRECONDITION:
+            raise HTTPException(
+                status_code=409,
+                detail="Workflow is not executable",
+            ) from exc
+
+        if exc.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise HTTPException(
+                status_code=504,
+                detail="Workflow Service timed out",
+            ) from exc
+
+        raise HTTPException(
+            status_code=503,
+            detail="Workflow Service unavailable",
+        ) from exc
+
+    finally:
+        await client.close()
+
+    try:
+        nodes = json.loads(definition.nodes_json)
+        if not isinstance(nodes, list):
+            raise ValueError("Invalid node list")
+    except (json.JSONDecodeError, ValueError, TypeError):
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid workflow definition",
+        )
+
+    triggers = [
+        node
+        for node in nodes
+        if isinstance(node, dict)
+        and isinstance(node.get("node_type"), str)
+        and node["node_type"].startswith("trigger.")
+    ]
+
+    if len(triggers) != 1 or triggers[0]["node_type"] != "trigger.schedule":
+        raise HTTPException(
+            status_code=409,
+            detail="Published workflow does not have a Scheduled Trigger",
+        )
+
+    next_run_at = (
+        calculate_next_run(
+            data.schedule_type,
+            data.interval_minutes,
+            data.cron_expression,
+            data.timezone,
+        )
+        if data.enabled
+        else None
+    )
+
+    schedule = WorkflowSchedule(
+        workspace_id=workspace_id,
+        workflow_id=data.workflow_id,
+        workflow_version_id=UUID(published.version_id),
+        schedule_type=data.schedule_type,
+        interval_minutes=data.interval_minutes,
+        cron_expression=data.cron_expression,
+        timezone=data.timezone,
+        input_data=data.input_data,
+        enabled=data.enabled,
+        next_run_at=next_run_at,
+    )
+
+    session.add(schedule)
+
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="A schedule already exists for this workflow",
+        ) from exc
+
+    await session.refresh(schedule)
+    return schedule
+
+
+async def list_schedules(
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> list[WorkflowSchedule]:
+    """List schedules belonging to a workspace."""
+
+    result = await session.execute(
+        select(WorkflowSchedule)
+        .where(WorkflowSchedule.workspace_id == workspace_id)
+        .order_by(WorkflowSchedule.created_at.desc())
+    )
+
+    return list(result.scalars().all())
+
+
+async def get_schedule(
+    schedule_id: UUID,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> WorkflowSchedule:
+    """Retrieve one schedule within a workspace."""
+
+    result = await session.execute(
+        select(WorkflowSchedule).where(
+            WorkflowSchedule.id == schedule_id,
+            WorkflowSchedule.workspace_id == workspace_id,
+        )
+    )
+
+    schedule = result.scalar_one_or_none()
+
+    if schedule is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Schedule not found",
+        )
+
+    return schedule
+
+
+async def update_schedule(
+    schedule_id: UUID,
+    workspace_id: UUID,
+    data: ScheduleUpdate,
+    session: AsyncSession,
+) -> WorkflowSchedule:
+    """Update an existing workflow schedule."""
+
+    schedule = await get_schedule(
+        schedule_id=schedule_id,
+        workspace_id=workspace_id,
+        session=session,
+    )
+
+    changes = data.model_dump(exclude_unset=True)
+
+    if not changes:
+        return schedule
+
+    if "schedule_type" in changes:
+        if changes["schedule_type"] == "interval":
+            changes["cron_expression"] = None
+        elif changes["schedule_type"] == "cron":
+            changes["interval_minutes"] = None
+
+    # Validate against the current published definition before allowing any
+    # update to put a suspended schedule back on the due queue.
+    compatible = False
+    client = WorkflowGrpcClient()
+    try:
+        published = await client.get_published_version(
+            workflow_id=str(schedule.workflow_id),
+            workspace_id=str(workspace_id),
+        )
+        definition = await client.get_workflow_definition(
+            workflow_id=str(schedule.workflow_id),
+            version_id=published.version_id,
+            workspace_id=str(workspace_id),
+        )
+        nodes = json.loads(definition.nodes_json)
+        triggers = [
+            node
+            for node in nodes
+            if isinstance(node, dict) and str(node.get("node_type", "")).startswith("trigger.")
+        ]
+        compatible = (
+            str(schedule.workflow_version_id) == str(published.version_id)
+            and len(triggers) == 1
+            and triggers[0]["node_type"] == "trigger.schedule"
+        )
+    except grpc.aio.AioRpcError as exc:
+        if exc.code() not in {grpc.StatusCode.NOT_FOUND, grpc.StatusCode.FAILED_PRECONDITION}:
+            raise HTTPException(
+                status_code=504 if exc.code() == grpc.StatusCode.DEADLINE_EXCEEDED else 503,
+                detail="Workflow eligibility could not be confirmed. Refresh before retrying.",
+            ) from exc
+    except (ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(
+            status_code=502, detail="Invalid published workflow definition"
+        ) from exc
+    finally:
+        await client.close()
+
+    explicit_resume = changes.get("enabled") is True
+    if explicit_resume and not compatible:
+        raise HTTPException(
+            status_code=409,
+            detail="Activate a compatible published workflow and synchronize its schedule before resuming.",
+        )
+
+    configuration = {
+        field: changes.get(field, getattr(schedule, field))
+        for field in (
+            "schedule_type",
+            "interval_minutes",
+            "cron_expression",
+            "timezone",
+        )
+    }
+    next_run = calculate_next_run(
+        schedule_type=configuration["schedule_type"],
+        interval_minutes=configuration["interval_minutes"],
+        cron_expression=configuration["cron_expression"],
+        timezone_name=configuration["timezone"],
+    )
+    enabled = changes.get("enabled", schedule.enabled)
+    # enabled=true,next_run_at=null is lifecycle suspension, not consent to resume.
+    may_schedule = compatible and enabled and (schedule.next_run_at is not None or explicit_resume)
+    for field, value in changes.items():
+        setattr(schedule, field, value)
+    schedule.next_run_at = next_run if may_schedule else None
+
+    await session.commit()
+    await session.refresh(schedule)
+
+    return schedule
+
+
+async def delete_schedule(
+    schedule_id: UUID,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> None:
+    """Delete a schedule belonging to the workspace."""
+
+    schedule = await get_schedule(
+        schedule_id=schedule_id,
+        workspace_id=workspace_id,
+        session=session,
+    )
+
+    await session.delete(schedule)
+    await session.commit()
+
+
+async def sync_workflow_schedule(
+    workflow_id: UUID,
+    workspace_id: UUID,
+    workflow_version_id: UUID,
+    has_schedule_trigger: bool,
+    workflow_active: bool,
+    session: AsyncSession,
+) -> int:
+    """Synchronize a schedule with a published workflow version."""
+
+    result = await session.execute(
+        select(WorkflowSchedule).where(
+            WorkflowSchedule.workflow_id == workflow_id,
+            WorkflowSchedule.workspace_id == workspace_id,
+        )
+    )
+
+    schedule = result.scalar_one_or_none()
+
+    if schedule is None:
+        return 0
+
+    if not has_schedule_trigger:
+        # Stop scheduling when the new version
+        # does not contain a Scheduled Trigger.
+        schedule.next_run_at = None
+    else:
+        schedule.workflow_version_id = workflow_version_id
+
+        # Preserve the user's manual pause preference.
+        if schedule.enabled and workflow_active:
+            schedule.next_run_at = calculate_next_run(
+                schedule_type=schedule.schedule_type,
+                interval_minutes=schedule.interval_minutes,
+                cron_expression=schedule.cron_expression,
+                timezone_name=schedule.timezone,
+            )
+        else:
+            schedule.next_run_at = None
+
+    await session.commit()
+    return 1
+
+
+async def suspend_workflow_schedule(
+    workflow_id: UUID,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> int:
+    """Stop future scheduled runs for an inactive workflow."""
+
+    result = await session.execute(
+        update(WorkflowSchedule)
+        .where(
+            WorkflowSchedule.workflow_id == workflow_id,
+            WorkflowSchedule.workspace_id == workspace_id,
+        )
+        .values(next_run_at=None)
+    )
+
+    await session.commit()
+    return result.rowcount
+
+
+async def delete_workflow_schedule(
+    workflow_id: UUID,
+    workspace_id: UUID,
+    session: AsyncSession,
+) -> int:
+    """Delete a schedule when its workflow is deleted."""
+
+    result = await session.execute(
+        delete(WorkflowSchedule).where(
+            WorkflowSchedule.workflow_id == workflow_id,
+            WorkflowSchedule.workspace_id == workspace_id,
+        )
+    )
+
+    await session.commit()
+    return result.rowcount

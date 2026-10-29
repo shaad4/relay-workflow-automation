@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+grpcio
+grpcio-tools
+sqlalchemy[asyncio]
+asyncpg
+alembic
+python-dotenv
+aiokafka
+openai
+google-genai
+anthropic
+cryptography

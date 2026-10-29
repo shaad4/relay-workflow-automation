@@ -1,0 +1,88 @@
+import { apiRequest, refreshAuthTokens } from "@/lib/api";
+
+export async function registerUser(data) {
+  return apiRequest("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function loginUser(data) {
+  return apiRequest("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function refreshToken() {
+  const tokens = await refreshAuthTokens();
+  if (!tokens)
+    throw new Error("Your session has expired. Please sign in again.");
+  return tokens;
+}
+
+export async function logoutUser() {
+  return apiRequest("/auth/logout", {
+    method: "POST",
+  });
+}
+
+export async function getCurrentUser() {
+  return apiRequest("/auth/me", {
+    method: "GET",
+  });
+}
+
+export async function verifyEmail(token, options = {}) {
+  return apiRequest(`/auth/verify-email?token=${encodeURIComponent(token)}`, {
+    method: "GET",
+    ...options,
+  });
+}
+
+export async function resendVerification(email) {
+  return apiRequest("/auth/resend-verification", {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+    }),
+  });
+}
+
+export async function forgotPassword(email) {
+  return apiRequest("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+    }),
+  });
+}
+
+export async function resetPassword(token, newPassword) {
+  return apiRequest("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({
+      token,
+      new_password: newPassword,
+    }),
+  });
+}
+
+export async function completeGoogleSignup(signupSessionId, workspaceName) {
+  return apiRequest("/auth/google/complete", {
+    method: "POST",
+    body: JSON.stringify({
+      signup_session_id: signupSessionId,
+      workspace_name: workspaceName,
+    }),
+  });
+}
+
+export async function exchangeGoogleLoginCode(code) {
+  return apiRequest("/auth/google/exchange", {
+    method: "POST",
+    body: JSON.stringify({
+      code,
+    }),
+  });
+}

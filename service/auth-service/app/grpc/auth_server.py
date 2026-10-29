@@ -1,0 +1,83 @@
+from datetime import datetime, timezone
+from uuid import UUID
+
+import jwt
+from sqlalchemy import select
+
+from app.core.jwt import decode_token
+from app.db.database import AsyncSessionLocal
+from app.grpc.generated.auth import auth_pb2, auth_pb2_grpc
+from app.models import RefreshSession, User
+
+
+class AuthInternalService(auth_pb2_grpc.AuthInternalServiceServicer):
+    async def ValidateToken(self, request, context):
+        try:
+            payload = decode_token(request.access_token)
+
+            if payload.get("type") != "access":
+                return auth_pb2.ValidateTokenResponse(
+                    valid=False,
+                    user_id="",
+                    workspace_id="",
+                )
+
+            user_id = payload.get("sub")
+            workspace_id = payload.get("workspace_id")
+
+            if not user_id or not workspace_id:
+                return auth_pb2.ValidateTokenResponse(
+                    valid=False,
+                    user_id="",
+                    workspace_id="",
+                )
+
+            session_id = payload.get("sid")
+            if session_id:
+                parsed_session_id = UUID(session_id)
+                parsed_user_id = UUID(user_id)
+                async with AsyncSessionLocal() as session:
+                    result = await session.execute(
+                        select(RefreshSession).where(
+                            RefreshSession.id == parsed_session_id,
+                            RefreshSession.user_id == parsed_user_id,
+                            RefreshSession.revoked_at.is_(None),
+                            RefreshSession.expires_at > datetime.now(timezone.utc),
+                        )
+                    )
+                    if result.scalar_one_or_none() is None:
+                        return auth_pb2.ValidateTokenResponse(
+                            valid=False,
+                            user_id="",
+                            workspace_id="",
+                        )
+
+            return auth_pb2.ValidateTokenResponse(
+                valid=True,
+                user_id=user_id,
+                workspace_id=workspace_id,
+            )
+
+        except (jwt.InvalidTokenError, TypeError, ValueError):
+            return auth_pb2.ValidateTokenResponse(
+                valid=False,
+                user_id="",
+                workspace_id="",
+            )
+
+    async def ResolveWorkspace(self, request, context):
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(User).where(User.id == request.user_id))
+
+            user = result.scalar_one_or_none()
+
+            if not user:
+                return auth_pb2.ResolveWorkspaceResponse(
+                    found=False,
+                    workspace_id="",
+                )
+
+            return auth_pb2.ResolveWorkspaceResponse(
+                found=True,
+                workspace_id=str(user.workspace_id),
+            )

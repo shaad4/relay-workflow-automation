@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+alembic
+python-dotenv
+grpcio
+grpcio-tools
+httpx
+stripe
+cryptography>=50.0.1,<51.0.0

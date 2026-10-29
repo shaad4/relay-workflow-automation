@@ -84,3 +84,14 @@ pnpm-debug.log*
 # =========================
 *.tmp
 *.temp
+
+# =========================
+# Benchmark Results
+# =========================
+benchmarks/results/
+
+
+# Backend test reports
+coverage.xml
+coverage.json
+test-results.xml

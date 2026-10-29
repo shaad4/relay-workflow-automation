@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package relay.auth;
+
+service AuthInternalService {
+  rpc ValidateToken(ValidateTokenRequest)
+      returns (ValidateTokenResponse);
+
+  rpc ResolveWorkspace(ResolveWorkspaceRequest)
+      returns (ResolveWorkspaceResponse);
+}
+
+message ValidateTokenRequest {
+  string access_token = 1;
+}
+
+message ValidateTokenResponse {
+  bool valid = 1;
+  string user_id = 2;
+  string workspace_id = 3;
+}
+
+message ResolveWorkspaceRequest {
+  string user_id = 1;
+}
+
+message ResolveWorkspaceResponse {
+  bool found = 1;
+  string workspace_id = 2;
+}

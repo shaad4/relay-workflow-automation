@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package relay.rag;
+
+
+service RagInternalService {
+  rpc Retrieve(RetrieveRequest)
+      returns (RetrieveResponse);
+}
+
+
+message RetrieveRequest {
+  string workspace_id = 1;
+  string knowledge_base_id = 2;
+  string query = 3;
+  int32 top_k = 4;
+}
+
+
+message RetrievedChunk {
+  string chunk_id = 1;
+  string document_id = 2;
+  int32 chunk_index = 3;
+  string content = 4;
+  float score = 5;
+}
+
+
+message RetrieveResponse {
+  repeated RetrievedChunk chunks = 1;
+}

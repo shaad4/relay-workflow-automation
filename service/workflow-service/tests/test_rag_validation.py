@@ -1,0 +1,211 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import asyncio
+from types import SimpleNamespace as NS
+from uuid import uuid4
+
+import pytest
+from app.schemas.node_configuration import RagSearchConfig
+from app.services import workflow_service as service
+from pydantic import ValidationError
+from test_workflow_service import VERSION_ID, WORKFLOW_ID, WORKSPACE_ID, FakeSession, Result
+
+KB = str(uuid4())
+VALID = {"knowledge_base_id": KB, "query": "{{trigger.data.question}}", "top_k": 5}
+
+
+@pytest.mark.parametrize("value", [1, 5, 20])
+def test_top_k_valid(value):
+    assert RagSearchConfig.model_validate({**VALID, "top_k": value}).top_k == value
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [{"top_k": value} for value in [0, 21, 1.5, "5", True, None]]
+    + [{"query": value} for value in ["", " \n", "x" * 2001, None, 4]]
+    + [
+        {"knowledge_base_id": "bad"},
+        {"unexpected": 1},
+        {"knowledge_base": "different"},
+        {"knowledge_base_id": "", "knowledge_base": KB},
+        {"knowledge_base_id": None, "knowledge_base": KB},
+        {"knowledge_base": None},
+    ],
+)
+def test_invalid_config(patch):
+    with pytest.raises(ValidationError):
+        RagSearchConfig.model_validate({**VALID, **patch})
+
+
+def test_legacy_matching_and_input_immutability():
+    legacy = {"knowledge_base": KB, "query": "Question"}
+    before = dict(legacy)
+    value = RagSearchConfig.model_validate(legacy)
+    assert str(value.knowledge_base_id) == KB and value.top_k == 5
+    assert legacy == before
+    assert (
+        RagSearchConfig.model_validate({**VALID, "knowledge_base": KB}).knowledge_base_id
+        == value.knowledge_base_id
+    )
+
+
+def node(id, type, config=None):
+    return NS(node_id=id, node_type=type, configuration=config or {})
+
+
+def edge(source, target, condition=None):
+    return NS(source_node_id=source, target_node_id=target, condition=condition)
+
+
+def validate(nodes, edges):
+    session = FakeSession(
+        [
+            Result(scalar=NS(id=WORKFLOW_ID)),
+            Result(scalar=NS(id=VERSION_ID)),
+            Result(scalars=nodes),
+            Result(scalars=edges),
+        ]
+    )
+    return asyncio.run(service.validate_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, session))
+
+
+@pytest.mark.parametrize(
+    "type", ["ai.rag_search", "action.http_request", "action.email", "action.refund"]
+)
+def test_supported_paths(type):
+    configs = {
+        "ai.rag_search": VALID,
+        "action.http_request": {"connection_id": KB, "url": "https://example.com"},
+        "action.email": {
+            "connection_id": KB,
+            "to": "user@example.com",
+            "subject": "Hello",
+            "body": "Hello",
+        },
+        "action.refund": {"connection_id": KB, "payment_id": "pi_test", "amount": "5"},
+    }
+    assert validate(
+        [node("t", "trigger.webhook"), node("a", type, configs[type])], [edge("t", "a")]
+    )["valid"]
+
+
+@pytest.mark.parametrize(
+    "nodes,edges,code",
+    [
+        ([node("x", "ai.generate")], [], "INVALID_AI_GENERATE_CONFIGURATION"),
+        ([node("x", "ai.decision")], [], "INVALID_AI_DECISION_CONFIGURATION"),
+        ([node("x", "logic.condition")], [], "INVALID_CONDITION_CONFIGURATION"),
+        ([node("x", "action.email")], [], "INVALID_TRIGGER"),
+        ([node("t", "trigger.webhook")], [edge("t", "missing")], "INVALID_EDGE_TARGET"),
+        (
+            [node("t", "trigger.webhook"), node("a", "ai.rag_search", VALID)],
+            [edge("t", "a"), edge("a", "t")],
+            "WORKFLOW_CYCLE",
+        ),
+        ([node("t", "trigger.webhook"), node("a", "action.email")], [], "DISCONNECTED_NODES"),
+        (
+            [node("t", "trigger.webhook"), node("a", "action.email"), node("b", "action.refund")],
+            [edge("t", "a"), edge("t", "b")],
+            "INVALID_BRANCHING",
+        ),
+        (
+            [node("t", "trigger.webhook"), node("r", "ai.rag_search", {**VALID, "top_k": 0})],
+            [edge("t", "r")],
+            "INVALID_RAG_CONFIGURATION",
+        ),
+    ],
+)
+def test_publish_validation_errors(nodes, edges, code):
+    assert code in {error["code"] for error in validate(nodes, edges)["errors"]}
+
+
+def test_approval_branching_preserved_and_ambiguous_branch_rejected():
+    nodes = [
+        node("t", "trigger.webhook"),
+        node("h", "human.approval", {"approver_user_id": KB, "message": "Approve?"}),
+        node(
+            "a",
+            "action.email",
+            {"connection_id": KB, "to": "user@example.com", "subject": "Approved", "body": "Done"},
+        ),
+        node("r", "ai.rag_search", VALID),
+    ]
+    edges = [edge("t", "h"), edge("h", "a", "approved"), edge("h", "r", "rejected")]
+    assert validate(nodes, edges)["valid"]
+    edges[-1].condition = "approved"
+    assert "INVALID_BRANCHING" in {error["code"] for error in validate(nodes, edges)["errors"]}
+
+
+@pytest.mark.parametrize("valid", [True, False])
+def test_publish_gates_actual_rag_configuration(valid, integration_client):
+    workflow = NS(id=WORKFLOW_ID, status="inactive", published_version_id=None)
+    version = NS(id=VERSION_ID, version=1, status="draft")
+    nodes = [
+        node("t", "trigger.webhook"),
+        node("r", "ai.rag_search", {**VALID, "top_k": 5 if valid else 0}),
+    ]
+    session = FakeSession(
+        [
+            Result(scalar=workflow),
+            Result(scalar=version),
+            Result(scalar=workflow),
+            Result(scalar=version),
+            Result(scalars=nodes),
+            Result(scalars=[edge("t", "r")]),
+            Result(scalar=None),
+        ]
+    )
+    if valid:
+        assert (
+            asyncio.run(service.publish_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, session))["status"]
+            == "published"
+        )
+        integration_client.sync_workflow_schedule.assert_awaited_once_with(
+            workflow_id=WORKFLOW_ID,
+            workspace_id=WORKSPACE_ID,
+            workflow_version_id=VERSION_ID,
+            has_schedule_trigger=False,
+            workflow_active=True,
+        )
+        integration_client.close.assert_awaited_once()
+    else:
+        with pytest.raises(ValueError, match="validation failed"):
+            asyncio.run(service.publish_workflow(WORKFLOW_ID, 1, WORKSPACE_ID, session))
+        assert session.commits == 0 and version.status == "draft"
+        integration_client.sync_workflow_schedule.assert_not_awaited()
+
+
+@pytest.mark.parametrize("body_format", [None, "plain", "html"])
+def test_email_format_schema_and_publication_preserve_legacy_config(body_format):
+    from app.schemas.node_configuration import EmailConfig
+
+    config = {
+        "connection_id": str(uuid4()),
+        "to": "{{trigger.data.recipient_email}}",
+        "subject": "Student Report - {{trigger.data.student_name}}",
+        "body": "{{nodes.generate_1.content}}",
+    }
+    if body_format is not None:
+        config["body_format"] = body_format
+    parsed = EmailConfig.model_validate(config)
+    assert parsed.body_format == (body_format or "plain")
+    assert parsed.model_dump()["body"] == config["body"]
+    assert validate(
+        [node("t", "trigger.webhook"), node("mail", "action.email", config)], [edge("t", "mail")]
+    )["valid"]
+
+
+@pytest.mark.parametrize("body_format", ["HTML", "markdown", "", None, 42, []])
+def test_email_format_rejected_by_schema_and_publication(body_format):
+    from app.schemas.node_configuration import EmailConfig
+
+    config = {"body_format": body_format}
+    with pytest.raises(ValidationError):
+        EmailConfig.model_validate(config)
+    result = validate(
+        [node("t", "trigger.webhook"), node("mail", "action.email", config)], [edge("t", "mail")]
+    )
+    assert "INVALID_EMAIL_CONFIGURATION" in {error["code"] for error in result["errors"]}

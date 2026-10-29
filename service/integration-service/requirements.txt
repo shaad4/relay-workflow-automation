@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+alembic
+python-dotenv
+grpcio
+grpcio-tools
+pwdlib[argon2]
+aiokafka
+pytest
+pytest-cov
+httpx
+croniter
+celery[redis]
