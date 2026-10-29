@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiUrl } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { loginUser } from "@/services/auth";
@@ -107,7 +108,6 @@ export default function LoginForm() {
       const lowerMsg = msg.toLowerCase();
 
       const isNetworkOrDevError =
-        !process.env.NEXT_PUBLIC_AUTH_API_URL ||
         err?.name === "TypeError" ||
         lowerMsg.includes("failed to fetch") ||
         lowerMsg.includes("networkerror");
@@ -367,13 +367,8 @@ export default function LoginForm() {
             type="button"
             disabled={isSubmitting}
             onClick={() => {
-              const authUrl = process.env.NEXT_PUBLIC_AUTH_API_URL;
-              if (authUrl) {
-                // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-                window.location.href = `${authUrl}/auth/google`;
-              } else {
-                router.push("/auth/google");
-              }
+              // OAuth must navigate to the server, not the client router.
+              window.location.assign(apiUrl("/auth/google"));
             }}
             className="w-full h-11 px-4 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--elevated)] hover:border-[var(--border-strong)] text-[var(--text-primary)] font-medium text-[15px] flex items-center justify-center gap-3 transition-all duration-100 ease-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 disabled:opacity-50 disabled:cursor-not-allowed"
           >

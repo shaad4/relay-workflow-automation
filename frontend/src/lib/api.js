@@ -1,4 +1,13 @@
-const API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL;
+// Legacy direct-API builds remain supported. New images use the runtime server proxy.
+const API_URL =
+  process.env.NEXT_PUBLIC_AUTH_API_URL?.replace(/\/$/, "") || "/api/relay";
+
+export function apiUrl(endpoint, { absolute = false } = {}) {
+  const url = `${API_URL}${endpoint}`;
+  return absolute && typeof window !== "undefined"
+    ? new URL(url, window.location.origin).href
+    : url;
+}
 
 let refreshPromise = null;
 
@@ -38,7 +47,7 @@ function getErrorMessage(detail) {
 export async function refreshAuthTokens() {
   if (refreshPromise) return refreshPromise;
   const refresh = async () => {
-    const response = await fetch(`${API_URL}/auth/refresh`, {
+    const response = await fetch(apiUrl("/auth/refresh"), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -76,7 +85,7 @@ export async function apiRequest(endpoint, options = {}) {
     } else if (!headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    return fetch(`${API_URL}${endpoint}`, {
+    return fetch(apiUrl(endpoint), {
       ...requestOptions,
       credentials: "include",
       headers,

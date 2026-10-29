@@ -77,17 +77,18 @@ test(
     });
     await page.route("**/*", async (route) => {
       const url = new URL(route.request().url());
-      if (url.origin === origin) return route.continue();
+      if (url.origin === origin && !url.pathname.startsWith("/api/relay/"))
+        return route.continue();
+      const apiPath = url.pathname.replace(/^\/api\/relay/, "");
       let data = {};
-      if (url.pathname === "/auth/refresh")
-        data = { access_token: "test-only" };
-      else if (url.pathname === "/auth/me")
+      if (apiPath === "/auth/refresh") data = { access_token: "test-only" };
+      else if (apiPath === "/auth/me")
         data = {
           name: "Test User",
           email: "test@example.com",
           workspace_name: "Test workspace",
         };
-      else if (url.pathname === "/dashboard/overview") {
+      else if (apiPath === "/dashboard/overview") {
         const range = url.searchParams.get("range");
         requests.push(range);
         if (mode === "loading")
@@ -126,7 +127,7 @@ test(
             failed: 0,
           }));
         }
-      } else if (url.pathname.startsWith("/approvals")) data = [];
+      } else if (apiPath.startsWith("/approvals")) data = [];
       else data = { items: [], total: 0, page: 1, page_size: 10 };
       await route.fulfill({
         status: 200,
