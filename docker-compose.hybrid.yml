@@ -1,0 +1,65 @@
+# Base + this override runs infrastructure only; app profile is opt-in.
+# Private trusted-network example, NOT Internet-safe. Review host/OCI firewall
+# manually before use; never bind public IP, 0.0.0.0 or a Docker container IP.
+services:
+  auth-service:
+    profiles: !override
+    - applications
+  api-gateway:
+    profiles: !override
+    - applications
+  workflow-service:
+    profiles: !override
+    - applications
+  integration-service:
+    profiles: !override
+    - applications
+  action-service:
+    profiles: !override
+    - applications
+  execution-service:
+    profiles: !override
+    - applications
+  rag-service:
+    profiles: !override
+    - applications
+  integration-celery-worker:
+    profiles: !override
+    - applications
+  integration-celery-beat:
+    profiles: !override
+    - applications
+  rag-celery-worker:
+    profiles: !override
+    - applications
+  frontend:
+    profiles: !override
+    - applications
+  auth-postgres:
+    ports: !override
+    - ${RELAY_PRIVATE_BIND_IP:?set_VM_private_IP}:5434:5432
+  workflow-postgres:
+    ports: !override
+    - ${RELAY_PRIVATE_BIND_IP:?set_VM_private_IP}:5433:5432
+  integration-postgres:
+    ports: !override
+    - ${RELAY_PRIVATE_BIND_IP:?set_VM_private_IP}:5435:5432
+  action-postgres:
+    ports: !override
+    - ${RELAY_PRIVATE_BIND_IP:?set_VM_private_IP}:5436:5432
+  execution-postgres:
+    ports: !override
+    - ${RELAY_PRIVATE_BIND_IP:?set_VM_private_IP}:5437:5432
+  rag-postgres:
+    ports: !override
+    - ${RELAY_PRIVATE_BIND_IP:?set_VM_private_IP}:5438:5432
+  rag-redis:
+    ports: !override
+    - ${RELAY_PRIVATE_BIND_IP:?set_VM_private_IP}:6379:6379
+  kafka:
+    ports: !override
+    - ${RELAY_PRIVATE_BIND_IP:?set_VM_private_IP}:19092:19092
+    environment:
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PRIVATE://:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PRIVATE://${KAFKA_PRIVATE_HOST:?set_private_DNS_name}:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PRIVATE:PLAINTEXT

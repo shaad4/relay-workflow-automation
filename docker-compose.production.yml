@@ -1,0 +1,296 @@
+# Opt-in production override; requires Compose >=2.24.4. Never contains credentials.
+# Run only after backups, explicit migrations, HTTPS and environment review.
+services:
+  auth-postgres:
+    networks: !override [backend]
+    ports: !reset []
+    mem_limit: ${DATABASE_MEMORY_LIMIT:-512m}
+    cpus: ${DATABASE_CPU_LIMIT:-1.0}
+  auth-service:
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/auth-service:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    env_file: !override
+    - path: ${RELAY_ENV_DIR:?set_absolute_production_env_directory}/auth-service.env
+      required: true
+    environment:
+      RELAY_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+      BACKEND_URL: ${BACKEND_URL:?set_https_public_api_url}
+      COOKIE_SECURE: 'true'
+    ports: !reset []
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    pids_limit: 128
+    mem_limit: ${APP_MEMORY_LIMIT:-512m}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  api-gateway:
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/api-gateway:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    env_file: !override
+    - path: ${RELAY_ENV_DIR:?set_absolute_production_env_directory}/api-gateway.env
+      required: true
+    environment:
+      RELAY_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+      BACKEND_URL: ${BACKEND_URL:?set_https_public_api_url}
+    ports: !override
+    - 127.0.0.1:${API_GATEWAY_PORT:-8001}:8000
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    pids_limit: 128
+    mem_limit: ${APP_MEMORY_LIMIT:-512m}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  workflow-service:
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/workflow-service:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    env_file: !override
+    - path: ${RELAY_ENV_DIR:?set_absolute_production_env_directory}/workflow-service.env
+      required: true
+    environment:
+      RELAY_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+      BACKEND_URL: ${BACKEND_URL:?set_https_public_api_url}
+    ports: !reset []
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    pids_limit: 128
+    mem_limit: ${APP_MEMORY_LIMIT:-512m}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  workflow-postgres:
+    networks: !override [backend]
+    ports: !reset []
+    mem_limit: ${DATABASE_MEMORY_LIMIT:-512m}
+    cpus: ${DATABASE_CPU_LIMIT:-1.0}
+  integration-service:
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/integration-service:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    env_file: !override
+    - path: ${RELAY_ENV_DIR:?set_absolute_production_env_directory}/integration-service.env
+      required: true
+    environment:
+      RELAY_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+      BACKEND_URL: ${BACKEND_URL:?set_https_public_api_url}
+    ports: !reset []
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    pids_limit: 128
+    mem_limit: ${APP_MEMORY_LIMIT:-512m}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  integration-celery-worker:
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/integration-service:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    env_file: !override
+    - path: ${RELAY_ENV_DIR:?set_absolute_production_env_directory}/integration-service.env
+      required: true
+    environment:
+      RELAY_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+      BACKEND_URL: ${BACKEND_URL:?set_https_public_api_url}
+    ports: !reset []
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    pids_limit: 128
+    mem_limit: ${APP_MEMORY_LIMIT:-512m}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  integration-celery-beat:
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/integration-service:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    env_file: !override
+    - path: ${RELAY_ENV_DIR:?set_absolute_production_env_directory}/integration-service.env
+      required: true
+    environment:
+      RELAY_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+      BACKEND_URL: ${BACKEND_URL:?set_https_public_api_url}
+    ports: !reset []
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    pids_limit: 128
+    mem_limit: ${APP_MEMORY_LIMIT:-512m}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  integration-postgres:
+    networks: !override [backend]
+    ports: !reset []
+    mem_limit: ${DATABASE_MEMORY_LIMIT:-512m}
+    cpus: ${DATABASE_CPU_LIMIT:-1.0}
+  action-service:
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/action-service:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    env_file: !override
+    - path: ${RELAY_ENV_DIR:?set_absolute_production_env_directory}/action-service.env
+      required: true
+    environment:
+      RELAY_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+      BACKEND_URL: ${BACKEND_URL:?set_https_public_api_url}
+    ports: !reset []
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    pids_limit: 128
+    mem_limit: ${APP_MEMORY_LIMIT:-512m}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  action-postgres:
+    networks: !override [backend]
+    ports: !reset []
+    mem_limit: ${DATABASE_MEMORY_LIMIT:-512m}
+    cpus: ${DATABASE_CPU_LIMIT:-1.0}
+  execution-service:
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/execution-service:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    env_file: !override
+    - path: ${RELAY_ENV_DIR:?set_absolute_production_env_directory}/execution-service.env
+      required: true
+    environment:
+      RELAY_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+      BACKEND_URL: ${BACKEND_URL:?set_https_public_api_url}
+      EXECUTION_MAX_CONCURRENCY: ${EXECUTION_MAX_CONCURRENCY:-1}
+    ports: !reset []
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    pids_limit: 128
+    mem_limit: ${APP_MEMORY_LIMIT:-512m}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  execution-postgres:
+    networks: !override [backend]
+    ports: !reset []
+    mem_limit: ${DATABASE_MEMORY_LIMIT:-512m}
+    cpus: ${DATABASE_CPU_LIMIT:-1.0}
+  rag-service:
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/rag-service:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    env_file: !override
+    - path: ${RELAY_ENV_DIR:?set_absolute_production_env_directory}/rag-service.env
+      required: true
+    environment:
+      RELAY_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+      BACKEND_URL: ${BACKEND_URL:?set_https_public_api_url}
+    ports: !reset []
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    pids_limit: 128
+    mem_limit: ${APP_MEMORY_LIMIT:-512m}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  rag-postgres:
+    networks: !override [backend]
+    ports: !reset []
+    mem_limit: ${DATABASE_MEMORY_LIMIT:-512m}
+    cpus: ${DATABASE_CPU_LIMIT:-1.0}
+  rag-redis:
+    networks: !override [backend]
+    mem_limit: ${REDIS_MEMORY_LIMIT:-384m}
+    cpus: ${REDIS_CPU_LIMIT:-0.5}
+  rag-celery-worker:
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/rag-service:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    env_file: !override
+    - path: ${RELAY_ENV_DIR:?set_absolute_production_env_directory}/rag-service.env
+      required: true
+    environment:
+      RELAY_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+      BACKEND_URL: ${BACKEND_URL:?set_https_public_api_url}
+    ports: !reset []
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    pids_limit: 128
+    mem_limit: ${APP_MEMORY_LIMIT:-512m}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  kafka:
+    networks: !override [backend]
+    mem_limit: ${KAFKA_MEMORY_LIMIT:-1536m}
+    cpus: ${KAFKA_CPU_LIMIT:-1.0}
+    environment:
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx768m
+  frontend:
+    profiles: !reset []
+    image: ${RELAY_IMAGE_REGISTRY:?set_release_image_registry}/frontend:${RELAY_IMAGE_TAG:?set_immutable_release_tag}
+    environment:
+      API_GATEWAY_URL: http://api-gateway:8000
+      FRONTEND_URL: ${FRONTEND_URL:?set_https_frontend_url}
+    ports: !override
+    - 127.0.0.1:${FRONTEND_PORT:-3000}:3000
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+    - /app/.next/cache:rw,nosuid,size=128m,uid=10001,gid=10001,mode=0700
+    mem_limit: ${FRONTEND_MEMORY_LIMIT:-512m}
+    cpus: ${FRONTEND_CPU_LIMIT:-1.0}
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
