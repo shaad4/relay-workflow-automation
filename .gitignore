@@ -104,3 +104,7 @@ test-results.xml
 *.dump
 *.pem
 *.key
+
+# Operator-only full-K3s customization overlays
+/deploy/kubernetes/overlays/full-k3s-local/
+/deploy/kubernetes/overlays/full-k3s-migrations-local/

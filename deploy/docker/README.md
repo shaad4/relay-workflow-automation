@@ -244,3 +244,5 @@ in a staging environment before calling a release production-ready.
 
 Reference: [Compose merge semantics](https://docs.docker.com/reference/compose-file/merge/)
 and [environment precedence](https://docs.docker.com/compose/how-tos/environment-variables/envvars-precedence/).
+
+For all infrastructure inside Kubernetes, see [Full K3s](../kubernetes/FULL-K3S.md). Compose remains independent and complete; full K3s does not require Compose at runtime.

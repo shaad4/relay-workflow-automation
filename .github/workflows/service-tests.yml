@@ -266,7 +266,7 @@ jobs:
         run: python -m pip install PyYAML==6.0.3
       - name: Render Kustomize overlays and migration Jobs
         run: |
-          for overlay in development production bootstrap; do
+          for overlay in development production bootstrap full-k3s full-k3s-migrations; do
             kubectl kustomize "deploy/kubernetes/overlays/$overlay" > "/tmp/relay-$overlay.yaml"
           done
           kubectl kustomize deploy/kubernetes/migrations > /tmp/relay-migrations.yaml
@@ -276,7 +276,16 @@ jobs:
             --kubernetes /tmp/relay-development.yaml \
             --kubernetes /tmp/relay-production.yaml \
             --kubernetes /tmp/relay-bootstrap.yaml \
+            --kubernetes /tmp/relay-full-k3s.yaml \
+            --kubernetes /tmp/relay-full-k3s-migrations.yaml \
             --kubernetes /tmp/relay-migrations.yaml
+      - name: Validate full-K3s infrastructure contracts and scripts
+        run: |
+          python scripts/check_full_k3s.py /tmp/relay-full-k3s.yaml
+          python scripts/test_full_k3s.py
+          for script in scripts/k8s/*.sh; do bash -n "$script"; done
+          kubectl kustomize deploy/kubernetes/initialization/vector > /tmp/relay-vector-init.yaml
+          kubectl kustomize deploy/kubernetes/initialization/topics > /tmp/relay-topics-init.yaml
       - name: Validate Compose with synthetic configuration
         run: bash scripts/ci-compose-check.sh
       - name: Validate Kubernetes schemas offline
@@ -285,7 +294,7 @@ jobs:
             https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz \
             --output /tmp/kubeconform.tar.gz
           tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
-          /tmp/kubeconform -strict -summary /tmp/relay-*.yaml
+          /tmp/kubeconform -strict -kubernetes-version 1.36.0 -summary /tmp/relay-*.yaml
 
   # 7. IDENTICAL APPLICATION IMAGES FOR COMPOSE AND KUBERNETES
   container-builds:

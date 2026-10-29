@@ -1,3 +1,9 @@
+# Deployment modes
+
+- **Docker Compose:** complete self-hosted stack; see [Docker instructions](../docker/README.md).
+- **Hybrid K3s:** existing application overlays with private external Compose infrastructure (instructions below).
+- **Full K3s:** applications and persistent infrastructure inside Kubernetes; follow the [staged full-K3s guide](FULL-K3S.md). The new overlay is opt-in.
+
 # Relay on Kubernetes / K3s
 
 These are **reviewable deployment templates, not a verified live installation**.
