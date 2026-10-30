@@ -86,6 +86,22 @@ async def relay_add_edge(
         target_node_id=target_node_id,
     )
 
+@mcp.tool()
+async def relay_validate_workflow(
+    workflow_id: str,
+    version: int,
+) -> dict:
+    """Validate a Relay workflow before publishing."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.validate_workflow(
+        workflow_id=workflow_id,
+        version=version,
+    )
 
 if __name__ == "__main__":
     mcp.run()
