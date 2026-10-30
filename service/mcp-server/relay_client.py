@@ -157,4 +157,19 @@ class RelayClient:
             response.raise_for_status()
             return response.json()
 
-            
+
+    async def list_executions(self, page: int = 1):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                f"{self.base_url}/executions/",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}"
+                },
+                params={
+                    "page": page,
+                    "page_size": 10,
+                },
+            )
+
+            response.raise_for_status()
+            return response.json()

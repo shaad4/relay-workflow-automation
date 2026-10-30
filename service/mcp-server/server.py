@@ -158,5 +158,16 @@ async def relay_run_workflow(
         input_data=input_data,
     )
 
+@mcp.tool()
+async def relay_list_executions(page: int = 1) -> dict:
+    """List recent Relay workflow executions and their statuses."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.list_executions(page=page)
+
 if __name__ == "__main__":
     mcp.run()
