@@ -169,5 +169,19 @@ async def relay_list_executions(page: int = 1) -> dict:
 
     return await client.list_executions(page=page)
 
+
+@mcp.tool()
+async def relay_get_execution_steps(execution_id: str) -> dict:
+    """Get the steps and outputs of a Relay workflow execution."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.get_execution_steps(
+        execution_id=execution_id,
+    )
+
 if __name__ == "__main__":
     mcp.run()

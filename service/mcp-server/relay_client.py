@@ -173,3 +173,15 @@ class RelayClient:
 
             response.raise_for_status()
             return response.json()
+
+    async def get_execution_steps(self, execution_id: str):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                f"{self.base_url}/executions/{execution_id}/steps/",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}"
+                },
+            )
+
+            response.raise_for_status()
+            return response.json()
