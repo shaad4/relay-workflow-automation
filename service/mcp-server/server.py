@@ -66,6 +66,27 @@ async def relay_add_node(
     )
 
 @mcp.tool()
+async def relay_update_node(
+    workflow_id: str,
+    version: int,
+    node_id: str,
+    configuration: dict,
+) -> dict:
+    """Update the configuration of a node in a Relay draft workflow."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.update_node(
+        workflow_id=workflow_id,
+        version=version,
+        node_id=node_id,
+        configuration=configuration,
+    )
+
+@mcp.tool()
 async def relay_add_edge(
     workflow_id: str,
     version: int,

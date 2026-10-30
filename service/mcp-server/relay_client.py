@@ -65,6 +65,25 @@ class RelayClient:
             response.raise_for_status()
             return response.json()
 
+    async def update_node(
+        self,
+        workflow_id: str,
+        version: int,
+        node_id: str,
+        configuration: dict,
+    ):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.patch(
+                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/nodes/{node_id}/",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}"
+                },
+                json={"configuration": configuration},
+            )
+
+            response.raise_for_status()
+            return response.json()
+
     async def add_edge(
         self,
         workflow_id: str,
@@ -103,3 +122,5 @@ class RelayClient:
 
             response.raise_for_status()
             return response.json()
+
+    
