@@ -1,0 +1,69 @@
+import os
+
+from mcp.server import MCPServer
+from relay_client import RelayClient
+
+mcp = MCPServer("Relay MCP Server")
+
+
+@mcp.tool()
+def relay_hello(name: str) -> str:
+    """Test the Relay MCP server connection."""
+    return f"Hello {name}! Relay MCP Server is working."
+
+
+@mcp.tool()
+async def relay_list_workflows() -> list[dict]:
+    """List workflows belonging to the authenticated Relay workspace."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.list_workflows()
+
+
+@mcp.tool()
+async def relay_create_workflow(
+    name: str,
+    description: str = "",
+) -> dict:
+    """Create a new draft workflow in the authenticated Relay workspace."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.create_workflow(
+        name=name,
+        description=description,
+    )
+
+
+@mcp.tool()
+async def relay_add_node(
+    workflow_id: str,
+    version: int,
+    node_id: str,
+    node_type: str,
+    configuration: dict,
+) -> dict:
+    """Add a node to an existing Relay draft workflow version."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.add_node(
+        workflow_id=workflow_id,
+        version=version,
+        node_id=node_id,
+        node_type=node_type,
+        configuration=configuration,
+    )
+
+if __name__ == "__main__":
+    mcp.run()
