@@ -1,12 +1,19 @@
-import os
-
 from mcp.server import MCPServer
-from relay_client import RelayClient
 
+from relay_client import RelayClient
+from relay_session import RelaySession
 from workflow_builder import create_complete_workflow
+
+
+# MCP Server Initialization
 
 mcp = MCPServer("Relay MCP Server")
 
+relay_session = RelaySession()
+relay_client = RelayClient(relay_session)
+
+
+# Connection Test
 
 @mcp.tool()
 def relay_hello(name: str) -> str:
@@ -14,16 +21,12 @@ def relay_hello(name: str) -> str:
     return f"Hello {name}! Relay MCP Server is working."
 
 
+# Workflow Management
+
 @mcp.tool()
 async def relay_list_workflows() -> list[dict]:
     """List workflows belonging to the authenticated Relay workspace."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.list_workflows()
+    return await relay_client.list_workflows()
 
 
 @mcp.tool()
@@ -32,17 +35,25 @@ async def relay_create_workflow(
     description: str = "",
 ) -> dict:
     """Create a new draft workflow in the authenticated Relay workspace."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.create_workflow(
+    return await relay_client.create_workflow(
         name=name,
         description=description,
     )
 
+
+@mcp.tool()
+async def relay_deactivate_workflow(workflow_id: str) -> dict:
+    """Deactivate an existing Relay workflow."""
+    return await relay_client.deactivate_workflow(workflow_id)
+
+
+@mcp.tool()
+async def relay_delete_workflow(workflow_id: str) -> dict:
+    """Permanently delete a draft or inactive Relay workflow."""
+    return await relay_client.delete_workflow(workflow_id)
+
+
+# Node Management
 
 @mcp.tool()
 async def relay_add_node(
@@ -53,19 +64,14 @@ async def relay_add_node(
     configuration: dict,
 ) -> dict:
     """Add a node to an existing Relay draft workflow version."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.add_node(
+    return await relay_client.add_node(
         workflow_id=workflow_id,
         version=version,
         node_id=node_id,
         node_type=node_type,
         configuration=configuration,
     )
+
 
 @mcp.tool()
 async def relay_update_node(
@@ -75,18 +81,13 @@ async def relay_update_node(
     configuration: dict,
 ) -> dict:
     """Update the configuration of a node in a Relay draft workflow."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.update_node(
+    return await relay_client.update_node(
         workflow_id=workflow_id,
         version=version,
         node_id=node_id,
         configuration=configuration,
     )
+
 
 @mcp.tool()
 async def relay_delete_node(
@@ -95,17 +96,14 @@ async def relay_delete_node(
     node_id: str,
 ) -> dict:
     """Delete a node from a draft workflow. Requires user confirmation."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.delete_node(
+    return await relay_client.delete_node(
         workflow_id=workflow_id,
         version=version,
         node_id=node_id,
     )
+
+
+# Edge Management
 
 @mcp.tool()
 async def relay_add_edge(
@@ -115,18 +113,13 @@ async def relay_add_edge(
     target_node_id: str,
 ) -> dict:
     """Connect two nodes in an existing Relay draft workflow."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.add_edge(
+    return await relay_client.add_edge(
         workflow_id=workflow_id,
         version=version,
         source_node_id=source_node_id,
         target_node_id=target_node_id,
     )
+
 
 @mcp.tool()
 async def relay_delete_edge(
@@ -135,17 +128,14 @@ async def relay_delete_edge(
     edge_id: str,
 ) -> dict:
     """Delete an edge from a draft workflow. Requires user confirmation."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.delete_edge(
+    return await relay_client.delete_edge(
         workflow_id=workflow_id,
         version=version,
         edge_id=edge_id,
     )
+
+
+# Workflow Validation and Publishing
 
 @mcp.tool()
 async def relay_validate_workflow(
@@ -153,16 +143,11 @@ async def relay_validate_workflow(
     version: int,
 ) -> dict:
     """Validate a Relay workflow before publishing."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.validate_workflow(
+    return await relay_client.validate_workflow(
         workflow_id=workflow_id,
         version=version,
     )
+
 
 @mcp.tool()
 async def relay_publish_workflow(
@@ -170,37 +155,13 @@ async def relay_publish_workflow(
     version: int,
 ) -> dict:
     """Publish a validated Relay workflow after user approval."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.publish_workflow(
+    return await relay_client.publish_workflow(
         workflow_id=workflow_id,
         version=version,
     )
 
-@mcp.tool()
-async def relay_deactivate_workflow(workflow_id: str) -> dict:
-    """Deactivate an existing Relay workflow."""
 
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-    return await client.deactivate_workflow(workflow_id)
-
-
-@mcp.tool()
-async def relay_delete_workflow(workflow_id: str) -> dict:
-    """Permanently delete a draft or inactive Relay workflow."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-    return await client.delete_workflow(workflow_id)
+# Workflow Execution
 
 @mcp.tool()
 async def relay_run_workflow(
@@ -208,41 +169,29 @@ async def relay_run_workflow(
     input_data: dict,
 ) -> dict:
     """Run a published Relay manual-trigger workflow with input data."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.run_workflow(
+    return await relay_client.run_workflow(
         workflow_id=workflow_id,
         input_data=input_data,
     )
 
+
+# Execution History
+
 @mcp.tool()
 async def relay_list_executions(page: int = 1) -> dict:
     """List recent Relay workflow executions and their statuses."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.list_executions(page=page)
+    return await relay_client.list_executions(page=page)
 
 
 @mcp.tool()
 async def relay_get_execution_steps(execution_id: str) -> dict:
     """Get the steps and outputs of a Relay workflow execution."""
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
-    return await client.get_execution_steps(
+    return await relay_client.get_execution_steps(
         execution_id=execution_id,
     )
+
+
+# Complete Workflow Creation
 
 @mcp.tool()
 async def relay_create_complete_workflow(
@@ -257,19 +206,22 @@ async def relay_create_complete_workflow(
     Creates a draft and validates it.
     Does not publish or execute the workflow.
     """
-
-    client = RelayClient(
-        base_url=os.environ["RELAY_API_URL"],
-        access_token=os.environ["RELAY_ACCESS_TOKEN"],
-    )
-
     return await create_complete_workflow(
-        client=client,
+        client=relay_client,
         name=name,
         description=description,
         nodes=nodes,
         edges=edges,
     )
 
+
+# Start MCP Server
+
 if __name__ == "__main__":
-    mcp.run()
+    try:
+        mcp.run()
+    finally:
+        # RelaySession owns an async HTTP client.
+        # Its cleanup will be handled through the MCP lifecycle
+        # in a later improvement.
+        pass

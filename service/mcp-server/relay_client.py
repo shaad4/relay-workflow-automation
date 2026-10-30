@@ -1,43 +1,49 @@
-import httpx
+from relay_session import RelaySession
 
 
 class RelayClient:
-    def __init__(self, base_url: str, access_token: str):
-        self.base_url = base_url.rstrip("/")
-        self.access_token = access_token
+    def __init__(self, session: RelaySession):
+        self.session = session
+
+    # Workflow Management
 
     async def list_workflows(self):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(
-                f"{self.base_url}/workflows/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-            )
-
-            response.raise_for_status()
-            return response.json()
+        response = await self.session.get("/workflows/")
+        return response.json()
 
     async def create_workflow(
         self,
         name: str,
         description: str = "",
     ):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{self.base_url}/workflows/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-                json={
-                    "name": name,
-                    "description": description,
-                },
-            )
+        response = await self.session.request(
+            "POST",
+            "/workflows/",
+            json={
+                "name": name,
+                "description": description,
+            },
+        )
+        return response.json()
 
-            response.raise_for_status()
-            return response.json()
+    async def deactivate_workflow(self, workflow_id: str):
+        response = await self.session.request(
+            "POST",
+            f"/workflows/{workflow_id}/deactivate/",
+        )
+        return response.json()
 
+    async def delete_workflow(self, workflow_id: str):
+        await self.session.request(
+            "DELETE",
+            f"/workflows/{workflow_id}/",
+        )
+        return {
+            "success": True,
+            "deleted_workflow_id": workflow_id,
+        }
+
+    # Node Management
 
     async def add_node(
         self,
@@ -47,23 +53,18 @@ class RelayClient:
         node_type: str,
         configuration: dict,
     ):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/nodes/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-                json={
-                    "node_id": node_id,
-                    "node_type": node_type,
-                    "configuration": configuration,
-                    "position_x": 250,
-                    "position_y": 150,
-                },
-            )
-
-            response.raise_for_status()
-            return response.json()
+        response = await self.session.request(
+            "POST",
+            f"/workflows/{workflow_id}/versions/{version}/nodes/",
+            json={
+                "node_id": node_id,
+                "node_type": node_type,
+                "configuration": configuration,
+                "position_x": 250,
+                "position_y": 150,
+            },
+        )
+        return response.json()
 
     async def update_node(
         self,
@@ -72,17 +73,14 @@ class RelayClient:
         node_id: str,
         configuration: dict,
     ):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.patch(
-                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/nodes/{node_id}/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-                json={"configuration": configuration},
-            )
-
-            response.raise_for_status()
-            return response.json()
+        response = await self.session.request(
+            "PATCH",
+            f"/workflows/{workflow_id}/versions/{version}/nodes/{node_id}/",
+            json={
+                "configuration": configuration,
+            },
+        )
+        return response.json()
 
     async def delete_node(
         self,
@@ -90,20 +88,16 @@ class RelayClient:
         version: int,
         node_id: str,
     ):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.delete(
-                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/nodes/{node_id}/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-            )
+        await self.session.request(
+            "DELETE",
+            f"/workflows/{workflow_id}/versions/{version}/nodes/{node_id}/",
+        )
+        return {
+            "success": True,
+            "deleted_node_id": node_id,
+        }
 
-            response.raise_for_status()
-
-            return {
-                "success": True,
-                "deleted_node_id": node_id,
-            }
+    # Edge Management
 
     async def add_edge(
         self,
@@ -112,20 +106,15 @@ class RelayClient:
         source_node_id: str,
         target_node_id: str,
     ):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/edges/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-                json={
-                    "source_node_id": source_node_id,
-                    "target_node_id": target_node_id,
-                },
-            )
-
-            response.raise_for_status()
-            return response.json()
+        response = await self.session.request(
+            "POST",
+            f"/workflows/{workflow_id}/versions/{version}/edges/",
+            json={
+                "source_node_id": source_node_id,
+                "target_node_id": target_node_id,
+            },
+        )
+        return response.json()
 
     async def delete_edge(
         self,
@@ -133,124 +122,71 @@ class RelayClient:
         version: int,
         edge_id: str,
     ):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.delete(
-                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/edges/{edge_id}/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-            )
+        await self.session.request(
+            "DELETE",
+            f"/workflows/{workflow_id}/versions/{version}/edges/{edge_id}/",
+        )
+        return {
+            "success": True,
+            "deleted_edge_id": edge_id,
+        }
 
-            response.raise_for_status()
-
-            return {
-                "success": True,
-                "deleted_edge_id": edge_id,
-            }
-
+    # Validation and Publishing
 
     async def validate_workflow(
         self,
         workflow_id: str,
         version: int,
     ):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/validate/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-            )
-
-            response.raise_for_status()
-            return response.json()
+        response = await self.session.request(
+            "POST",
+            f"/workflows/{workflow_id}/versions/{version}/validate/",
+        )
+        return response.json()
 
     async def publish_workflow(
         self,
         workflow_id: str,
         version: int,
     ):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/publish/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-            )
+        response = await self.session.request(
+            "POST",
+            f"/workflows/{workflow_id}/versions/{version}/publish/",
+        )
+        return response.json()
 
-            response.raise_for_status()
-            return response.json()
-
-    async def deactivate_workflow(self, workflow_id: str):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{self.base_url}/workflows/{workflow_id}/deactivate/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-            )
-            response.raise_for_status()
-            return response.json()
-
-
-    async def delete_workflow(self, workflow_id: str):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.delete(
-                f"{self.base_url}/workflows/{workflow_id}/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-            )
-            response.raise_for_status()
-
-            return {
-                "success": True,
-                "deleted_workflow_id": workflow_id,
-            }
-
+    # Workflow Execution
 
     async def run_workflow(
         self,
         workflow_id: str,
         input_data: dict,
     ):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{self.base_url}/workflows/{workflow_id}/run",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-                json={"input": input_data},
-            )
+        response = await self.session.request(
+            "POST",
+            f"/workflows/{workflow_id}/run",
+            json={
+                "input": input_data,
+            },
+        )
+        return response.json()
 
-            response.raise_for_status()
-            return response.json()
-
+    # Execution History
 
     async def list_executions(self, page: int = 1):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(
-                f"{self.base_url}/executions/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-                params={
-                    "page": page,
-                    "page_size": 10,
-                },
-            )
-
-            response.raise_for_status()
-            return response.json()
+        response = await self.session.request(
+            "GET",
+            "/executions/",
+            params={
+                "page": page,
+                "page_size": 10,
+            },
+        )
+        return response.json()
 
     async def get_execution_steps(self, execution_id: str):
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(
-                f"{self.base_url}/executions/{execution_id}/steps/",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                },
-            )
-
-            response.raise_for_status()
-            return response.json()
+        response = await self.session.request(
+            "GET",
+            f"/executions/{execution_id}/steps/",
+        )
+        return response.json()
