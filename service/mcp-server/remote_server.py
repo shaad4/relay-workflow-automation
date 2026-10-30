@@ -1,8 +1,8 @@
-"""Local OAuth-protected Streamable HTTP server. Never imports the stdio server."""
+"""OAuth-protected Streamable HTTP in local or explicit K3s deployment mode."""
 
 import os
 from contextlib import asynccontextmanager
-from ipaddress import ip_address
+from ipaddress import ip_address, ip_network
 from urllib.parse import urlsplit
 
 import httpx
@@ -21,6 +21,7 @@ from starlette.responses import PlainTextResponse
 from starlette.routing import Mount
 from tools import register_tools
 from user_session import DelegatedRequestSession, RelayAccessError
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 
 class LoopbackOnlyMiddleware:
@@ -37,6 +38,40 @@ class LoopbackOnlyMiddleware:
                 local = False
             if not local:
                 await PlainTextResponse("Loopback access only", status_code=403)(
+                    scope, receive, send
+                )
+                return
+        await self.app(scope, receive, send)
+
+
+def trusted_ingress_networks():
+    """Require explicit ingress peer addresses; never inherit FORWARDED_ALLOW_IPS."""
+    entries = os.environ.get("MCP_TRUSTED_PROXY_IPS", "").split(",")
+    try:
+        networks = [ip_network(entry.strip()) for entry in entries]
+    except ValueError:
+        raise ValueError("MCP_TRUSTED_PROXY_IPS requires ingress IP addresses or CIDRs") from None
+    if any(network.prefixlen == 0 for network in networks):
+        raise ValueError("MCP_TRUSTED_PROXY_IPS must not trust all addresses")
+    return networks
+
+
+class TrustedIngressMiddleware:
+    """Check the actual socket peer before interpreting any forwarded headers."""
+
+    def __init__(self, app, networks):
+        self.networks = networks
+        self.app = ProxyHeadersMiddleware(app, trusted_hosts=[str(n) for n in networks])
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            try:
+                peer = ip_address(scope.get("client", ("", 0))[0])
+                trusted = any(peer in network for network in self.networks)
+            except (ValueError, TypeError):
+                trusted = False
+            if not trusted:
+                await PlainTextResponse("Trusted ingress required", status_code=403)(
                     scope, receive, send
                 )
                 return
@@ -149,10 +184,16 @@ async def reject_identity_arguments(ctx, call_next):
 def create_remote_app(
     *, provider=None, public_origin=None, session_secret=None, relay_transport=None
 ):
+    mode = os.environ.get("MCP_DEPLOYMENT_MODE", "local")
+    if mode not in {"local", "k3s"}:
+        raise ValueError("MCP_DEPLOYMENT_MODE must be local or k3s")
+    networks = trusted_ingress_networks() if mode == "k3s" else None
     origin = (public_origin or os.environ.get("MCP_PUBLIC_ORIGIN", "http://127.0.0.1:8001")).rstrip(
         "/"
     )
-    app = create_oauth_app(provider=provider, public_origin=origin, session_secret=session_secret)
+    app = create_oauth_app(
+        provider=provider, public_origin=origin, session_secret=session_secret, deployment_mode=mode
+    )
     provider = app.state.provider
     if provider.resource != origin + "/mcp":
         raise ValueError("OAuth resource must exactly match the MCP endpoint")
@@ -195,21 +236,38 @@ def create_remote_app(
             yield
 
     app.router.lifespan_context = lifespan
-    app.add_middleware(LoopbackOnlyMiddleware)
+    if mode == "local":
+        app.add_middleware(LoopbackOnlyMiddleware)
+    else:
+        app.add_middleware(TrustedIngressMiddleware, networks=networks)
     app.state.mcp = mcp
     return app
 
 
-if __name__ == "__main__":
+def main():
     import uvicorn
 
     origin = os.environ.get("MCP_PUBLIC_ORIGIN", "http://127.0.0.1:8001").rstrip("/")
-    if urlsplit(origin).scheme != "http":
+    mode = os.environ.get("MCP_DEPLOYMENT_MODE", "local")
+    app = create_remote_app()
+    if mode == "local" and urlsplit(origin).scheme != "http":
         raise ValueError("The local runner supports HTTP loopback only")
+    port = (
+        int(os.environ.get("MCP_PORT", "8001"))
+        if mode == "k3s"
+        else (urlsplit(origin).port or 8001)
+    )
+    if not 1 <= port <= 65535:
+        raise ValueError("MCP_PORT must be between 1 and 65535")
     uvicorn.run(
-        create_remote_app(),
-        host="127.0.0.1",
-        port=urlsplit(origin).port or 8001,
+        app,
+        host="0.0.0.0" if mode == "k3s" else "127.0.0.1",
+        port=port,
+        workers=1,
         proxy_headers=False,
         access_log=False,
     )
+
+
+if __name__ == "__main__":
+    main()

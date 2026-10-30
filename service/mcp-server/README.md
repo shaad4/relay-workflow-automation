@@ -39,6 +39,50 @@ responses; initialize normally and send the SDK's required protocol/Accept heade
 No unauthenticated tool discovery or tool calls are allowed. Revocation is `/revoke`.
 See [OAuth details](oauth/README.md) for PKCE, redirect, consent, refresh and storage rules.
 
+## Explicit K3s deployment mode (configuration only)
+
+Local mode remains the default. Container mode must be explicitly selected:
+
+```sh
+export MCP_DEPLOYMENT_MODE=k3s
+export MCP_PUBLIC_ORIGIN=https://mcp.relay.shaad.site
+export MCP_PORT=8001
+# Set MCP_TRUSTED_PROXY_IPS to the actual ingress peer IPs or narrowly scoped CIDRs,
+# comma-separated. It has no default; do not use the whole pod/node network.
+# Supply MCP_SESSION_SECRET and RELAY_API_URL through deployment secrets/config.
+.venv/bin/python remote_server.py
+```
+
+This runner binds `0.0.0.0:$MCP_PORT` with **one Uvicorn worker**. Keep **one K3s
+replica**; replicas cannot share the in-memory OAuth state. No manifests have been
+changed and nothing has been deployed. This section supersedes the local-only bind
+instructions above only when `MCP_DEPLOYMENT_MODE=k3s` is explicitly set.
+
+The public origin must be exactly `https://mcp.relay.shaad.site` (an optional trailing
+slash is normalized). The OAuth issuer/endpoints, secure browser cookies, allowed
+Host/Origin, and resource audience use this configured origin, never forwarded host
+headers. The protected endpoint is `https://mcp.relay.shaad.site/mcp`; both discovery
+endpoints and OAuth routes remain available.
+
+In K3s mode, the loopback peer gate is replaced with an explicit ingress peer
+allowlist. The **original socket peer** must match `MCP_TRUSTED_PROXY_IPS` before
+Uvicorn's installed proxy middleware processes `X-Forwarded-For` and
+`X-Forwarded-Proto`. Wildcards, empty lists and all-address CIDRs are rejected.
+`Forwarded` and `X-Forwarded-Host` do not override the configured identity or Host
+checks. The outer Uvicorn server keeps `proxy_headers=False` to avoid interpreting
+headers before the peer check; use this runner rather than an independently
+configured Uvicorn CLI. `FORWARDED_ALLOW_IPS` is not used.
+
+Traefik must terminate HTTPS, preserve the public Host header, and overwrite/sanitize
+forwarded headers from external callers. Configure the narrowest actual source
+addresses seen by the pod, accounting for cluster NAT. Source-IP trust is not
+cryptographic: a compromised allowed ingress or an overly broad CIDR defeats this
+boundary. A future deployment also needs ingress-only network policy, TLS/secrets,
+and operational validation. OAuth, audience, CSRF, and per-tool permission checks
+remain enabled regardless of forwarded headers. Existing memory, rate-limit and
+restart limitations still apply; this is deployment-mode support, not production
+readiness or authorization to expose the service.
+
 ## Scopes
 
 Register and request the desired space-separated scopes explicitly. The default
