@@ -3,6 +3,8 @@ import os
 from mcp.server import MCPServer
 from relay_client import RelayClient
 
+from workflow_builder import create_complete_workflow
+
 mcp = MCPServer("Relay MCP Server")
 
 
@@ -240,6 +242,33 @@ async def relay_get_execution_steps(execution_id: str) -> dict:
 
     return await client.get_execution_steps(
         execution_id=execution_id,
+    )
+
+@mcp.tool()
+async def relay_create_complete_workflow(
+    name: str,
+    description: str,
+    nodes: list[dict],
+    edges: list[dict],
+) -> dict:
+    """
+    Create a complete Relay workflow from nodes and edges.
+
+    Creates a draft and validates it.
+    Does not publish or execute the workflow.
+    """
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await create_complete_workflow(
+        client=client,
+        name=name,
+        description=description,
+        nodes=nodes,
+        edges=edges,
     )
 
 if __name__ == "__main__":
