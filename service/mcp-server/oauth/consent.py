@@ -1,4 +1,3 @@
-
 import secrets
 from html import escape
 
@@ -47,6 +46,16 @@ def create_consent_page(store: AuthorizationStore):
                 status_code=400,
             )
 
+        csrf_token = escape(
+            request.session["csrf_token"],
+            quote=True,
+        )
+
+        safe_request_id = escape(
+            request_id,
+            quote=True,
+        )
+
         # ----------------------------------------
         # Prepare Consent Information
         # ----------------------------------------
@@ -63,45 +72,79 @@ def create_consent_page(store: AuthorizationStore):
             permissions = "<li>No specific permissions requested</li>"
 
         # ----------------------------------------
-        # Render Consent Page
+        # Check Authenticated Relay Session
         # ----------------------------------------
 
-        html = f"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport"
-                  content="width=device-width, initial-scale=1.0">
-            <title>Connect to Relay</title>
-        </head>
+        login_id = request.session.get(
+            "relay_login_session"
+        )
 
-        <body>
-            <h2>Connect to Relay</h2>
+        login_store = request.app.state.login_store
+
+        login_session = (
+            login_store.get(login_id)
+            if login_id
+            else None
+        )
+
+        # ----------------------------------------
+        # Render Login or Approval Form
+        # ----------------------------------------
+
+        if login_session:
+            action_html = f"""
+            <h3>Authorize Relay Access</h3>
 
             <p>
-                Application: <strong>{client_id}</strong>
+                You are signed in to Relay.
+                Review the permissions before continuing.
             </p>
 
-            <p>Requested permissions:</p>
+            <form method="POST" action="/oauth/approve">
+                <input
+                    type="hidden"
+                    name="request_id"
+                    value="{safe_request_id}"
+                >
 
-            <ul>
-                {permissions}
-            </ul>
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{csrf_token}"
+                >
 
+                <button
+                    type="submit"
+                    name="decision"
+                    value="approve"
+                >
+                    Approve Access
+                </button>
+
+                <button
+                    type="submit"
+                    name="decision"
+                    value="deny"
+                >
+                    Deny
+                </button>
+            </form>
+            """
+        else:
+            action_html = f"""
             <h3>Sign in to Relay</h3>
 
             <form method="POST" action="/oauth/login">
                 <input
                     type="hidden"
                     name="request_id"
-                    value="{escape(request_id, quote=True)}"
+                    value="{safe_request_id}"
                 >
 
                 <input
                     type="hidden"
                     name="csrf_token"
-                    value="{escape(request.session['csrf_token'], quote=True)}"
+                    value="{csrf_token}"
                 >
 
                 <label for="email">Email</label>
@@ -122,8 +165,43 @@ def create_consent_page(store: AuthorizationStore):
                     autocomplete="current-password"
                 >
 
-                <button type="submit">Sign in</button>
+                <button type="submit">
+                    Sign in
+                </button>
             </form>
+            """
+
+        # ----------------------------------------
+        # Render Consent Page
+        # ----------------------------------------
+
+        html = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta
+                name="viewport"
+                content="width=device-width, initial-scale=1.0"
+            >
+            <title>Connect to Relay</title>
+        </head>
+
+        <body>
+            <h2>Connect to Relay</h2>
+
+            <p>
+                Application: <strong>{client_id}</strong>
+            </p>
+
+            <p>Requested permissions:</p>
+
+            <ul>
+                {permissions}
+            </ul>
+
+            {action_html}
+
         </body>
         </html>
         """
