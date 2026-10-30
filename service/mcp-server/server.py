@@ -141,5 +141,22 @@ async def relay_publish_workflow(
         version=version,
     )
 
+@mcp.tool()
+async def relay_run_workflow(
+    workflow_id: str,
+    input_data: dict,
+) -> dict:
+    """Run a published Relay manual-trigger workflow with input data."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.run_workflow(
+        workflow_id=workflow_id,
+        input_data=input_data,
+    )
+
 if __name__ == "__main__":
     mcp.run()

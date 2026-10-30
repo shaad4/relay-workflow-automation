@@ -139,4 +139,22 @@ class RelayClient:
             response.raise_for_status()
             return response.json()
 
-        
+
+    async def run_workflow(
+        self,
+        workflow_id: str,
+        input_data: dict,
+    ):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{self.base_url}/workflows/{workflow_id}/run",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}"
+                },
+                json={"input": input_data},
+            )
+
+            response.raise_for_status()
+            return response.json()
+
+            
