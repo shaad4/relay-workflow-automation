@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
+import { GmailDisclosure } from "@/components/legal/PolicyLinks";
 import AIProviderConnections from "@/components/connections/AIProviderConnections";
 import {
   Modal,
@@ -192,6 +193,9 @@ function IntegrationCatalog({
               </span>
             </button>
           ))}
+        </div>
+        <div className="border-t border-[var(--border-subtle)] px-5 py-4">
+          <GmailDisclosure />
         </div>
         {error && (
           <p role="alert" className="px-5 pb-4 text-[12px] text-red-400">
@@ -1034,6 +1038,9 @@ function ConnectionsContent() {
                       Connect your Gmail account to send emails from Relay
                       workflows.
                     </p>
+                    <div className="mt-3">
+                      <GmailDisclosure />
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -1831,6 +1838,9 @@ function ConnectionsContent() {
                       Workflows can use this account when sending email with
                       Gmail.
                     </p>
+                    <div className="mt-3">
+                      <GmailDisclosure />
+                    </div>
                   </section>
                   {errors.api && (
                     <p role="alert" className="text-[12px] text-red-500">

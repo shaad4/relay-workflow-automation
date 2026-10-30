@@ -325,6 +325,7 @@
 }
 .footer nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 24px;
   color: #a99ab6;
   font-size: 10px;

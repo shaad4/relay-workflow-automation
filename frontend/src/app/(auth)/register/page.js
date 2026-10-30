@@ -1,3 +1,4 @@
+import PolicyLinks from "@/components/legal/PolicyLinks";
 import PublicRoute from "@/components/auth/PublicRoute";
 import AuthNavbar from "@/components/layout/AuthNavbar";
 import RegisterForm from "@/components/auth/RegisterForm";
@@ -23,7 +24,8 @@ export default function RegisterPage() {
 
       {/* Footer */}
       <footer className="py-6 text-center text-[12px] text-[var(--text-tertiary)] shrink-0">
-        <p>Relay — Modern workflow automation platform.</p>
+        <p className="mb-3">Relay — Modern workflow automation platform.</p>
+        <PolicyLinks />
       </footer>
     </div>
   );

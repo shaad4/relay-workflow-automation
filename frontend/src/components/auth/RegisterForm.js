@@ -1,5 +1,6 @@
 "use client";
 
+import PolicyLinks from "@/components/legal/PolicyLinks";
 import { useState } from "react";
 import { apiUrl } from "@/lib/api";
 import Link from "next/link";
@@ -439,6 +440,13 @@ export default function RegisterForm() {
             </div>
           </form>
 
+          <div className="mt-4 space-y-2 text-center text-xs leading-5 text-[var(--text-secondary)]">
+            <p>
+              By creating an account, you agree to the Terms of Service. See our
+              Privacy Policy for how we handle your data.
+            </p>
+            <PolicyLinks />
+          </div>
           {/* Footer Link */}
           <div className="mt-7 text-center text-[14px] text-[var(--text-tertiary)]">
             Already have an account?{" "}

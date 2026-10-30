@@ -350,6 +350,8 @@ export default function LandingPage() {
           <a href="#product">Product</a>
           <a href="#how-it-works">How it works</a>
           <Link href="/login">Sign in</Link>
+          <Link href="/privacy">Privacy Policy</Link>
+          <Link href="/terms">Terms of Service</Link>
         </nav>
         <small>© {new Date().getFullYear()} Relay</small>
       </footer>

@@ -1,19 +1,38 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
 namespace: relay
+
 resources:
-- ../../base
-- ../../infrastructure
+  - ../../base
+  - ../../infrastructure
+
 components:
-- ../../components/ingress
+  - ../../components/ingress
+
 patches:
-- path: configmap-patch.yaml
-- target:
-    kind: NetworkPolicy
-    name: relay-private-infrastructure
-  patch: |-
-    $patch: delete
-    apiVersion: networking.k8s.io/v1
-    kind: NetworkPolicy
-    metadata:
+  # Full K3s production configuration
+  - path: configmap-patch.yaml
+
+  # Remove hybrid-only infrastructure network policy
+  - target:
+      kind: NetworkPolicy
       name: relay-private-infrastructure
+    patch: |-
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: relay-private-infrastructure
+
+  # Configure public Relay subdomain
+  - target:
+      kind: Ingress
+      name: relay
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: relay.shaad.site
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: relay.shaad.site

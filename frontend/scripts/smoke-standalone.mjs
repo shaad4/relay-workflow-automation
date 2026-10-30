@@ -66,6 +66,21 @@ try {
   assert.ok(ready, "standalone server started within 10 seconds");
   assert.equal((await fetch(`${origin}/ready`)).status, 200);
   assert.equal((await fetch(`${origin}/login`)).status, 200);
+  // Legal pages must render fully without cookies, authentication, or a workspace.
+  for (const [path, title] of [
+    ["/privacy", "Privacy Policy"],
+    ["/terms", "Terms of Service"],
+  ]) {
+    const response = await fetch(`${origin}${path}`, { redirect: "manual" });
+    assert.equal(response.status, 200, `${path} is public`);
+    const html = await response.text();
+    assert.ok(html.includes(title), `${path} includes its policy content`);
+    assert.ok(
+      html.includes('href="/privacy"') && html.includes('href="/terms"'),
+    );
+    assert.ok(html.includes("mailto:groveworkspace@gmail.com"));
+    assert.ok(html.includes(`https://relay.shaad.site${path}`));
+  }
   const login = await fetch(`${origin}/api/relay/auth/login`, {
     method: "POST",
     headers: { origin, "content-type": "application/json" },

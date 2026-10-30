@@ -6,7 +6,11 @@ data:
   RELAY_ENV: production
   KAFKA_BOOTSTRAP_SERVERS: kafka:9092
   COOKIE_SECURE: 'true'
-  FRONTEND_URL: https://relay.example.com
-  BACKEND_URL: https://relay.example.com/api/relay
-  GOOGLE_REDIRECT_URI: https://relay.example.com/api/relay/auth/google/callback
-  GOOGLE_GMAIL_REDIRECT_URI: https://relay.example.com/api/relay/connections/gmail/oauth/callback
+  FRONTEND_URL: https://relay.shaad.site
+  BACKEND_URL: https://relay.shaad.site/api/relay
+  GOOGLE_REDIRECT_URI: https://relay.shaad.site/api/relay/auth/google/callback
+  GOOGLE_GMAIL_REDIRECT_URI: https://relay.shaad.site/api/relay/connections/gmail/oauth/callback
+  SMTP_HOST: smtp.gmail.com
+  SMTP_PORT: "587"
+  SMTP_FROM_EMAIL: groveworkspace@gmail.com
+  SMTP_FROM_NAME: Relay

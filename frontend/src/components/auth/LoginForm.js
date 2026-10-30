@@ -1,5 +1,6 @@
 "use client";
 
+import PolicyLinks from "@/components/legal/PolicyLinks";
 import { useState } from "react";
 import { apiUrl } from "@/lib/api";
 import { useRouter } from "next/navigation";
@@ -395,6 +396,13 @@ export default function LoginForm() {
         </div>
       </form>
 
+      <div className="mt-4 space-y-2 text-center text-xs leading-5 text-[var(--text-secondary)]">
+        <p>
+          Learn how Relay handles your account information and the terms that
+          apply.
+        </p>
+        <PolicyLinks />
+      </div>
       {/* Footer Link */}
       <div className="mt-7 text-center text-[14px] text-[var(--text-tertiary)]">
         Don&apos;t have an account?{" "}
