@@ -123,4 +123,20 @@ class RelayClient:
             response.raise_for_status()
             return response.json()
 
-    
+    async def publish_workflow(
+        self,
+        workflow_id: str,
+        version: int,
+    ):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/publish/",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}"
+                },
+            )
+
+            response.raise_for_status()
+            return response.json()
+
+        

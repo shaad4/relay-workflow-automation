@@ -124,5 +124,22 @@ async def relay_validate_workflow(
         version=version,
     )
 
+@mcp.tool()
+async def relay_publish_workflow(
+    workflow_id: str,
+    version: int,
+) -> dict:
+    """Publish a validated Relay workflow after user approval."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.publish_workflow(
+        workflow_id=workflow_id,
+        version=version,
+    )
+
 if __name__ == "__main__":
     mcp.run()
