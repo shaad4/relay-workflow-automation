@@ -17,7 +17,6 @@ async def authenticate_relay_user(
             "Origin": "https://relay.shaad.site",
         },
     ) as client:
-
         login_response = await client.post(
             "/auth/login",
             json={
@@ -28,17 +27,11 @@ async def authenticate_relay_user(
 
         login_response.raise_for_status()
 
-        access_token = client.cookies.get(
-            "relay_access_token"
-        )
-        refresh_token = client.cookies.get(
-            "relay_refresh_token"
-        )
+        access_token = client.cookies.get("relay_access_token")
+        refresh_token = client.cookies.get("relay_refresh_token")
 
         if not access_token or not refresh_token:
-            raise RuntimeError(
-                "Relay login did not return authentication tokens"
-            )
+            raise RuntimeError("Relay login did not return authentication tokens")
 
         identity_response = await client.get(
             "/auth/me",
@@ -50,10 +43,8 @@ async def authenticate_relay_user(
         identity_response.raise_for_status()
         user = identity_response.json()
 
-        if not user.get("id") or not user.get("workspace_id"):
-            raise RuntimeError(
-                "Relay identity response is incomplete"
-            )
+        if not isinstance(user, dict) or not user.get("id") or not user.get("workspace_id"):
+            raise RuntimeError("Relay identity response is incomplete")
 
         return {
             "user_id": user["id"],

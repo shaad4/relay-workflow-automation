@@ -21,14 +21,8 @@ class AuthorizationStore:
         client_id: str,
         params: AuthorizationParams,
     ) -> str:
-        # Remove expired requests.
+        self.cleanup()
         now = time.time()
-
-        self.requests = {
-            key: value
-            for key, value in self.requests.items()
-            if value.expires_at > now
-        }
 
         request_id = secrets.token_urlsafe(32)
 
@@ -39,6 +33,10 @@ class AuthorizationStore:
         )
 
         return request_id
+
+    def cleanup(self):
+        now = time.time()
+        self.requests = {k: v for k, v in self.requests.items() if v.expires_at > now}
 
     def consume(self, request_id: str) -> PendingAuthorization | None:
         # Each authorization request can only be consumed once.

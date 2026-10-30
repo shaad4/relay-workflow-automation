@@ -10,6 +10,6 @@ def validate_csrf(request: Request, submitted_token: str) -> bool:
         return False
 
     return secrets.compare_digest(
-        expected_token,
-        submitted_token,
+        expected_token.encode(),
+        submitted_token.encode(),
     )

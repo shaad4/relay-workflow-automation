@@ -1,4 +1,3 @@
-
 import asyncio
 import os
 from datetime import datetime, timezone
@@ -47,9 +46,7 @@ class RelaySession:
             expires_at = payload.get("exp", 0)
 
             # Refresh 60 seconds before expiry.
-            return expires_at > (
-                datetime.now(timezone.utc).timestamp() + 60
-            )
+            return expires_at > (datetime.now(timezone.utc).timestamp() + 60)
 
         except (jwt.PyJWTError, ValueError, TypeError):
             return False
@@ -66,14 +63,10 @@ class RelaySession:
         response.raise_for_status()
 
         if not self._get_cookie("relay_access_token"):
-            raise RuntimeError(
-                "Relay login failed: access cookie missing"
-            )
+            raise RuntimeError("Relay login failed: access cookie missing")
 
     async def refresh(self):
-        refresh_token = self._get_cookie(
-            "relay_refresh_token"
-        )
+        refresh_token = self._get_cookie("relay_refresh_token")
 
         if not refresh_token:
             raise RuntimeError("Refresh token missing")
@@ -88,9 +81,7 @@ class RelaySession:
         response.raise_for_status()
 
         if not self._get_cookie("relay_access_token"):
-            raise RuntimeError(
-                "Access token missing after refresh"
-            )
+            raise RuntimeError("Access token missing after refresh")
 
     async def _ensure_authenticated(self):
         if self._access_token_valid():
@@ -138,9 +129,7 @@ class RelaySession:
                 except (httpx.HTTPError, RuntimeError):
                     await self.login()
 
-            headers["Authorization"] = (
-                f"Bearer {self._get_cookie('relay_access_token')}"
-            )
+            headers["Authorization"] = f"Bearer {self._get_cookie('relay_access_token')}"
 
             response = await self.client.request(
                 method,

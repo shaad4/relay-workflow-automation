@@ -1,4 +1,17 @@
+from urllib.parse import quote
+
 from relay_session import RelaySession
+
+
+def path_segment(value):
+    value = str(value)
+    if (
+        value in {"", ".", ".."}
+        or any(c in value for c in "/\\%?#")
+        or any(ord(c) < 32 for c in value)
+    ):
+        raise ValueError("Invalid resource identifier")
+    return quote(value, safe="")
 
 
 class RelayClient:
@@ -29,14 +42,14 @@ class RelayClient:
     async def deactivate_workflow(self, workflow_id: str):
         response = await self.session.request(
             "POST",
-            f"/workflows/{workflow_id}/deactivate/",
+            f"/workflows/{path_segment(workflow_id)}/deactivate/",
         )
         return response.json()
 
     async def delete_workflow(self, workflow_id: str):
         await self.session.request(
             "DELETE",
-            f"/workflows/{workflow_id}/",
+            f"/workflows/{path_segment(workflow_id)}/",
         )
         return {
             "success": True,
@@ -55,7 +68,7 @@ class RelayClient:
     ):
         response = await self.session.request(
             "POST",
-            f"/workflows/{workflow_id}/versions/{version}/nodes/",
+            f"/workflows/{path_segment(workflow_id)}/versions/{version}/nodes/",
             json={
                 "node_id": node_id,
                 "node_type": node_type,
@@ -75,7 +88,7 @@ class RelayClient:
     ):
         response = await self.session.request(
             "PATCH",
-            f"/workflows/{workflow_id}/versions/{version}/nodes/{node_id}/",
+            f"/workflows/{path_segment(workflow_id)}/versions/{version}/nodes/{path_segment(node_id)}/",
             json={
                 "configuration": configuration,
             },
@@ -90,7 +103,7 @@ class RelayClient:
     ):
         await self.session.request(
             "DELETE",
-            f"/workflows/{workflow_id}/versions/{version}/nodes/{node_id}/",
+            f"/workflows/{path_segment(workflow_id)}/versions/{version}/nodes/{path_segment(node_id)}/",
         )
         return {
             "success": True,
@@ -108,7 +121,7 @@ class RelayClient:
     ):
         response = await self.session.request(
             "POST",
-            f"/workflows/{workflow_id}/versions/{version}/edges/",
+            f"/workflows/{path_segment(workflow_id)}/versions/{version}/edges/",
             json={
                 "source_node_id": source_node_id,
                 "target_node_id": target_node_id,
@@ -124,7 +137,7 @@ class RelayClient:
     ):
         await self.session.request(
             "DELETE",
-            f"/workflows/{workflow_id}/versions/{version}/edges/{edge_id}/",
+            f"/workflows/{path_segment(workflow_id)}/versions/{version}/edges/{path_segment(edge_id)}/",
         )
         return {
             "success": True,
@@ -140,7 +153,7 @@ class RelayClient:
     ):
         response = await self.session.request(
             "POST",
-            f"/workflows/{workflow_id}/versions/{version}/validate/",
+            f"/workflows/{path_segment(workflow_id)}/versions/{version}/validate/",
         )
         return response.json()
 
@@ -151,7 +164,7 @@ class RelayClient:
     ):
         response = await self.session.request(
             "POST",
-            f"/workflows/{workflow_id}/versions/{version}/publish/",
+            f"/workflows/{path_segment(workflow_id)}/versions/{version}/publish/",
         )
         return response.json()
 
@@ -164,7 +177,7 @@ class RelayClient:
     ):
         response = await self.session.request(
             "POST",
-            f"/workflows/{workflow_id}/run",
+            f"/workflows/{path_segment(workflow_id)}/run",
             json={
                 "input": input_data,
             },
@@ -187,6 +200,6 @@ class RelayClient:
     async def get_execution_steps(self, execution_id: str):
         response = await self.session.request(
             "GET",
-            f"/executions/{execution_id}/steps/",
+            f"/executions/{path_segment(execution_id)}/steps/",
         )
         return response.json()

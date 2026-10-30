@@ -1,6 +1,4 @@
-
-import secrets
-from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse
@@ -29,9 +27,8 @@ def create_approval_handler(
         csrf_token = str(form.get("csrf_token", ""))
         decision = str(form.get("decision", ""))
 
-        if (
-            request.session.get("oauth_request_id") != request_id
-            or not validate_csrf(request, csrf_token)
+        if request.session.get("oauth_request_id") != request_id or not validate_csrf(
+            request, csrf_token
         ):
             return HTMLResponse(
                 "Invalid authorization session",
@@ -48,11 +45,7 @@ def create_approval_handler(
 
         login_id = request.session.get("relay_login_session")
 
-        login_session = (
-            login_store.get(login_id)
-            if login_id
-            else None
-        )
+        login_session = login_store.get(login_id) if login_id else None
 
         if login_session is None:
             return HTMLResponse(
@@ -81,10 +74,12 @@ def create_approval_handler(
         query = dict(parse_qsl(parsed.query))
 
         if decision == "deny":
-            query.update({
-                "error": "access_denied",
-                "state": pending.params.state or "",
-            })
+            query.update(
+                {
+                    "error": "access_denied",
+                    "state": pending.params.state or "",
+                }
+            )
         else:
             user_id = login_session["identity"]["user_id"]
 
@@ -92,21 +87,27 @@ def create_approval_handler(
                 client_id=pending.client_id,
                 params=pending.params,
                 user_id=user_id,
+                relay_session=login_session["relay_session"],
             )
 
-            query.update({
-                "code": code,
-                "state": pending.params.state or "",
-            })
+            query.update(
+                {
+                    "code": code,
+                    "state": pending.params.state or "",
+                }
+            )
 
-        callback_url = urlunsplit((
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            urlencode(query),
-            parsed.fragment,
-        ))
+        callback_url = urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                urlencode(query),
+                parsed.fragment,
+            )
+        )
 
+        login_store.sessions.pop(login_id, None)
         request.session.pop("oauth_request_id", None)
         request.session.pop("csrf_token", None)
         request.session.pop("relay_login_session", None)

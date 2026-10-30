@@ -30,21 +30,23 @@ def create_consent_page(store: AuthorizationStore):
         # Browser Session Binding
         # ----------------------------------------
 
-        session_request_id = request.session.get(
-            "oauth_request_id"
-        )
+        session_request_id = request.session.get("oauth_request_id")
 
         if session_request_id is None:
             request.session["oauth_request_id"] = request_id
-            request.session["csrf_token"] = (
-                secrets.token_urlsafe(32)
-            )
+            request.session["csrf_token"] = secrets.token_urlsafe(32)
 
         elif session_request_id != request_id:
-            return HTMLResponse(
-                "Another authorization request is already active",
-                status_code=400,
+            if store.get(session_request_id) is not None:
+                return HTMLResponse(
+                    "Another authorization request is already active", status_code=400
+                )
+            request.app.state.login_store.sessions.pop(
+                request.session.get("relay_login_session"), None
             )
+            request.session.clear()
+            request.session["oauth_request_id"] = request_id
+            request.session["csrf_token"] = secrets.token_urlsafe(32)
 
         csrf_token = escape(
             request.session["csrf_token"],
@@ -63,10 +65,7 @@ def create_consent_page(store: AuthorizationStore):
         client_id = escape(pending.client_id)
         scopes = pending.params.scopes or []
 
-        permissions = "".join(
-            f"<li>{escape(scope)}</li>"
-            for scope in scopes
-        )
+        permissions = "".join(f"<li>{escape(scope)}</li>" for scope in scopes)
 
         if not permissions:
             permissions = "<li>No specific permissions requested</li>"
@@ -75,17 +74,11 @@ def create_consent_page(store: AuthorizationStore):
         # Check Authenticated Relay Session
         # ----------------------------------------
 
-        login_id = request.session.get(
-            "relay_login_session"
-        )
+        login_id = request.session.get("relay_login_session")
 
         login_store = request.app.state.login_store
 
-        login_session = (
-            login_store.get(login_id)
-            if login_id
-            else None
-        )
+        login_session = login_store.get(login_id) if login_id else None
 
         # ----------------------------------------
         # Render Login or Approval Form
