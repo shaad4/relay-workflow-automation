@@ -180,6 +180,27 @@ async def relay_publish_workflow(
     )
 
 @mcp.tool()
+async def relay_deactivate_workflow(workflow_id: str) -> dict:
+    """Deactivate an existing Relay workflow."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+    return await client.deactivate_workflow(workflow_id)
+
+
+@mcp.tool()
+async def relay_delete_workflow(workflow_id: str) -> dict:
+    """Permanently delete a draft or inactive Relay workflow."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+    return await client.delete_workflow(workflow_id)
+
+@mcp.tool()
 async def relay_run_workflow(
     workflow_id: str,
     input_data: dict,

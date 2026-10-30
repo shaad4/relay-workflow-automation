@@ -181,6 +181,33 @@ class RelayClient:
             response.raise_for_status()
             return response.json()
 
+    async def deactivate_workflow(self, workflow_id: str):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{self.base_url}/workflows/{workflow_id}/deactivate/",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}"
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+
+
+    async def delete_workflow(self, workflow_id: str):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.delete(
+                f"{self.base_url}/workflows/{workflow_id}/",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}"
+                },
+            )
+            response.raise_for_status()
+
+            return {
+                "success": True,
+                "deleted_workflow_id": workflow_id,
+            }
+
 
     async def run_workflow(
         self,
