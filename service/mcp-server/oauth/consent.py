@@ -1,0 +1,102 @@
+
+import secrets
+from html import escape
+
+from starlette.requests import Request
+from starlette.responses import HTMLResponse
+
+from oauth.storage import AuthorizationStore
+
+
+def create_consent_page(store: AuthorizationStore):
+
+    async def consent_page(request: Request):
+        request_id = request.query_params.get("request_id")
+
+        if not request_id:
+            return HTMLResponse(
+                "Missing authorization request",
+                status_code=400,
+            )
+
+        pending = store.get(request_id)
+
+        if pending is None:
+            return HTMLResponse(
+                "Authorization request expired or invalid",
+                status_code=400,
+            )
+
+        # ----------------------------------------
+        # Browser Session Binding
+        # ----------------------------------------
+
+        session_request_id = request.session.get(
+            "oauth_request_id"
+        )
+
+        if session_request_id is None:
+            request.session["oauth_request_id"] = request_id
+            request.session["csrf_token"] = (
+                secrets.token_urlsafe(32)
+            )
+
+        elif session_request_id != request_id:
+            return HTMLResponse(
+                "Another authorization request is already active",
+                status_code=400,
+            )
+
+        # ----------------------------------------
+        # Prepare Consent Information
+        # ----------------------------------------
+
+        client_id = escape(pending.client_id)
+        scopes = pending.params.scopes or []
+
+        permissions = "".join(
+            f"<li>{escape(scope)}</li>"
+            for scope in scopes
+        )
+
+        if not permissions:
+            permissions = "<li>No specific permissions requested</li>"
+
+        # ----------------------------------------
+        # Render Consent Page
+        # ----------------------------------------
+
+        html = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport"
+                  content="width=device-width, initial-scale=1.0">
+            <title>Connect to Relay</title>
+        </head>
+
+        <body>
+            <h2>Connect to Relay</h2>
+
+            <p>
+                Application: <strong>{client_id}</strong>
+            </p>
+
+            <p>Requested permissions:</p>
+
+            <ul>
+                {permissions}
+            </ul>
+
+            <p>
+                Sign-in and approval will be added
+                in the next step.
+            </p>
+        </body>
+        </html>
+        """
+
+        return HTMLResponse(html)
+
+    return consent_page
