@@ -87,6 +87,25 @@ async def relay_update_node(
     )
 
 @mcp.tool()
+async def relay_delete_node(
+    workflow_id: str,
+    version: int,
+    node_id: str,
+) -> dict:
+    """Delete a node from a draft workflow. Requires user confirmation."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.delete_node(
+        workflow_id=workflow_id,
+        version=version,
+        node_id=node_id,
+    )
+
+@mcp.tool()
 async def relay_add_edge(
     workflow_id: str,
     version: int,
@@ -105,6 +124,25 @@ async def relay_add_edge(
         version=version,
         source_node_id=source_node_id,
         target_node_id=target_node_id,
+    )
+
+@mcp.tool()
+async def relay_delete_edge(
+    workflow_id: str,
+    version: int,
+    edge_id: str,
+) -> dict:
+    """Delete an edge from a draft workflow. Requires user confirmation."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.delete_edge(
+        workflow_id=workflow_id,
+        version=version,
+        edge_id=edge_id,
     )
 
 @mcp.tool()

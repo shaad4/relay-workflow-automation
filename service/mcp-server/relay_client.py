@@ -84,6 +84,27 @@ class RelayClient:
             response.raise_for_status()
             return response.json()
 
+    async def delete_node(
+        self,
+        workflow_id: str,
+        version: int,
+        node_id: str,
+    ):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.delete(
+                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/nodes/{node_id}/",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}"
+                },
+            )
+
+            response.raise_for_status()
+
+            return {
+                "success": True,
+                "deleted_node_id": node_id,
+            }
+
     async def add_edge(
         self,
         workflow_id: str,
@@ -105,6 +126,27 @@ class RelayClient:
 
             response.raise_for_status()
             return response.json()
+
+    async def delete_edge(
+        self,
+        workflow_id: str,
+        version: int,
+        edge_id: str,
+    ):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.delete(
+                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/edges/{edge_id}/",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}"
+                },
+            )
+
+            response.raise_for_status()
+
+            return {
+                "success": True,
+                "deleted_edge_id": edge_id,
+            }
 
 
     async def validate_workflow(
