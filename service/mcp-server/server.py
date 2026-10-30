@@ -65,5 +65,27 @@ async def relay_add_node(
         configuration=configuration,
     )
 
+@mcp.tool()
+async def relay_add_edge(
+    workflow_id: str,
+    version: int,
+    source_node_id: str,
+    target_node_id: str,
+) -> dict:
+    """Connect two nodes in an existing Relay draft workflow."""
+
+    client = RelayClient(
+        base_url=os.environ["RELAY_API_URL"],
+        access_token=os.environ["RELAY_ACCESS_TOKEN"],
+    )
+
+    return await client.add_edge(
+        workflow_id=workflow_id,
+        version=version,
+        source_node_id=source_node_id,
+        target_node_id=target_node_id,
+    )
+
+
 if __name__ == "__main__":
     mcp.run()

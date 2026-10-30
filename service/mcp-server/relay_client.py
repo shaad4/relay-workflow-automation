@@ -64,3 +64,25 @@ class RelayClient:
 
             response.raise_for_status()
             return response.json()
+
+    async def add_edge(
+        self,
+        workflow_id: str,
+        version: int,
+        source_node_id: str,
+        target_node_id: str,
+    ):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{self.base_url}/workflows/{workflow_id}/versions/{version}/edges/",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}"
+                },
+                json={
+                    "source_node_id": source_node_id,
+                    "target_node_id": target_node_id,
+                },
+            )
+
+            response.raise_for_status()
+            return response.json()
