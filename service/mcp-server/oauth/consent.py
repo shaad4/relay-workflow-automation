@@ -89,10 +89,41 @@ def create_consent_page(store: AuthorizationStore):
                 {permissions}
             </ul>
 
-            <p>
-                Sign-in and approval will be added
-                in the next step.
-            </p>
+            <h3>Sign in to Relay</h3>
+
+            <form method="POST" action="/oauth/login">
+                <input
+                    type="hidden"
+                    name="request_id"
+                    value="{escape(request_id, quote=True)}"
+                >
+
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{escape(request.session['csrf_token'], quote=True)}"
+                >
+
+                <label for="email">Email</label>
+                <input
+                    id="email"
+                    type="email"
+                    name="email"
+                    required
+                    autocomplete="username"
+                >
+
+                <label for="password">Password</label>
+                <input
+                    id="password"
+                    type="password"
+                    name="password"
+                    required
+                    autocomplete="current-password"
+                >
+
+                <button type="submit">Sign in</button>
+            </form>
         </body>
         </html>
         """
