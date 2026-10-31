@@ -1,4 +1,4 @@
-name: Service tests
+name: Relay CI
 
 on:
   pull_request:
