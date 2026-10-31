@@ -168,6 +168,7 @@ Manual acceptance checks:
    Escape, focus restoration, reduced motion, and clipboard-denied feedback.
 
 Setup references:
+
 - [ChatGPT official custom MCP guide](https://developers.openai.com/api/docs/guides/custom-mcp-server)
 - [Claude official remote connector guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
 

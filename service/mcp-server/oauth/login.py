@@ -1,4 +1,3 @@
-
 import os
 import secrets
 import time
@@ -21,9 +20,7 @@ class LoginStore:
     def cleanup(self):
         now = time.time()
         self.sessions = {
-            key: value
-            for key, value in self.sessions.items()
-            if value["expires_at"] > now
+            key: value for key, value in self.sessions.items() if value["expires_at"] > now
         }
 
     def save(self, identity: dict) -> str:
@@ -32,10 +29,7 @@ class LoginStore:
         session_id = secrets.token_urlsafe(32)
 
         self.sessions[session_id] = {
-            "identity": {
-                key: identity[key]
-                for key in ("user_id", "workspace_id")
-            },
+            "identity": {key: identity[key] for key in ("user_id", "workspace_id")},
             "relay_session": UserRelaySession(
                 os.environ["RELAY_API_URL"],
                 identity["access_token"],
@@ -83,10 +77,8 @@ def create_login_handler(
         email = str(form.get("email", ""))
         password = str(form.get("password", ""))
 
-        if (
-            request.session.get("oauth_request_id")
-            != request_id
-            or not validate_csrf(request, csrf_token)
+        if request.session.get("oauth_request_id") != request_id or not validate_csrf(
+            request, csrf_token
         ):
             return HTMLResponse(
                 "Invalid authorization session",
@@ -117,9 +109,7 @@ def create_login_handler(
                 status_code=401,
             )
 
-        previous_id = request.session.get(
-            "relay_login_session"
-        )
+        previous_id = request.session.get("relay_login_session")
 
         if previous_id:
             login_store.sessions.pop(previous_id, None)
@@ -127,19 +117,12 @@ def create_login_handler(
         session_id = login_store.save(identity)
 
         # Rotate CSRF token after authentication.
-        request.session["csrf_token"] = (
-            secrets.token_urlsafe(32)
-        )
+        request.session["csrf_token"] = secrets.token_urlsafe(32)
 
-        request.session["relay_login_session"] = (
-            session_id
-        )
+        request.session["relay_login_session"] = session_id
 
         return RedirectResponse(
-            url=(
-                "/oauth/consent"
-                f"?request_id={request_id}"
-            ),
+            url=(f"/oauth/consent?request_id={request_id}"),
             status_code=303,
         )
 
