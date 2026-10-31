@@ -1,0 +1,87 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: relay-mcp
+  namespace: relay
+  labels:
+    app: relay-mcp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: relay-mcp
+  template:
+    metadata:
+      labels:
+        app: relay-mcp
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: relay-mcp
+          image: relay-mcp:dev
+          imagePullPolicy: Never
+
+          ports:
+            - name: http
+              containerPort: 8001
+
+          env:
+            - name: MCP_DEPLOYMENT_MODE
+              value: "k3s"
+
+            - name: MCP_PORT
+              value: "8001"
+
+            - name: MCP_PUBLIC_ORIGIN
+              value: "https://mcp.relay.shaad.site"
+
+            - name: RELAY_API_URL
+              value: "https://relay.shaad.site/api/relay"
+
+            - name: MCP_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: relay-mcp-secret
+                  key: MCP_SESSION_SECRET
+
+            - name: MCP_TRUSTED_PROXY_IPS
+              valueFrom:
+                configMapKeyRef:
+                  name: relay-mcp-config
+                  key: MCP_TRUSTED_PROXY_IPS
+
+          resources:
+            requests:
+              cpu: 25m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi

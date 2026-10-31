@@ -1,0 +1,25 @@
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: relay-mcp
+  namespace: relay
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: mcp.relay.shaad.site
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: relay-mcp
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - mcp.relay.shaad.site
+      secretName: relay-mcp-tls
