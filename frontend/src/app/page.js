@@ -1,9 +1,9 @@
 import LandingPage from "../components/landing/LandingPage";
 
 export const metadata = {
-  title: "Relay — Put your workflows in motion",
+  title: { absolute: "Relay | Automation" },
   description:
-    "Connect your tools, bring your knowledge, and build AI-powered workflows that understand, decide, and act. All on one visual canvas.",
+    "Build intelligent workflows on a visual canvas, connect your AI assistant with MCP, and explore the Relay project on GitHub.",
 };
 
 export default function HomePage() {
