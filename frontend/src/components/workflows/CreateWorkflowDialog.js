@@ -147,7 +147,7 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-150 font-sans"
     >
       <div className="relative my-auto w-full max-w-lg overflow-hidden rounded-2xl border border-[var(--border-default)] bg-[var(--surface)] text-left shadow-2xl animate-in zoom-in-95 duration-150">
-        <div className="h-1 w-full bg-gradient-to-r from-indigo-500 via-violet-500 to-sky-400" />
+        <div className="h-1 w-full bg-[var(--border-default)]" />
         {/* Close Button */}
         <button
           type="button"
@@ -162,7 +162,7 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
         {/* Modal Header with Icon Badge */}
         <div className="border-b border-[var(--border-subtle)] px-6 pb-5 pt-6 pr-14">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-500 shadow-sm">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[var(--border-default)] bg-[var(--elevated)] text-[var(--text-primary)] shadow-sm">
               <WorkflowIcon className="h-6 w-6 stroke-[1.5]" />
             </div>
             <div>
@@ -272,7 +272,7 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }) {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-[12px] font-semibold text-white shadow-sm transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-[12px] font-semibold text-[var(--accent-foreground)] shadow-sm transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <>

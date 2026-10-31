@@ -1,0 +1,15 @@
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: relay-mcp
+  namespace: relay
+spec:
+  type: ClusterIP
+  selector:
+    app: relay-mcp
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+      protocol: TCP

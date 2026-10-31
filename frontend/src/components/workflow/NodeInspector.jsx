@@ -694,7 +694,7 @@ function WebhookConfig({
               <InspectorButton
                 type="button"
                 onClick={openEdit}
-                className="h-8 w-full rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)]"
+                className="h-8 w-full rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]"
               >
                 Edit webhook
               </InspectorButton>
@@ -758,7 +758,7 @@ function WebhookConfig({
             <InspectorButton
               type="button"
               onClick={openCreate}
-              className="h-8 w-full rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)]"
+              className="h-8 w-full rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]"
             >
               ＋ {config.setup_required ? "Set up webhook" : "Create webhook"}
             </InspectorButton>
@@ -1001,7 +1001,7 @@ function WebhookConfig({
                     type="button"
                     onClick={() => submit()}
                     disabled={saving}
-                    className="h-8 rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white"
+                    className="h-8 rounded-[6px] bg-[var(--accent)] px-3 text-[11px] font-medium text-[var(--accent-foreground)]"
                   >
                     {saving
                       ? dialog === "create"
@@ -1076,7 +1076,7 @@ function WebhookConfig({
                             );
                           }
                         }}
-                        className={`h-8 rounded-[6px] px-3 text-[11px] font-medium ${copied ? "border border-emerald-600/40 text-emerald-600 dark:text-emerald-400" : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"}`}
+                        className={`h-8 rounded-[6px] px-3 text-[11px] font-medium ${copied ? "border border-emerald-600/40 text-emerald-600 dark:text-emerald-400" : "bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]"}`}
                       >
                         {copied ? "✓ Copied" : "Copy secret"}
                       </InspectorButton>
@@ -1110,7 +1110,7 @@ function WebhookConfig({
                   <InspectorButton
                     type="button"
                     onClick={closeDialog}
-                    className="h-8 rounded-[6px] bg-[var(--accent)] px-4 text-[11px] font-medium text-white"
+                    className="h-8 rounded-[6px] bg-[var(--accent)] px-4 text-[11px] font-medium text-[var(--accent-foreground)]"
                   >
                     Done, secret saved
                   </InspectorButton>
@@ -1875,7 +1875,7 @@ function RefundConfig({ config, onChange, variableContext }) {
               type="button"
               onClick={createMockPaymentConnection}
               disabled={creatingConnection}
-              className="h-8 w-full rounded-[5px] bg-[var(--accent)] px-2 text-[10px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+              className="h-8 w-full rounded-[5px] bg-[var(--accent)] px-2 text-[10px] font-medium text-[var(--accent-foreground)] transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
             >
               {creatingConnection
                 ? "Creating connection…"
@@ -3862,7 +3862,7 @@ export default function NodeInspector({
               type="submit"
               className={`w-full h-8 px-3 rounded-[6px] font-medium text-[12px] transition-all duration-100 ease-out flex items-center justify-center gap-1.5 cursor-pointer shadow-none ${
                 hasLocalChanges
-                  ? "bg-[#4F46E5] hover:bg-[#6366F1] text-white"
+                  ? "bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-foreground)]"
                   : "bg-[var(--elevated)] hover:bg-[var(--border-subtle)] text-[var(--text-secondary)] border border-[var(--border-default)]"
               }`}
             >

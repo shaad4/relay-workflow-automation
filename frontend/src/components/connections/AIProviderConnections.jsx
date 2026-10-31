@@ -536,7 +536,7 @@ export default function AIProviderConnections() {
                       {form.provider === provider.id && (
                         <span
                           aria-hidden="true"
-                          className="absolute right-2 top-2 grid h-4 w-4 place-items-center rounded-full bg-[var(--accent)] text-[10px] text-white"
+                          className="absolute right-2 top-2 grid h-4 w-4 place-items-center rounded-full bg-[var(--accent)] text-[10px] text-[var(--accent-foreground)]"
                         >
                           ✓
                         </span>

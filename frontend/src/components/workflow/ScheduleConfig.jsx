@@ -95,7 +95,7 @@ function ScheduleFields({ config, onChange, disabled }) {
               type="button"
               aria-pressed={value.schedule_type === type}
               onClick={() => change("schedule_type", type)}
-              className={`rounded py-1.5 capitalize focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${value.schedule_type === type ? "bg-[var(--accent)] text-white" : "text-[var(--text-secondary)]"}`}
+              className={`rounded py-1.5 capitalize focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${value.schedule_type === type ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "text-[var(--text-secondary)]"}`}
             >
               {type}
             </InspectorButton>
@@ -218,7 +218,7 @@ function ScheduleFields({ config, onChange, disabled }) {
             className={`relative h-5 w-9 shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${value.enabled ? "bg-[var(--accent)]" : "bg-[var(--border-strong)]"}`}
           >
             <span
-              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${value.enabled ? "left-[18px]" : "left-0.5"}`}
+              className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${value.enabled ? "left-[18px] bg-[var(--accent-foreground)]" : "left-0.5 bg-white"}`}
             />
           </InspectorButton>
         </label>
@@ -717,7 +717,7 @@ export default function ScheduleConfig({
                           return result.schedule;
                         }, true)
                       }
-                      className={`${buttonClass} w-full bg-[var(--accent)] text-white`}
+                      className={`${buttonClass} w-full bg-[var(--accent)] text-[var(--accent-foreground)]`}
                     >
                       {pending
                         ? "Saving…"
@@ -750,7 +750,7 @@ export default function ScheduleConfig({
                           true,
                         );
                     }}
-                    className={`${buttonClass} w-full bg-[var(--accent)] text-white`}
+                    className={`${buttonClass} w-full bg-[var(--accent)] text-[var(--accent-foreground)]`}
                   >
                     {pending ? "Saving…" : "Update Schedule"}
                   </InspectorButton>

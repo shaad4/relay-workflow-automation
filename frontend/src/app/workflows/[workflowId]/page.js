@@ -2,9 +2,10 @@
 
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
-import WorkflowBuilder from "@/components/workflow/WorkflowBuilder";
+import WorkflowScreenGate from "@/components/workflow/WorkflowScreenGate";
 import { useAuth } from "@/context/AuthContext";
 import {
   getWorkflow,
@@ -12,6 +13,11 @@ import {
   getWorkflowNodes,
   getWorkflowEdges,
 } from "@/services/workflows";
+
+const WorkflowBuilder = dynamic(
+  () => import("@/components/workflow/WorkflowBuilder"),
+  { loading: () => <LoadingSkeleton /> },
+);
 
 function RefreshIcon(props) {
   return (
@@ -79,7 +85,7 @@ const LoadingSkeleton = () => (
       <div className="flex items-center gap-2">
         <div className="h-8 w-16 bg-[var(--elevated)] rounded animate-pulse" />
         <div className="h-8 w-20 bg-[var(--elevated)] rounded animate-pulse" />
-        <div className="h-8 w-20 bg-[#4F46E5]/40 rounded animate-pulse" />
+        <div className="h-8 w-20 bg-[var(--accent)]/40 rounded animate-pulse" />
       </div>
     </div>
     <div className="flex-1 flex">
@@ -126,7 +132,7 @@ const ErrorState = ({ error, onRetry }) => (
       <button
         type="button"
         onClick={onRetry}
-        className="h-9 px-4 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] text-white text-[14px] font-medium transition-colors flex items-center gap-2 cursor-pointer"
+        className="h-9 px-4 rounded-[6px] bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-foreground)] text-[14px] font-medium transition-colors flex items-center gap-2 cursor-pointer"
       >
         <RefreshIcon className="w-4 h-4 stroke-[1.5]" />
         <span>Retry</span>
@@ -138,6 +144,16 @@ const ErrorState = ({ error, onRetry }) => (
 export default function WorkflowBuilderPage({ params }) {
   const resolvedParams = use(params);
   const workflowId = resolvedParams?.workflowId ?? "";
+  return (
+    <ProtectedRoute>
+      <WorkflowScreenGate workflowId={workflowId}>
+        <DesktopWorkflowBuilderPage workflowId={workflowId} />
+      </WorkflowScreenGate>
+    </ProtectedRoute>
+  );
+}
+
+function DesktopWorkflowBuilderPage({ workflowId }) {
   const { isInitializing } = useAuth();
 
   const [workflow, setWorkflow] = useState(null);
