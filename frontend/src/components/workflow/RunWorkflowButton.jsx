@@ -157,8 +157,8 @@ export default function RunWorkflowButton({
         }}
         className={
           iconOnly
-            ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-sm transition-all hover:brightness-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
-            : "h-8 px-3 rounded-[6px] bg-[var(--accent)] text-white text-[12px] font-medium flex items-center gap-1.5 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm transition-all hover:brightness-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+            : "h-8 px-3 rounded-[6px] bg-[var(--accent)] text-[var(--accent-foreground)] text-[12px] font-medium flex items-center gap-1.5 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
         }
       >
         <svg
@@ -235,7 +235,7 @@ export default function RunWorkflowButton({
                     <button
                       type="button"
                       onClick={() => setRunOpen(false)}
-                      className="rounded-md bg-[var(--accent)] px-4 py-2 text-white"
+                      className="rounded-md bg-[var(--accent)] px-4 py-2 text-[var(--accent-foreground)]"
                     >
                       Done
                     </button>
@@ -373,7 +373,7 @@ export default function RunWorkflowButton({
                       disabled={
                         !canRun || runPending || Boolean(inputValidation.error)
                       }
-                      className="rounded-md bg-[var(--accent)] px-4 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-md bg-[var(--accent)] px-4 py-2 text-xs font-medium text-[var(--accent-foreground)] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {runPending ? "Requesting…" : "Run Workflow"}
                     </button>

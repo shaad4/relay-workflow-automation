@@ -389,7 +389,7 @@ export default function WebhooksPage() {
             </div>
             <button
               onClick={openCreate}
-              className={`${button} shrink-0 border-transparent bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]`}
+              className={`${button} shrink-0 border-transparent bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]`}
             >
               <span>＋</span>Create Webhook
             </button>
@@ -526,7 +526,7 @@ export default function WebhooksPage() {
               </p>
               <button
                 onClick={openCreate}
-                className={`${button} mt-5 border-transparent bg-[var(--accent)] text-white`}
+                className={`${button} mt-5 border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]`}
               >
                 ＋ Create Webhook
               </button>
@@ -906,7 +906,7 @@ export default function WebhooksPage() {
                   </button>
                   <button
                     disabled={saving}
-                    className={`${button} border-transparent bg-[var(--accent)] text-white`}
+                    className={`${button} border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]`}
                   >
                     {saving ? "Creating…" : "Create webhook"}
                   </button>
@@ -1024,7 +1024,7 @@ export default function WebhooksPage() {
                     </button>
                     <button
                       disabled={saving}
-                      className={`${button} border-transparent bg-[var(--accent)] text-white`}
+                      className={`${button} border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]`}
                     >
                       {saving ? "Saving…" : "Save changes"}
                     </button>
@@ -1363,7 +1363,7 @@ export default function WebhooksPage() {
                     setCredential(null);
                     refresh();
                   }}
-                  className={`${button} border-transparent bg-[var(--accent)] text-white`}
+                  className={`${button} border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]`}
                 >
                   Done
                 </button>

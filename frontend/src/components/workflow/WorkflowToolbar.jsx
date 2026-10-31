@@ -669,7 +669,7 @@ export default function WorkflowToolbar({
               <button
                 type="submit"
                 disabled={isSavingMetadata}
-                className="inline-flex h-8 items-center gap-2 rounded-lg bg-[var(--accent)] px-3 text-[12px] font-medium text-white hover:opacity-90 disabled:opacity-50"
+                className="inline-flex h-8 items-center gap-2 rounded-lg bg-[var(--accent)] px-3 text-[12px] font-medium text-[var(--accent-foreground)] hover:opacity-90 disabled:opacity-50"
               >
                 {isSavingMetadata && (
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -727,7 +727,7 @@ export default function WorkflowToolbar({
                 type="button"
                 disabled={isTogglingWorkflow}
                 onClick={toggleWorkflowStatus}
-                className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-medium text-white disabled:opacity-50 ${normalizedWorkflowStatus === "active" ? "bg-red-600 hover:bg-red-700" : "bg-[var(--accent)] hover:opacity-90"}`}
+                className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-medium disabled:opacity-50 ${normalizedWorkflowStatus === "active" ? "bg-red-600 text-white hover:bg-red-700" : "bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90"}`}
               >
                 {isTogglingWorkflow && (
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -1008,7 +1008,7 @@ export default function WorkflowToolbar({
             type="button"
             onClick={onPublish}
             disabled={isPublishing}
-            className="h-8 px-3.5 rounded-[6px] bg-[#4F46E5] hover:bg-[#6366F1] active:opacity-90 text-white font-medium text-[12px] transition-all duration-100 ease-out flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            className="h-8 px-3.5 rounded-[6px] bg-[var(--accent)] hover:bg-[var(--accent-hover)] active:opacity-90 text-[var(--accent-foreground)] font-medium text-[12px] transition-all duration-100 ease-out flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
             {isPublishing ? (
               <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
