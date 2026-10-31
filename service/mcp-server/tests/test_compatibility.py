@@ -302,7 +302,13 @@ class CompatibilityTests(unittest.IsolatedAsyncioTestCase):
             ("code_challenge", None, "A valid S256 code_challenge is required"),
             ("resource", None, "resource must exactly match this MCP endpoint"),
             ("resource", PUBLIC + "/other", "resource must exactly match this MCP endpoint"),
-            ("scope", "admin", "Requested scopes must be supported and registered"),
+            ("scope", "admin", "Requested scopes are not supported"),
+            (
+                "scope",
+                "relay:read relay:write relay:delete relay:execute",
+                "Requested scopes exceed this client registration; "
+                "register a new client with the required scopes",
+            ),
             ("response_type", None, "response_type must be code"),
         ]
         for key, value, message in cases:

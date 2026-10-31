@@ -4,10 +4,11 @@ import inspect
 from contextvars import ContextVar
 from functools import wraps
 
+from oauth.scopes import TOOL_SCOPES, InsufficientScopeError
 from workflow_builder import create_complete_workflow
 
 
-def register_tools(mcp, client_context):
+def register_tools(mcp, client_context, *, oauth_resource=None):
     current_client = ContextVar("relay_tool_client")
 
     def get_client():
@@ -16,21 +17,33 @@ def register_tools(mcp, client_context):
     def tool(fn):
         @wraps(fn)
         async def invoke(*args, **kwargs):
-            async with client_context(fn.__name__) as client:
-                binding = current_client.set(client)
-                try:
-                    result = fn(*args, **kwargs)
-                    if inspect.isawaitable(result):
-                        result = await result
+            try:
+                async with client_context(fn.__name__) as client:
+                    binding = current_client.set(client)
+                    try:
+                        result = fn(*args, **kwargs)
+                        if inspect.isawaitable(result):
+                            result = await result
 
-                    if hasattr(client, "sanitize_result"):
-                        return client.sanitize_result(result)
+                        if hasattr(client, "sanitize_result"):
+                            return client.sanitize_result(result)
 
-                    return result
-                finally:
-                    current_client.reset(binding)
+                        return result
+                    finally:
+                        current_client.reset(binding)
+            except InsufficientScopeError as error:
+                if oauth_resource is None:
+                    raise
+                # An ordinary ToolError loses the metadata ChatGPT needs to reauthorize.
+                return error.as_tool_result(oauth_resource)
 
-        mcp.tool()(invoke)
+        meta = None
+        if oauth_resource is not None:
+            scope = TOOL_SCOPES[fn.__name__]
+            # SDK 2.3 exposes extension fields through _meta. ChatGPT supports this
+            # securitySchemes mirror; stdio tools keep their existing descriptors.
+            meta = {"securitySchemes": [{"type": "oauth2", "scopes": [scope] if scope else []}]}
+        mcp.tool(meta=meta)(invoke)
         return invoke
 
     # Connection Test

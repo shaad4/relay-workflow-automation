@@ -1,4 +1,213 @@
-# ChatGPT OAuth compatibility audit
+# MCP OAuth compatibility audits
+
+## Dynamic registration scope negotiation
+
+**Current revision: regression tests added/updated but NOT RUN, as requested.**
+Earlier passing test counts below apply to the earlier revisions only. No deployment,
+live registration changes, or workflow calls were performed for this revision.
+
+### Precise failure
+
+The reported JSON is emitted by the original intersection check in
+`oauth/app.py:100-102`, before the SDK authorization handler. For the exact supplied
+request `relay:read relay:write relay:delete relay:execute`, every scope is supported.
+The failing condition is therefore at least one scope missing from the registered
+client's `scope`, not missing support in discovery. After this change, that specific
+condition is at `oauth/app.py:106-111`; unsupported/malformed scope names are separately
+rejected at `oauth/app.py:104-105` with a different static diagnostic.
+
+The old DCR configuration (`default_scopes=["relay:read"]`) caused clients omitting
+the optional registration scope field to be stored as read-only. The SDK registration
+handler applies that default, and `oauth/provider.py:80` stores the full registration
+unchanged. Explicit requests for all four valid scopes were already accepted and
+stored; there was no truncation to read-only in that path. Discovery advertises the
+same `SCOPES` list accepted by registration and authorization.
+
+The exact original ChatGPT registration request and in-memory record were not
+available. The supplied error establishes the registration mismatch for the exact
+scope string above, but does not establish whether ChatGPT omitted registration
+scope or explicitly requested a restricted list. No raw OAuth URLs, secrets, tokens,
+or live registry contents were collected. Malformed separators would instead fall
+under the new unsupported-scope diagnostic.
+
+### Minimal change and security boundaries
+
+`oauth/app.py:57-62` now defaults only **new registrations with omitted scope** to
+the supported scope list. This is a client eligibility list, not an access grant.
+[RFC 7591 section 2](https://www.rfc-editor.org/rfc/rfc7591.html#section-2) permits
+server-selected registration defaults when scope is omitted. Explicit restricted
+registrations and existing records are not expanded.
+
+`/authorize` still enforces both supported and registered scopes, and now explains
+which condition failed without echoing request data. `oauth/provider.py:85-88` still
+defaults omitted authorization scope to read-only. Login, explicit approval, PKCE,
+redirect matching, audience checks, per-tool checks and token issuance are unchanged.
+Refresh cannot grant scopes beyond the existing grant. No client-name exceptions or
+workflow/engine changes were introduced; Claude uses the same existing rules.
+
+### Reconnection and deployment
+
+ChatGPT performs DCR once per MCP connection and reuses that client, so reauthorization
+alone does not replace an old read-only registration.
+[OpenAI authentication](https://developers.openai.com/plugins/build/auth)
+
+1. Rebuild and redeploy only MCP using the commands below. Keep the existing single
+   replica/worker and `Recreate` strategy.
+2. Remove and recreate ChatGPT's custom MCP server connection to trigger fresh DCR,
+   rather than only disconnecting/reconnecting account authorization. Use endpoint
+   `https://mcp.relay.shaad.site/mcp`, OAuth, and automatic client registration.
+3. If configuring explicit registration scopes, include the scopes ChatGPT will
+   request. Its observed four-scope request needs all four registered. Omitting
+   registration scopes now also supports that request. For just listing/running,
+   configure both requests as `relay:read relay:execute` if the client allows it.
+4. Review Relay's consent page. All four requested permissions must be shown when
+   all four are requested. Approve only if those operations are wanted; declining
+   must issue no code/token. No need to supply a pre-created client secret for DCR.
+5. If the client was already registered for all requested scopes, fresh authorization
+   and consent suffice; refresh alone never expands an existing read-only grant.
+
+From the repository root (manual commands, not executed):
+
+```sh
+MCP_IMAGE="relay-mcp:dcr-scopes-$(date -u +%Y%m%d%H%M%S)"
+docker build -t "$MCP_IMAGE" service/mcp-server
+docker save -o /tmp/relay-mcp-dcr-scopes.tar "$MCP_IMAGE"
+sudo k3s ctr -n k8s.io images import /tmp/relay-mcp-dcr-scopes.tar
+sudo k3s kubectl -n relay set image deployment/relay-mcp relay-mcp="$MCP_IMAGE"
+sudo k3s kubectl -n relay rollout status deployment/relay-mcp --timeout=300s
+```
+
+Import on every eligible node first. No frontend rebuild is needed. The existing
+in-memory OAuth storage loses registrations/tokens on restart, including Claude's;
+recreate Claude's connection after the final restart as needed. This is existing
+deployment behavior, not a change to Claude's scope handling.
+
+### Added regression coverage (not executed)
+
+`tests/test_remote.py` covers omitted and explicit four-scope DCR for both synthetic
+ChatGPT and Claude clients; stored/returned scopes; all four consent labels; no token
+before login/approval; denial; exact code/token scopes; refresh; omitted authorization
+remaining read-only; forbidden refresh escalation; and unsupported registration and
+authorization scopes. The explicit read-only case also models legacy default
+registrations and checks that unauthorized requests cannot change their scope list.
+`tests/test_compatibility.py` distinguishes unsupported scopes from registered-scope
+mismatches through the combined K3s app. These are authored regressions, not a claim
+of verified runtime or live-client behavior. Static lint/format and diff checks only.
+
+## Earlier audit: tool scope negotiation (before DCR default fix)
+
+The following is historical evidence for the earlier tool-metadata change. In
+particular, its registration defaults and passing test count predate the fix above.
+
+### Root cause and evidence boundary
+
+The reported `Insufficient OAuth scope` comes from `remote_server.py:130-132`:
+the authenticated token lacks the scope in `TOOL_SCOPES`. For
+`relay_run_workflow` that is exactly `relay:execute` (`oauth/scopes.py:20`),
+not `relay:write`. This check happens before any Relay API request or execution.
+The pre-fix branch raised a plain `RelayAccessError`; it supplied no machine-readable
+authorization challenge. Remote tool registration also advertised no tool-level
+OAuth requirements. These are confirmed, reproducible scope-negotiation defects.
+
+Public production discovery was checked read-only: both documents correctly
+advertised all four supported scopes and the resource was
+`https://mcp.relay.shaad.site/mcp`. The running image was
+`relay-mcp:logo-20261031065705`. SHA-256 checks of deployed `remote_server.py`,
+`tools.py`, `oauth/app.py`, `oauth/provider.py` and `oauth/scopes.py` matched this
+checkout before the fix. Neither live token values nor the running in-memory client
+registry/authorization requests were collected. The full live granted scope sets
+and the exact point where ChatGPT omitted execution permission remain unobserved.
+
+| Client observation | Permission implied by the enforced check |
+| --- | --- |
+| ChatGPT lists workflows | Its successful listing token includes `relay:read`. |
+| ChatGPT cannot run workflows with this error | Its failing execution token lacks `relay:execute`. This does not establish every scope it has. |
+| Claude runs workflows | Its successful execution token includes `relay:execute`. |
+
+Client registrations have separate IDs and permitted scopes. There is no
+ChatGPT/Claude name-based authorization branch, audience alias or scope conversion.
+Both use the same resource and exact, case-sensitive, space-separated scope names.
+Public, secret POST and Basic clients are supported. The synthetic client profiles
+in regression tests are not claimed to be captures of either live client's requests.
+
+### Scope flow audit
+
+| Stage | Code and conclusion |
+| --- | --- |
+| Discovery | `oauth/app.py:144` builds authorization metadata from supported scopes; `remote_server.py:234-242` advertises protected-resource scopes. Live metadata is correct; supported scopes are not grants. |
+| Dynamic registration | `oauth/app.py:57-59` defaults omitted scope to `relay:read`. Explicit scopes are validated by the SDK and stored by `oauth/provider.py:58-80`. |
+| Authorization | `oauth/app.py:99-103` and `oauth/provider.py:82-96` require scopes to be supported and registered. Omitted scope grants registered read access only. Reconnecting with the same omitted/read-only scope cannot elevate access. |
+| Consent and code | `oauth/consent.py:63-77` displays the requested permissions. `oauth/approval.py` requires authenticated approval, browser binding and CSRF. `oauth/codes.py:22-36` copies those scopes into the one-use, client/PKCE/resource-bound code. |
+| Token issuance | `oauth/provider.py:102-138` issues opaque access/refresh tokens with exactly the code scopes and returns the same space-separated `scope`. No execution permission is lost here. |
+| Validation and refresh | `oauth/provider.py:140-164` checks expiry, grant, client and audience; refresh permits only a subset of granted scopes. Bearer validation remains enabled, followed by `remote_server.py:130-132` and Relay's user/workspace checks. |
+
+### Small secure fix
+
+- `tools.py:34-46`: remote descriptors now expose each tool's exact OAuth scope
+  through `_meta.securitySchemes`, derived from the same `TOOL_SCOPES` enforcement
+  map. SDK 2.3.0 supports extension metadata through `_meta`; stdio remains unchanged.
+- `oauth/scopes.py:27-58`: a specific scope-denial error produces an MCP error result
+  with `_meta["mcp/www_authenticate"]`, `error="insufficient_scope"`, the discovery
+  URL and only the missing required scope. It also explains the read-only
+  registration case without exposing credentials.
+- `remote_server.py:132`: the existing denial now uses that specific error. No scope
+  defaults, consent requirements, audiences, token rules or execution code changed.
+
+ChatGPT documents both tool security schemes and the tool-result authentication
+challenge as requirements for triggering authorization UI:
+[OpenAI authentication](https://developers.openai.com/plugins/build/auth).
+Its [reference](https://developers.openai.com/plugins/reference) documents the
+`_meta.securitySchemes` compatibility mirror. A challenge does not itself grant
+access and cannot expand a read-only client's registered scope allowlist.
+
+### Regression validation
+
+The full MCP suite passes **57 tests**. Five new integration tests exercise real
+SDK routes with synthetic client registrations and mocked Relay calls: metadata
+matches enforcement for every tool; read-only reconnects remain denied; fresh
+registration plus explicit execution consent succeeds; ChatGPT/Claude profiles
+preserve scopes through code, access and refresh tokens; reduced scopes deny
+execution; denied consent, forged tool metadata, malformed scopes and wrong audiences
+do not bypass authorization. Denied calls never reach Relay, and challenge responses
+contain no synthetic credentials. The stdio regression also asserts it gets no
+OAuth tool metadata. No live workflows were executed or modified.
+
+Run from `service/mcp-server`: `.venv/bin/python -m unittest discover -s tests -v`.
+The complete suite needs execution outside this environment's sandbox because an
+existing static-file test stalled inside it. Configured Ruff checks and formatting
+of changed Python files, plus `git diff --check`, also pass.
+
+### Deployment and existing connections — commands not executed
+
+Only rebuild/redeploy MCP; no frontend build or workflow-engine deployment is needed.
+From the repository root, use a unique image tag so the rollout cannot reuse the old
+image (the existing deployment uses pull policy `Never`):
+
+```sh
+MCP_IMAGE="relay-mcp:oauth-scopes-$(date -u +%Y%m%d%H%M%S)"
+docker build -t "$MCP_IMAGE" service/mcp-server
+docker save -o /tmp/relay-mcp-oauth-scopes.tar "$MCP_IMAGE"
+sudo k3s ctr -n k8s.io images import /tmp/relay-mcp-oauth-scopes.tar
+sudo k3s kubectl -n relay set image deployment/relay-mcp relay-mcp="$MCP_IMAGE"
+sudo k3s kubectl -n relay rollout status deployment/relay-mcp --timeout=300s
+```
+
+Import the image on every eligible node first. Preserve the single replica/worker
+and `Recreate` strategy. Restart clears the in-memory registrations and tokens for
+**both clients**, so recreate their connections after the final restart.
+
+For listing and execution, configure ChatGPT's custom MCP registration with OAuth,
+automatic client registration, and default scopes `relay:read relay:execute` in
+Advanced OAuth settings when available. These scopes must be present at registration
+and authorization, not merely in discovery. Do not add write/delete. On the Relay
+consent page verify **Publish and execute workflows** appears before approval; if it
+does not, the client has not requested execution. Refresh/reinstall the custom tool
+definitions and verify listing, then a deliberately chosen workflow run. Configure
+Claude with its required scopes through fresh consent as well. If a client cannot
+request these scopes, use its supported OAuth configuration; do not loosen server
+checks. Real client UI behavior still needs this post-deployment verification.
+
+# Earlier audit: ChatGPT OAuth request compatibility
 
 ## Findings and evidence boundary
 

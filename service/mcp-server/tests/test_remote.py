@@ -1,6 +1,7 @@
 import asyncio
 import secrets
 import time
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import test_oauth
@@ -209,6 +210,376 @@ class RemoteTests(test_oauth.OAuthTests):
                 )
                 if not allowed:
                     self.assertEqual(len(self.calls), before)
+
+    async def register_scope_profile(self, name, scopes=None, auth_method="none"):
+        """Synthetic client profiles, not captured ChatGPT/Claude credentials or traffic."""
+        body = {
+            "client_name": name,
+            "redirect_uris": [test_oauth.CALLBACK],
+            "token_endpoint_auth_method": auth_method,
+            "grant_types": ["authorization_code", "refresh_token"],
+        }
+        if scopes is not None:
+            body["scope"] = " ".join(scopes)
+        response = await self.http.post("/register", json=body)
+        self.assertEqual(response.status_code, 201)
+        registered = response.json()
+        self.client = registered["client_id"]
+        self.profile_secret = registered.get("client_secret")
+        if hasattr(self, "requested_scope"):
+            del self.requested_scope
+        return registered
+
+    async def grant_scope_profile(self, scopes=None):
+        if scopes is None:
+            if hasattr(self, "requested_scope"):
+                del self.requested_scope
+        else:
+            self.requested_scope = " ".join(scopes)
+        code = (await self.approve())["code"][0]
+        expected = scopes if scopes is not None else ["relay:read"]
+        return await self.exchange_scope_profile(code, expected)
+
+    async def exchange_scope_profile(self, code, expected):
+        self.assertEqual(self.provider.code_store.codes[code].scopes, expected)
+        auth = {"client_secret": self.profile_secret} if self.profile_secret else {}
+        response = await self.exchange(code, **auth)
+        self.assertEqual(response.status_code, 200)
+        pair = response.json()
+        self.assertEqual(pair["scope"].split(), expected)
+        access = await self.provider.load_access_token(pair["access_token"])
+        self.assertEqual(access.scopes, expected)
+        self.assertEqual(access.client_id, self.client)
+        self.assertEqual(access.resource, RESOURCE)
+        return pair
+
+    async def assert_execution_scope_challenge(self, pair):
+        before = len(self.calls)
+        response = await self.call(
+            pair["access_token"],
+            "relay_run_workflow",
+            {"workflow_id": "workflow-user-a", "input_data": {}},
+        )
+        self.assertEqual(response.status_code, 200)
+        result = response.json()["result"]
+        self.assertTrue(result["isError"])
+        self.assertEqual(len(self.calls), before, "Denied calls must not reach Relay")
+        challenge = result["_meta"]["mcp/www_authenticate"]
+        self.assertEqual(len(challenge), 1)
+        self.assertIn('error="insufficient_scope"', challenge[0])
+        self.assertIn('error_description="Authorize relay:execute to use this tool"', challenge[0])
+        self.assertIn('scope="relay:execute"', challenge[0])
+        self.assertIn(
+            f'resource_metadata="{ORIGIN}/.well-known/oauth-protected-resource/mcp"',
+            challenge[0],
+        )
+        self.assertNotIn("relay:write", response.text)
+        self.assertNotIn("relay:delete", response.text)
+        for credential in (pair["access_token"], pair["refresh_token"], self.profile_secret):
+            if credential:
+                self.assertNotIn(credential, response.text)
+        for grant in self.provider.grants.values():
+            self.assertNotIn(grant["session"].access_token, response.text)
+            self.assertNotIn(grant["session"].refresh_token, response.text)
+
+    async def test_remote_oauth_tool_metadata_matches_enforced_permissions(self):
+        token = await self.mint(["relay:read"])
+        for path in (
+            "/.well-known/oauth-authorization-server",
+            "/.well-known/oauth-protected-resource/mcp",
+        ):
+            metadata = (await self.http.get(path)).json()
+            self.assertEqual(set(metadata["scopes_supported"]), set(SCOPES))
+        response = await self.rpc("tools/list", token)
+        for tool in response.json()["result"]["tools"]:
+            scope = TOOL_SCOPES[tool["name"]]
+            self.assertEqual(
+                tool["_meta"]["securitySchemes"],
+                [{"type": "oauth2", "scopes": [scope] if scope else []}],
+            )
+
+    async def test_remote_chatgpt_read_only_reconnect_does_not_grant_execution(self):
+        # Also models legacy registrations that defaulted to read-only before this fix.
+        registered = await self.register_scope_profile("ChatGPT", ["relay:read"])
+        self.assertEqual(registered["scope"], "relay:read")
+        for _ in range(2):
+            pair = await self.grant_scope_profile()
+            result = await self.call(pair["access_token"], "relay_list_workflows")
+            self.assertFalse(result.json()["result"].get("isError", False))
+            await self.assert_execution_scope_challenge(pair)
+
+        # A challenge is not consent, nor permission to bypass client registration.
+        self.requested_scope = "relay:read relay:execute"
+        response = await self.http.get("/authorize", params=self.params())
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "invalid_scope")
+        self.assertIn("exceed this client registration", response.json()["error_description"])
+        self.assertEqual((await self.provider.get_client(self.client)).scope, "relay:read")
+        response = await self.http.post(
+            "/token",
+            data={
+                "grant_type": "refresh_token",
+                "client_id": self.client,
+                "refresh_token": pair["refresh_token"],
+                "scope": "relay:read relay:execute",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "invalid_scope")
+        await self.assert_execution_scope_challenge(pair)
+
+        # Recreating the client with the needed scopes plus fresh consent resolves it.
+        old_client = self.client
+        await self.register_scope_profile("ChatGPT", ["relay:read", "relay:execute"])
+        self.assertNotEqual(self.client, old_client)
+        authorized = await self.grant_scope_profile(["relay:read", "relay:execute"])
+        response = await self.call(
+            authorized["access_token"],
+            "relay_run_workflow",
+            {"workflow_id": "workflow-user-a", "input_data": {}},
+        )
+        self.assertFalse(response.json()["result"].get("isError", False))
+        await self.assert_execution_scope_challenge(pair)
+
+    async def test_remote_dcr_defaults_do_not_grant_or_refresh_privileges(self):
+        for name in ("ChatGPT", "Claude"):
+            with self.subTest(client=name):
+                before = set(self.provider.access_tokens)
+                registered = await self.register_scope_profile(name)
+                self.assertEqual(set(registered["scope"].split()), set(SCOPES))
+                stored = await self.provider.get_client(self.client)
+                self.assertEqual(stored.scope, registered["scope"])
+                self.assertEqual(set(self.provider.access_tokens), before)
+
+                # Eligible permissions are not issued when authorization omits scope.
+                pair = await self.grant_scope_profile()
+                await self.assert_execution_scope_challenge(pair)
+                before = set(self.provider.access_tokens)
+                self.requested_scope = "relay:read relay:write relay:delete relay:execute"
+                denied = await self.approve(decision="deny")
+                self.assertEqual(denied["error"], ["access_denied"])
+                self.assertNotIn("code", denied)
+                self.assertFalse(self.provider.code_store.codes)
+                self.assertEqual(set(self.provider.access_tokens), before)
+                response = await self.http.post(
+                    "/token",
+                    data={
+                        "grant_type": "refresh_token",
+                        "client_id": self.client,
+                        "refresh_token": pair["refresh_token"],
+                        "scope": self.requested_scope,
+                    },
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json()["error"], "invalid_scope")
+                await self.assert_execution_scope_challenge(pair)
+
+    async def test_remote_all_supported_scopes_require_consent_and_survive_refresh(self):
+        # Exact scope order observed in ChatGPT's authorization request.
+        requested = ["relay:read", "relay:write", "relay:delete", "relay:execute"]
+        for name, auth_method in (("ChatGPT", "client_secret_post"), ("Claude", "none")):
+            for registration_scopes in (None, requested):
+                with self.subTest(client=name, registration_scopes=registration_scopes):
+                    registered = await self.register_scope_profile(
+                        name, registration_scopes, auth_method
+                    )
+                    self.assertEqual(set(registered["scope"].split()), set(requested))
+                    self.assertEqual(
+                        (await self.provider.get_client(self.client)).scope, registered["scope"]
+                    )
+                    self.requested_scope = " ".join(requested)
+                    before = set(self.provider.access_tokens)
+                    form = await self.begin()
+                    page = await self.http.get(
+                        "/oauth/consent", params={"request_id": form["request_id"]}
+                    )
+                    for label in (
+                        "View workflows and execution history",
+                        "Create and modify workflows",
+                        "Delete workflows and nodes",
+                        "Publish and execute workflows",
+                    ):
+                        self.assertIn(label, page.text)
+                    self.assertFalse(self.provider.code_store.codes)
+                    self.assertEqual(set(self.provider.access_tokens), before)
+                    # Registration and a scope request cannot replace login/approval.
+                    response = await self.http.post(
+                        "/oauth/approve",
+                        data={**form, "decision": "approve"},
+                        headers={"Origin": ORIGIN},
+                    )
+                    self.assertEqual(response.status_code, 401)
+                    form = await self.login(form)
+                    self.assertFalse(self.provider.code_store.codes)
+                    self.assertEqual(set(self.provider.access_tokens), before)
+                    response = await self.http.post(
+                        "/oauth/approve",
+                        data={**form, "decision": "approve"},
+                        headers={"Origin": ORIGIN},
+                    )
+                    self.assertEqual(response.status_code, 303)
+                    code = parse_qs(urlsplit(response.headers["location"]).query)["code"][0]
+                    pair = await self.exchange_scope_profile(code, requested)
+                    auth = {"client_secret": self.profile_secret} if self.profile_secret else {}
+                    refreshed = await self.http.post(
+                        "/token",
+                        data={
+                            "grant_type": "refresh_token",
+                            "client_id": self.client,
+                            "refresh_token": pair["refresh_token"],
+                            **auth,
+                        },
+                    )
+                    self.assertEqual(refreshed.status_code, 200)
+                    self.assertEqual(refreshed.json()["scope"].split(), requested)
+                    access = await self.provider.load_access_token(refreshed.json()["access_token"])
+                    self.assertEqual(access.scopes, requested)
+                    self.assertEqual(access.resource, RESOURCE)
+                    response = await self.call(
+                        refreshed.json()["access_token"],
+                        "relay_run_workflow",
+                        {"workflow_id": "workflow-user-a", "input_data": {}},
+                    )
+                    self.assertFalse(response.json()["result"].get("isError", False))
+
+    async def test_remote_registration_and_authorization_reject_unsupported_scopes(self):
+        for invalid in ("relay:read admin", "relay:read,relay:execute", "relay:Execute"):
+            with self.subTest(scope=invalid):
+                before = set(self.provider.clients)
+                response = await self.http.post(
+                    "/register",
+                    json={
+                        "redirect_uris": [test_oauth.CALLBACK],
+                        "token_endpoint_auth_method": "none",
+                        "grant_types": ["authorization_code", "refresh_token"],
+                        "scope": invalid,
+                    },
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(set(self.provider.clients), before)
+                await self.register_scope_profile("ChatGPT")
+                self.requested_scope = invalid
+                response = await self.http.get("/authorize", params=self.params())
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json()["error"], "invalid_scope")
+                self.assertEqual(
+                    response.json()["error_description"], "Requested scopes are not supported"
+                )
+                self.assertFalse(self.provider.authorization_store.requests)
+                self.assertFalse(self.provider.access_tokens)
+
+    async def test_remote_chatgpt_and_claude_explicit_scopes_and_refresh(self):
+        client_ids = set()
+        for name, auth_method in (("ChatGPT", "client_secret_post"), ("Claude", "none")):
+            with self.subTest(client=name):
+                await self.register_scope_profile(
+                    name, ["relay:read", "relay:execute"], auth_method
+                )
+                client_ids.add(self.client)
+                # Eligible client scopes never become grants merely through registration.
+                read_pair = await self.grant_scope_profile()
+                await self.assert_execution_scope_challenge(read_pair)
+                pair = await self.grant_scope_profile(["relay:read", "relay:execute"])
+                before = len(self.calls)
+                response = await self.call(
+                    pair["access_token"],
+                    "relay_run_workflow",
+                    {
+                        "workflow_id": "workflow-user-a",
+                        "input_data": {},
+                    },
+                )
+                self.assertFalse(response.json()["result"].get("isError", False))
+                self.assertGreater(len(self.calls), before)
+                auth = {"client_secret": self.profile_secret} if self.profile_secret else {}
+                refreshed = await self.http.post(
+                    "/token",
+                    data={
+                        "grant_type": "refresh_token",
+                        "client_id": self.client,
+                        "refresh_token": pair["refresh_token"],
+                        **auth,
+                    },
+                )
+                self.assertEqual(refreshed.status_code, 200)
+                self.assertEqual(refreshed.json()["scope"], "relay:read relay:execute")
+                response = await self.call(
+                    refreshed.json()["access_token"],
+                    "relay_run_workflow",
+                    {"workflow_id": "workflow-user-a", "input_data": {}},
+                )
+                self.assertFalse(response.json()["result"].get("isError", False))
+                before = len(self.calls)
+                denied = await self.call(
+                    refreshed.json()["access_token"],
+                    "relay_delete_workflow",
+                    {
+                        "workflow_id": "workflow-user-a",
+                    },
+                )
+                self.assertTrue(denied.json()["result"]["isError"])
+                self.assertEqual(len(self.calls), before)
+                reduced = await self.http.post(
+                    "/token",
+                    data={
+                        "grant_type": "refresh_token",
+                        "client_id": self.client,
+                        "refresh_token": refreshed.json()["refresh_token"],
+                        "scope": "relay:read",
+                        **auth,
+                    },
+                )
+                self.assertEqual(reduced.status_code, 200)
+                self.assertEqual(reduced.json()["scope"], "relay:read")
+                await self.assert_execution_scope_challenge(reduced.json())
+        self.assertEqual(len(client_ids), 2)
+
+    async def test_remote_scope_upgrade_requires_consent_and_cannot_be_forged(self):
+        await self.register_scope_profile("ChatGPT", ["relay:read", "relay:execute"])
+        pair = await self.grant_scope_profile(["relay:read"])
+        self.requested_scope = "relay:read relay:execute"
+        form = await self.begin()
+        page = await self.http.get("/oauth/consent", params={"request_id": form["request_id"]})
+        self.assertIn("Publish and execute workflows", page.text)
+        self.assertNotIn("Delete workflows and nodes", page.text)
+        form = await self.login(form)
+        denied = await self.http.post(
+            "/oauth/approve", data={**form, "decision": "deny"}, headers={"Origin": ORIGIN}
+        )
+        self.assertIn("access_denied", denied.headers["location"])
+        await self.assert_execution_scope_challenge(pair)
+        before = len(self.calls)
+        forged = await self.rpc(
+            "tools/call",
+            pair["access_token"],
+            {
+                "name": "relay_run_workflow",
+                "arguments": {"workflow_id": "workflow-user-a", "input_data": {}},
+                "_meta": {"securitySchemes": [{"type": "oauth2", "scopes": SCOPES}]},
+            },
+        )
+        self.assertTrue(forged.json()["result"]["isError"])
+        self.assertEqual(len(self.calls), before)
+
+    async def test_remote_client_names_do_not_change_scope_or_audience_rules(self):
+        for name in ("ChatGPT", "Claude"):
+            with self.subTest(client=name):
+                await self.register_scope_profile(name, ["relay:read", "relay:execute"])
+                for invalid in ("relay:read,relay:execute", "relay:read relay:Execute", "admin"):
+                    self.requested_scope = invalid
+                    response = await self.http.get("/authorize", params=self.params())
+                    self.assertEqual(response.status_code, 400)
+                    self.assertEqual(response.json()["error"], "invalid_scope")
+                self.requested_scope = "relay:read relay:execute"
+                response = await self.http.get(
+                    "/authorize",
+                    params={
+                        **self.params(),
+                        "resource": "https://other.invalid/mcp",
+                    },
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json()["error"], "invalid_target")
 
     async def test_remote_two_users_workspace_and_cross_workspace_denial(self):
         first, second = await self.mint(user="user-a"), await self.mint(user="user-b")

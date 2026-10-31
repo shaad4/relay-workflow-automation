@@ -26,6 +26,7 @@ class StdioTests(unittest.TestCase):
         self.assertEqual(report["tools"], 16)
         self.assertTrue(report["hello"])
         self.assertTrue(report["contracts_match"])
+        self.assertTrue(report["no_oauth_metadata"])
 
 
 async def probe():
@@ -65,6 +66,9 @@ async def probe():
                         "tools": len(tools),
                         "hello": not hello.is_error,
                         "contracts_match": contracts(tools) == contracts(expected),
+                        "no_oauth_metadata": all(
+                            "securitySchemes" not in (tool.meta or {}) for tool in tools
+                        ),
                     }
                 )
             )

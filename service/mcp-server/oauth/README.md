@@ -27,6 +27,11 @@ provider's stores. No server was deployed as part of this batch.
 
 1. Register through `POST /register`, with canonical, exact redirect URI strings,
    `authorization_code` and optionally `refresh_token` grants, and explicit scopes from `relay:read`, `relay:write`, `relay:execute`, `relay:delete`.
+   Omitting `scope` registers all supported scopes as eligible for later requests;
+   an explicit list stays restricted. Registration does not grant user access.
+   Omitted authorization scope still defaults to read-only; other permissions
+   require an explicit request and approval. Legacy read-only registrations need
+   fresh registration before requesting more scopes; refresh cannot expand grants.
    Public clients use `token_endpoint_auth_method=none`; secret-based SDK methods
    are supported too. Redirects must use HTTPS or HTTP loopback, without fragments
    or embedded credentials. Registration is not a statement that a client is trusted.

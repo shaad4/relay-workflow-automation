@@ -15,7 +15,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.exceptions import MCPError
 from mcp.types import Icon
 from oauth.app import create_oauth_app
-from oauth.scopes import SCOPES, TOOL_SCOPES
+from oauth.scopes import SCOPES, TOOL_SCOPES, InsufficientScopeError
 from pydantic import AnyHttpUrl
 from relay_client import RelayClient
 from starlette.responses import PlainTextResponse
@@ -129,7 +129,7 @@ def remote_client_context(provider, *, relay_transport=None):
 
         scope = TOOL_SCOPES[tool_name]
         if scope and scope not in current.scopes:
-            raise RelayAccessError("Insufficient OAuth scope")
+            raise InsufficientScopeError(scope)
 
         grant = provider.grants.get(current.grant_id)
         if grant is None:
@@ -217,7 +217,11 @@ def create_remote_app(
             required_scopes=[],
         ),
     )
-    register_tools(mcp, remote_client_context(provider, relay_transport=relay_transport))
+    register_tools(
+        mcp,
+        remote_client_context(provider, relay_transport=relay_transport),
+        oauth_resource=provider.resource,
+    )
     mcp_app = mcp.streamable_http_app(
         stateless_http=True,
         json_response=True,

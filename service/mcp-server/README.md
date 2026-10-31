@@ -98,10 +98,14 @@ readiness or authorization to expose the service.
 
 ## Scopes
 
-Register and request the desired space-separated scopes explicitly. The default
-registration scope is `relay:read`; omitted authorization scope grants read only if
-registered. The previous generic `relay` scope is no longer accepted for registration
-or tool authorization. Scope reduction during refresh is supported; escalation is not.
+Register and request the desired space-separated scopes explicitly. If registration
+omits `scope`, the new client's allowed scope list contains all four supported scopes.
+This defines what it may request later; registration issues no user access token.
+An explicit registration scope (including `relay:read` alone) remains restricted
+to that list. Omitted **authorization** scope still grants read only if registered;
+additional scopes require an explicit authorization request and user consent.
+The previous generic `relay` scope is not accepted. Scope reduction during refresh
+is supported; escalation is not.
 
 | Scope | Tools |
 | --- | --- |
@@ -114,6 +118,27 @@ or tool authorization. Scope reduction during refresh is supported; escalation i
 all tools so clients can discover their contracts; permission checks run on every
 call. Scope denial is an MCP tool error; missing/invalid/expired/revoked/wrong-audience
 bearer credentials produce HTTP 401 with protected-resource discovery information.
+
+Remote tool descriptors advertise their exact required permission in
+`_meta.securitySchemes` (the extension supported by SDK 2.3.0). Denied calls return
+`isError: true` with an `_meta["mcp/www_authenticate"]` Bearer challenge naming only
+that tool's scope. This lets compatible clients, including ChatGPT, request fresh
+consent. It does not grant permission or expand a client's registered scopes.
+Local stdio descriptors do not advertise OAuth.
+
+To list and run workflows, register **and authorize** `relay:read relay:execute`.
+Do not add `relay:write` or `relay:delete` unless those operations are needed.
+For ChatGPT, configure these space-separated default scopes in the custom MCP
+server's Advanced OAuth settings when available, using automatic client registration.
+If its existing OAuth client was registered with only `relay:read`, recreate the
+custom MCP server connection to trigger new registration; reconnecting or refreshing
+that read-only registration cannot add execution permission. After this fix,
+omitting registration scopes permits subsequent requests for all advertised scopes,
+or the client can explicitly register the required list. A client already registered
+for the needed scopes only needs fresh authorization and consent. Verify the Relay consent
+page includes **Publish and execute workflows** before approving. Refresh the
+client's tool list after deployment. Claude uses the same scope and consent rules.
+See [the scope audit and deployment steps](OAUTH_COMPATIBILITY.md#dynamic-registration-scope-negotiation).
 
 ## Per-user authorization
 

@@ -54,9 +54,12 @@ def create_oauth_app(
     if len(secret) < 32:
         raise ValueError("MCP_SESSION_SECRET must contain at least 32 random characters")
     provider = provider or RelayOAuthProvider(origin + "/mcp", store)
-    options = ClientRegistrationOptions(
-        enabled=True, valid_scopes=SCOPES, default_scopes=["relay:read"]
-    )
+    # Registration scopes are the permissions a client may REQUEST, not a grant.
+    # Clients that omit this optional DCR field must be able to request the scopes
+    # advertised by discovery later. Explicit restricted registrations stay restricted.
+    # The provider still defaults omitted authorization scope to read-only, and every
+    # additional permission requires an explicit request and user consent.
+    options = ClientRegistrationOptions(enabled=True, valid_scopes=SCOPES, default_scopes=SCOPES)
     auth_handler = AuthorizationHandler(provider)
     token_handler = TokenHandler(provider, ClientAuthenticator(provider))
     registration_handler = RegistrationHandler(provider, options)
@@ -98,8 +101,14 @@ def create_oauth_app(
             return error("invalid_target", "resource must exactly match this MCP endpoint")
         if "scope" in params:
             scopes = set(params["scope"].split(" "))
-            if not scopes.issubset(set(SCOPES) & set((client.scope or "").split())):
-                return error("invalid_scope", "Requested scopes must be supported and registered")
+            if not scopes.issubset(SCOPES):
+                return error("invalid_scope", "Requested scopes are not supported")
+            if not scopes.issubset((client.scope or "").split()):
+                return error(
+                    "invalid_scope",
+                    "Requested scopes exceed this client registration; "
+                    "register a new client with the required scopes",
+                )
         return await auth_handler.handle(request)
 
     async def token(request):
