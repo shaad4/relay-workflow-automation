@@ -2,9 +2,10 @@
 
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
-import WorkflowBuilder from "@/components/workflow/WorkflowBuilder";
+import WorkflowScreenGate from "@/components/workflow/WorkflowScreenGate";
 import { useAuth } from "@/context/AuthContext";
 import {
   getWorkflow,
@@ -12,6 +13,11 @@ import {
   getWorkflowNodes,
   getWorkflowEdges,
 } from "@/services/workflows";
+
+const WorkflowBuilder = dynamic(
+  () => import("@/components/workflow/WorkflowBuilder"),
+  { loading: () => <LoadingSkeleton /> },
+);
 
 function RefreshIcon(props) {
   return (
@@ -138,6 +144,16 @@ const ErrorState = ({ error, onRetry }) => (
 export default function WorkflowBuilderPage({ params }) {
   const resolvedParams = use(params);
   const workflowId = resolvedParams?.workflowId ?? "";
+  return (
+    <ProtectedRoute>
+      <WorkflowScreenGate workflowId={workflowId}>
+        <DesktopWorkflowBuilderPage workflowId={workflowId} />
+      </WorkflowScreenGate>
+    </ProtectedRoute>
+  );
+}
+
+function DesktopWorkflowBuilderPage({ workflowId }) {
   const { isInitializing } = useAuth();
 
   const [workflow, setWorkflow] = useState(null);
