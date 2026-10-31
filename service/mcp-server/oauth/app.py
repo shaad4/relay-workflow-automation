@@ -174,7 +174,13 @@ def create_oauth_app(
             Path(__file__).parent / "static" / "relay-light.png", media_type="image/png"
         )
 
+    async def server_icon(request):
+        return FileResponse(
+            Path(__file__).parent / "static" / "relay-icon-black.png", media_type="image/png"
+        )
+
     routes += [
+        Route("/oauth/static/relay-icon-black.png", server_icon, methods=["GET", "HEAD"]),
         Route("/oauth/static/relay-light.png", logo, methods=["GET", "HEAD"]),
         Route("/oauth/static/relay.css", stylesheet, methods=["GET", "HEAD"]),
         Route("/authorize", authorize, methods=["GET", "POST"]),

@@ -13,6 +13,7 @@ from mcp.server.auth.routes import create_protected_resource_routes
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.exceptions import MCPError
+from mcp.types import Icon
 from oauth.app import create_oauth_app
 from oauth.scopes import SCOPES, TOOL_SCOPES
 from pydantic import AnyHttpUrl
@@ -199,6 +200,13 @@ def create_remote_app(
         raise ValueError("OAuth resource must exactly match the MCP endpoint")
     mcp = MCPServer(
         "Relay MCP Server",
+        icons=[
+            Icon(
+                src=origin + "/oauth/static/relay-icon-black.png",
+                mime_type="image/png",
+                sizes=["1308x1202"],
+            )
+        ],
         log_level="ERROR",
         token_verifier=ProviderTokenVerifier(provider),
         middleware=[reject_identity_arguments],

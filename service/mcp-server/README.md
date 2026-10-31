@@ -39,6 +39,19 @@ responses; initialize normally and send the SDK's required protocol/Accept heade
 No unauthenticated tool discovery or tool calls are allowed. Revocation is `/revoke`.
 See [OAuth details](oauth/README.md) for PKCE, redirect, consent, refresh and storage rules.
 
+## Server icon
+
+The HTTP MCP server advertises `oauth/static/relay-icon-black.png` in its server
+info `icons` metadata. Its URL is built from `MCP_PUBLIC_ORIGIN` plus
+`/oauth/static/relay-icon-black.png`; GET and HEAD serve the PNG without an OAuth
+token. The metadata declares the supplied image's actual dimensions, 1308×1202.
+The existing Dockerfile includes the asset through `COPY oauth/ ./oauth/`.
+
+Rebuild and redeploy the MCP server, then reconnect the client to refresh its
+server metadata. Display is controlled by the client; advertising an icon does
+not guarantee Claude will display it for a custom connector.
+See the [Python SDK icon documentation](https://py.sdk.modelcontextprotocol.io/servers/media/#icons).
+
 ## Explicit K3s deployment mode (configuration only)
 
 Local mode remains the default. Container mode must be explicitly selected:
