@@ -17,6 +17,13 @@ import {
   InspectorFieldset,
 } from "./InspectorControls";
 import ScheduleConfig from "./ScheduleConfig";
+import {
+  InspectorValidation,
+  FieldFeedback,
+  FieldRequirements,
+} from "./InspectorValidation";
+import ValidationIssue from "./ValidationIssue";
+import { contractFor, contractOutputFields } from "./workflowValidation";
 import { normalizeSchedule, scheduleNodePayload } from "./scheduleTrigger";
 import { getNodeDefinition } from "./nodeDefinitions";
 import {
@@ -107,21 +114,27 @@ function XIcon(props) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Config field components
 // ─────────────────────────────────────────────────────────────────────────────
-function FieldLabel({ children }) {
+function FieldLabel({ children, field }) {
   return (
-    <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1 uppercase tracking-wide">
-      {children}
-    </label>
+    <div data-validation-field={field} className="mb-1 space-y-1">
+      <label className="block text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide">
+        {children}
+      </label>
+      <FieldRequirements field={field} />
+    </div>
   );
 }
 
-function VariableFieldLabel({ children, picker }) {
+function VariableFieldLabel({ children, picker, field }) {
   return (
-    <div className="mb-1 flex items-center justify-between gap-2">
-      <label className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-        {children}
-      </label>
-      {picker}
+    <div data-validation-field={field} className="mb-1 space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+          {children}
+        </label>
+        {picker}
+      </div>
+      <FieldRequirements field={field} />
     </div>
   );
 }
@@ -1422,7 +1435,7 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
         )}
       </section>
       <div>
-        <FieldLabel>Method</FieldLabel>
+        <FieldLabel field="method">Method</FieldLabel>
         <SelectInput
           value={config.method}
           onChange={(v) => onChange("method", v)}
@@ -1434,9 +1447,11 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
             { value: "DELETE", label: "DELETE" },
           ]}
         />
+        <FieldFeedback field="method" errorsOnly />
       </div>
       <div>
         <VariableFieldLabel
+          field="url"
           picker={pickerFor(
             "url",
             () =>
@@ -1482,6 +1497,7 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
           mono
           prefix={selectedConnection ? "/" : ""}
         />
+        <FieldFeedback field="url" errorsOnly />
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
           {selectedConnection
             ? "The saved connection supplies the base URL and authentication."
@@ -1489,7 +1505,7 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
         </p>
       </div>
       <div>
-        <FieldLabel>Timeout (seconds)</FieldLabel>
+        <FieldLabel field="timeout">Timeout (seconds)</FieldLabel>
         <InspectorInput
           type="number"
           aria-label="Timeout (seconds)"
@@ -1509,6 +1525,7 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
           aria-describedby={`http-timeout-help${timeoutError ? " http-timeout-error" : ""}`}
           className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none transition-colors"
         />
+        <FieldFeedback field="timeout" errorsOnly />
         <p
           id="http-timeout-help"
           className="mt-1 text-[10px] text-[var(--text-tertiary)]"
@@ -1526,7 +1543,7 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
         )}
       </div>
       <div>
-        <VariableFieldLabel picker={pickerFor("headers")}>
+        <VariableFieldLabel field="headers" picker={pickerFor("headers")}>
           Additional headers
         </VariableFieldLabel>
         <TextareaInput
@@ -1536,13 +1553,16 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
           mono
           variables
         />
+        <FieldFeedback field="headers" errorsOnly />
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
           One per line: Name: Value. Connection authentication is added
           separately.
         </p>
       </div>
       <div>
-        <VariableFieldLabel picker={pickerFor("body")}>Body</VariableFieldLabel>
+        <VariableFieldLabel field="body" picker={pickerFor("body")}>
+          Body
+        </VariableFieldLabel>
         <TextareaInput
           value={config.body}
           onChange={(v) => onChange("body", v)}
@@ -1550,6 +1570,7 @@ function HttpRequestConfig({ config, onChange, variableContext }) {
           mono
           variables
         />
+        <FieldFeedback field="body" errorsOnly />
       </div>
     </div>
   );
@@ -1689,7 +1710,7 @@ function EmailConfig({ config, onChange, variableContext }) {
         )}
       </section>
       <div>
-        <VariableFieldLabel picker={pickerFor("to")}>
+        <VariableFieldLabel field="to" picker={pickerFor("to")}>
           To Email
         </VariableFieldLabel>
         <TextInput
@@ -1697,9 +1718,10 @@ function EmailConfig({ config, onChange, variableContext }) {
           onChange={(v) => onChange("to", v)}
           variables
         />
+        <FieldFeedback field="to" errorsOnly />
       </div>
       <div>
-        <VariableFieldLabel picker={pickerFor("subject")}>
+        <VariableFieldLabel field="subject" picker={pickerFor("subject")}>
           Subject
         </VariableFieldLabel>
         <TextInput
@@ -1707,6 +1729,7 @@ function EmailConfig({ config, onChange, variableContext }) {
           onChange={(v) => onChange("subject", v)}
           variables
         />
+        <FieldFeedback field="subject" errorsOnly />
       </div>
       <fieldset>
         <legend className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
@@ -1738,7 +1761,7 @@ function EmailConfig({ config, onChange, variableContext }) {
         </div>
       </fieldset>
       <div>
-        <VariableFieldLabel picker={pickerFor("body")}>
+        <VariableFieldLabel field="body" picker={pickerFor("body")}>
           Message Body
         </VariableFieldLabel>
         <TextareaInput
@@ -1747,6 +1770,7 @@ function EmailConfig({ config, onChange, variableContext }) {
           rows={3}
           variables
         />
+        <FieldFeedback field="body" errorsOnly />
       </div>
     </div>
   );
@@ -1919,7 +1943,7 @@ function RefundConfig({ config, onChange, variableContext }) {
         )}
       </section>
       <div>
-        <VariableFieldLabel picker={pickerFor("payment_id")}>
+        <VariableFieldLabel field="payment_id" picker={pickerFor("payment_id")}>
           Payment ID
         </VariableFieldLabel>
         <TextInput
@@ -1928,9 +1952,10 @@ function RefundConfig({ config, onChange, variableContext }) {
           variables
           mono
         />
+        <FieldFeedback field="payment_id" errorsOnly />
       </div>
       <div>
-        <VariableFieldLabel picker={pickerFor("amount")}>
+        <VariableFieldLabel field="amount" picker={pickerFor("amount")}>
           Amount
         </VariableFieldLabel>
         <TextInput
@@ -1939,12 +1964,13 @@ function RefundConfig({ config, onChange, variableContext }) {
           variables
           mono
         />
+        <FieldFeedback field="amount" errorsOnly />
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
           Enter the refund amount, or insert a value from a previous node.
         </p>
       </div>
       <div>
-        <VariableFieldLabel picker={pickerFor("reason")}>
+        <VariableFieldLabel field="reason" picker={pickerFor("reason")}>
           Reason
         </VariableFieldLabel>
         <TextareaInput
@@ -1953,6 +1979,7 @@ function RefundConfig({ config, onChange, variableContext }) {
           rows={2}
           variables
         />
+        <FieldFeedback field="reason" errorsOnly />
       </div>
     </div>
   );
@@ -1992,7 +2019,7 @@ function DecisionModels({
   const unavailable = value && !result.items.some((item) => item.id === value);
   return (
     <div className="space-y-1.5">
-      <FieldLabel>Model</FieldLabel>
+      <FieldLabel field="model">Model</FieldLabel>
       {connectionId && active && result.status === "loading" ? (
         <div
           role="status"
@@ -2021,6 +2048,7 @@ function DecisionModels({
           ))}
         </InspectorSelect>
       )}
+      <FieldFeedback field="model" errorsOnly />
       {result.status === "error" && active && (
         <p role="alert" className="text-[10px] text-red-500">
           {result.error}{" "}
@@ -2105,7 +2133,7 @@ function AIDecisionConfig({
     ),
   ];
   const errorFor = (field) =>
-    errors
+    (variableContext.validationReady ? [] : errors)
       .filter((error) => error.field === field)
       .map((error, index) => (
         <p
@@ -2174,7 +2202,7 @@ function AIDecisionConfig({
       )}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <FieldLabel>AI Provider Connection</FieldLabel>
+          <FieldLabel field="connection_id">AI Provider Connection</FieldLabel>
           <Link
             href="/connections?section=ai"
             target="_blank"
@@ -2219,6 +2247,7 @@ function AIDecisionConfig({
             ))}
           </InspectorSelect>
         )}
+        <FieldFeedback field="connection_id" errorsOnly />
         {connections.status === "error" && (
           <p role="alert" className="text-[10px] text-red-500">
             {connections.error}
@@ -2274,6 +2303,7 @@ function AIDecisionConfig({
       </section>
       <section className={sectionClass}>
         <VariableFieldLabel
+          field="instructions"
           picker={
             !isReadOnly && (
               <VariablePicker
@@ -2301,6 +2331,7 @@ function AIDecisionConfig({
           aria-label="AI instructions"
           placeholder="Describe what to evaluate, how to choose a decision, and what to explain."
         />
+        <FieldFeedback field="instructions" errorsOnly />
         <div className="flex justify-between text-[10px] text-[var(--text-tertiary)]">
           <span>Required · Be specific about your criteria</span>
           <span>
@@ -2318,7 +2349,7 @@ function AIDecisionConfig({
       </section>
       <section className={sectionClass}>
         <div className="flex items-center justify-between">
-          <FieldLabel>Input Mappings</FieldLabel>
+          <FieldLabel field="input_mappings">Input Mappings</FieldLabel>
           <InspectorButton
             type="button"
             className={smallButton}
@@ -2436,10 +2467,12 @@ function AIDecisionConfig({
             {mappingError}
           </p>
         )}
+        <FieldFeedback field="input_mappings" errorsOnly />
         {errorFor("input_mappings")}
       </section>
       <section className={sectionClass}>
         <VariableFieldLabel
+          field="rag_context"
           picker={
             !isReadOnly && (
               <VariablePicker
@@ -2468,6 +2501,7 @@ function AIDecisionConfig({
           variables
           aria-label="RAG Knowledge Context"
         />
+        <FieldFeedback field="rag_context" errorsOnly />
         <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
           Optional reference knowledge, separate from your inputs. Insert
           context from an upstream RAG Search step. Maximum 2,000 characters.
@@ -2476,7 +2510,7 @@ function AIDecisionConfig({
       </section>
       <section className={sectionClass}>
         <div className="flex items-center justify-between">
-          <FieldLabel>Allowed Decisions</FieldLabel>
+          <FieldLabel field="allowed_decisions">Allowed Decisions</FieldLabel>
           <span className="text-[10px] text-[var(--text-tertiary)]">
             {decisions.length} / 20
           </span>
@@ -2539,6 +2573,7 @@ function AIDecisionConfig({
         >
           ＋ Add decision
         </InspectorButton>
+        <FieldFeedback field="allowed_decisions" errorsOnly />
         {errorFor("allowed_decisions")}
         <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
           Connect a Condition node after this step and choose its decision
@@ -2546,7 +2581,9 @@ function AIDecisionConfig({
         </p>
       </section>
       <section className={sectionClass}>
-        <FieldLabel>Validation Failure Behavior</FieldLabel>
+        <FieldLabel field="on_validation_failure">
+          Validation Failure Behavior
+        </FieldLabel>
         <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--elevated)] p-3">
           <p className="text-[11px] font-medium">Stop workflow execution</p>
           <p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">
@@ -2554,6 +2591,7 @@ function AIDecisionConfig({
             step. Downstream actions do not run.
           </p>
         </div>
+        <FieldFeedback field="on_validation_failure" errorsOnly />
       </section>
       <details className={sectionClass}>
         <summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)]">
@@ -2609,6 +2647,9 @@ function AIConfig({ config, onChange, variableContext, isReadOnly }) {
   const selected = connections.items.find(
     (item) => item.id === config.connection_id,
   );
+  const dynamicConnection = /^\{\{[\s\S]*\}\}$/.test(
+    config.connection_id || "",
+  );
   const active = selected?.status === "active";
   const missing = config.connection_id && !selected;
   const errors = [
@@ -2621,7 +2662,7 @@ function AIConfig({ config, onChange, variableContext, isReadOnly }) {
     ),
   ];
   const errorFor = (field) =>
-    errors
+    (variableContext.validationReady ? [] : errors)
       .filter((error) => error.field === field)
       .map((error, index) => (
         <p
@@ -2642,7 +2683,7 @@ function AIConfig({ config, onChange, variableContext, isReadOnly }) {
       </p>
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <FieldLabel>AI Provider Connection</FieldLabel>
+          <FieldLabel field="connection_id">AI Provider Connection</FieldLabel>
           <Link
             href="/connections?section=ai"
             target="_blank"
@@ -2672,7 +2713,8 @@ function AIConfig({ config, onChange, variableContext, isReadOnly }) {
             <option value="">Choose a connection</option>
             {missing && (
               <option value={config.connection_id} disabled>
-                Unavailable: {config.connection_id}
+                {dynamicConnection ? "From expression" : "Unavailable"}:{" "}
+                {config.connection_id}
               </option>
             )}
             {connections.items.map((item) => (
@@ -2689,6 +2731,7 @@ function AIConfig({ config, onChange, variableContext, isReadOnly }) {
             ))}
           </InspectorSelect>
         )}
+        <FieldFeedback field="connection_id" errorsOnly />
         {connections.status === "error" && (
           <p role="alert" className="text-[10px] text-red-500">
             {connections.error}
@@ -2720,29 +2763,48 @@ function AIConfig({ config, onChange, variableContext, isReadOnly }) {
             </Link>
           </p>
         )}
-        {connections.status === "ready" && config.connection_id && !active && (
-          <p
-            role="alert"
-            className="text-[10px] text-amber-600 dark:text-amber-400"
-          >
-            This connection is inactive or unavailable. Its saved ID is
-            preserved; choose an active connection before publishing.
-          </p>
-        )}
+        {connections.status === "ready" &&
+          config.connection_id &&
+          !active &&
+          !dynamicConnection && (
+            <p
+              role="alert"
+              className="text-[10px] text-amber-600 dark:text-amber-400"
+            >
+              This connection is inactive or unavailable. Its saved ID is
+              preserved; choose an active connection before publishing.
+            </p>
+          )}
         {errorFor("connection_id")}
-        <DecisionModels
-          key={`${config.connection_id}:${active}`}
-          connectionId={config.connection_id}
-          active={active}
-          value={config.model}
-          onChange={onChange}
-          isReadOnly={isReadOnly}
-          guidance="Choose a model that supports text generation. Catalog availability can change."
-        />
+        {dynamicConnection ? (
+          <div>
+            <FieldLabel field="model">Model</FieldLabel>
+            <TextInput
+              value={config.model}
+              onChange={(value) => onChange("model", value)}
+              ariaLabel="AI model"
+            />
+            <FieldFeedback field="model" errorsOnly />
+            <p className="text-[10px] text-[var(--text-tertiary)]">
+              The provider connection is resolved when this workflow runs. Enter
+              a model supported by that connection.
+            </p>
+          </div>
+        ) : (
+          <DecisionModels
+            key={`${config.connection_id}:${active}`}
+            connectionId={config.connection_id}
+            active={active}
+            value={config.model}
+            onChange={onChange}
+            isReadOnly={isReadOnly}
+            guidance="Choose a model that supports text generation. Catalog availability can change."
+          />
+        )}
         {errorFor("model")}
       </section>
       <section className={sectionClass}>
-        <FieldLabel>Instructions</FieldLabel>
+        <FieldLabel field="instructions">Instructions</FieldLabel>
         <TextareaInput
           value={
             typeof config.instructions === "string" ? config.instructions : ""
@@ -2752,13 +2814,15 @@ function AIConfig({ config, onChange, variableContext, isReadOnly }) {
           aria-label="AI Generate instructions"
           placeholder="Write a helpful, concise response."
         />
+        <FieldFeedback field="instructions" errorsOnly />
         <p className="text-[10px] text-[var(--text-tertiary)]">
-          Optional · Up to 10,000 characters.
+          Optional instructions for the AI provider.
         </p>
         {errorFor("instructions")}
       </section>
       <section className={sectionClass}>
         <VariableFieldLabel
+          field="prompt"
           picker={
             !isReadOnly && (
               <VariablePicker
@@ -2782,14 +2846,15 @@ function AIConfig({ config, onChange, variableContext, isReadOnly }) {
           aria-label="AI Generate prompt"
           placeholder="Write a response to {{trigger.data.message}}"
         />
+        <FieldFeedback field="prompt" errorsOnly />
         <p className="text-[10px] text-[var(--text-tertiary)]">
-          Required · Up to 10,000 characters. Use variables from the trigger or
-          earlier nodes.
+          Use variables from the trigger or earlier nodes.
         </p>
         {errorFor("prompt")}
       </section>
       <section className={sectionClass}>
         <VariableFieldLabel
+          field="rag_context"
           picker={
             !isReadOnly && (
               <VariablePicker
@@ -2818,9 +2883,9 @@ function AIConfig({ config, onChange, variableContext, isReadOnly }) {
           mono
           aria-label="AI Generate RAG Knowledge Context"
         />
+        <FieldFeedback field="rag_context" errorsOnly />
         <p className="text-[10px] leading-4 text-[var(--text-tertiary)]">
-          Optional reference knowledge from an upstream RAG Search node. Up to
-          2,000 characters.
+          Optional reference knowledge from an upstream RAG Search node.
         </p>
         {errorFor("rag_context")}
       </section>
@@ -2828,7 +2893,12 @@ function AIConfig({ config, onChange, variableContext, isReadOnly }) {
         <summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)]">
           Output information
         </summary>
-        {["content", "model", "input_tokens", "output_tokens"].map((field) => (
+        {(contractFor(variableContext.nodeCatalog, "ai.generate")
+          ? contractOutputFields(
+              contractFor(variableContext.nodeCatalog, "ai.generate"),
+            )
+          : ["content", "model", "input_tokens", "output_tokens"]
+        ).map((field) => (
           <code
             key={field}
             className="block select-text break-all rounded border border-[var(--border-subtle)] bg-[var(--input-bg)] p-2 text-[10px] text-[var(--text-secondary)]"
@@ -2895,7 +2965,7 @@ function RAGConfig({
     errors.knowledge_base_id ||=
       "This knowledge base is unavailable. Choose another knowledge base.";
   const errorFor = (field) =>
-    errors[field] && (
+    (variableContext.validationReady ? [] : errors)[field] && (
       <p
         id={`rag-${field}-error`}
         role="alert"
@@ -2924,7 +2994,7 @@ function RAGConfig({
         Retrieve relevant knowledge from uploaded company documents.
       </p>
       <div>
-        <FieldLabel>Knowledge Base</FieldLabel>
+        <FieldLabel field="knowledge_base_id">Knowledge Base</FieldLabel>
         <SelectInput
           value={selectedValue}
           onChange={(value) => onChange("knowledge_base_id", value)}
@@ -2932,6 +3002,7 @@ function RAGConfig({
           disabled={isReadOnly || loading || loadError}
           {...accessibility("knowledge_base_id", "Knowledge base")}
         />
+        <FieldFeedback field="knowledge_base_id" errorsOnly />
         {loading && (
           <p
             role="status"
@@ -2974,6 +3045,7 @@ function RAGConfig({
       </div>
       <div>
         <VariableFieldLabel
+          field="query"
           picker={
             !isReadOnly && (
               <VariablePicker
@@ -3000,13 +3072,14 @@ function RAGConfig({
           disabled={isReadOnly}
           {...accessibility("query", "Search query")}
         />
+        <FieldFeedback field="query" errorsOnly />
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
           Use text, upstream variables, or both. Maximum 2,000 characters.
         </p>
         {errorFor("query")}
       </div>
       <div>
-        <FieldLabel>Top Results</FieldLabel>
+        <FieldLabel field="top_k">Top Results</FieldLabel>
         <InspectorInput
           type="number"
           min="1"
@@ -3025,6 +3098,7 @@ function RAGConfig({
           {...accessibility("top_k", "Top results")}
           className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none font-mono"
         />
+        <FieldFeedback field="top_k" errorsOnly />
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
           Retrieve between 1 and 20 chunks.
         </p>
@@ -3154,6 +3228,7 @@ function ConditionConfig({
       ) : (
         <div>
           <VariableFieldLabel
+            field="value"
             picker={
               !isReadOnly && (
                 <VariablePicker
@@ -3174,6 +3249,7 @@ function ConditionConfig({
             variables
             aria-label="Value to Evaluate"
           />
+          <FieldFeedback field="value" errorsOnly />
           <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">
             At runtime, this value selects one outgoing edge whose label matches
             exactly, including letter case. An unmatched value stops execution.
@@ -3210,7 +3286,7 @@ function HumanApprovalConfig({
   return (
     <div className="space-y-3">
       <div>
-        <VariableFieldLabel picker={picker}>
+        <VariableFieldLabel field="message" picker={picker}>
           Approval Message
         </VariableFieldLabel>
         <TextareaInput
@@ -3221,6 +3297,7 @@ function HumanApprovalConfig({
           placeholder="Please review and approve this request."
           disabled={isReadOnly}
         />
+        <FieldFeedback field="message" errorsOnly />
         {errors.message && (
           <p role="alert" className="mt-1 text-[10px] text-red-500">
             {errors.message}
@@ -3228,7 +3305,7 @@ function HumanApprovalConfig({
         )}
       </div>
       <div>
-        <FieldLabel>Timeout</FieldLabel>
+        <FieldLabel field="timeout_minutes">Timeout</FieldLabel>
         <InspectorInput
           type="number"
           min="1"
@@ -3244,6 +3321,7 @@ function HumanApprovalConfig({
           disabled={isReadOnly}
           className="w-full h-8 px-2.5 text-[12px] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-[6px] border border-[var(--border-default)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)] focus:outline-none disabled:opacity-60"
         />
+        <FieldFeedback field="timeout_minutes" errorsOnly />
         <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
           Automatically handle the approval if no decision is made within this
           time.
@@ -3276,7 +3354,24 @@ export default function NodeInspector({
   workflowEdges = [],
   onSelectEdge,
   onEdgeConditionChange,
+  nodeCatalog,
+  validationIssues = [],
+  validationPending = false,
+  validationFocus,
 }) {
+  const inspectorRef = useRef(null);
+  useEffect(() => {
+    if (validationFocus?.nodeId !== selectedNode?.id) return;
+    const field = validationFocus?.field?.split(/[.\[]/)[0];
+    const target = [
+      ...(inspectorRef.current?.querySelectorAll("[data-validation-field]") ??
+        []),
+    ].find((element) => element.dataset.validationField === field);
+    target?.scrollIntoView({ block: "center", behavior: "auto" });
+    target?.parentElement
+      ?.querySelector("input, textarea, select")
+      ?.focus({ preventScroll: true });
+  }, [validationFocus, selectedNode?.id]);
   const { user } = useAuth();
   const knowledgeBaseCacheRef = useMemo(
     () => ({ current: null, scope: [user?.id, workflowId, workflowVersionId] }),
@@ -3288,7 +3383,6 @@ export default function NodeInspector({
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const [webhookGuideOpen, setWebhookGuideOpen] = useState(false);
   const [approvalErrors, setApprovalErrors] = useState({});
-  const [configurationErrors, setConfigurationErrors] = useState([]);
 
   const [draftScope, setDraftScope] = useState(null);
   const scopeKey = JSON.stringify([
@@ -3319,12 +3413,10 @@ export default function NodeInspector({
       setFormData(selectedConfig);
       setHasLocalChanges(false);
       setApprovalErrors({});
-      setConfigurationErrors([]);
     } else {
       setNodeName("");
       setFormData({});
       setHasLocalChanges(false);
-      setConfigurationErrors([]);
     }
   }
   useEffect(() => {
@@ -3360,7 +3452,13 @@ export default function NodeInspector({
 
   const typeId = selectedNode.data?.typeId ?? "custom";
   const def = getNodeDefinition(typeId);
+  const contract = contractFor(nodeCatalog, typeId);
+  const nodeIssues = validationIssues.filter(
+    (issue) => issue.nodeId === (selectedNode.data?.nodeId ?? selectedNode.id),
+  );
   const variableContext = {
+    nodeCatalog,
+    validationReady: !validationPending,
     nodes: workflowNodes,
     edges: workflowEdges,
     currentNode: selectedNode,
@@ -3382,28 +3480,18 @@ export default function NodeInspector({
     if (typeId === "ai.rag_search") {
       if (field === "knowledge_base_id") delete nextConfig.knowledge_base;
       nextConfig = normalizeRAGConfiguration(nextConfig);
-      onUpdateNode?.(selectedNode.id, { config: nextConfig });
     }
-    if (
-      typeId === "ai.decision" ||
-      typeId === "ai.generate" ||
-      typeId === "logic.condition" ||
-      typeId === "trigger.schedule"
-    )
-      onUpdateNode?.(selectedNode.id, {
-        config:
-          typeId === "trigger.schedule"
-            ? scheduleNodePayload(nextConfig)
-            : nextConfig,
-      });
+    if (typeId === "human.approval" && !nextConfig.approver_user_id && user?.id)
+      nextConfig.approver_user_id = user.id;
+    onUpdateNode?.(selectedNode.id, {
+      config:
+        typeId === "trigger.schedule"
+          ? scheduleNodePayload(nextConfig)
+          : nextConfig,
+    });
     formDataRef.current = nextConfig;
     setFormData(nextConfig);
     setHasLocalChanges(true);
-    setConfigurationErrors((previous) =>
-      typeId === "logic.condition" && typeof field === "object"
-        ? []
-        : previous.filter((error) => error.field !== field),
-    );
   };
 
   const handleSave = (e) => {
@@ -3418,39 +3506,6 @@ export default function NodeInspector({
         : typeId === "ai.decision"
           ? (selectedNode.data?.config ?? {})
           : formData;
-    const nextConfigurationErrors = validateNodeConfiguration(
-      typeId,
-      configToValidate,
-    );
-    if (typeId === "ai.decision")
-      nextConfigurationErrors.push(
-        ...validateDecisionReferences(
-          configToValidate,
-          workflowNodes,
-          workflowEdges,
-          selectedNode.id,
-        ),
-      );
-    if (typeId === "ai.generate")
-      nextConfigurationErrors.push(
-        ...validateGenerateReferences(
-          configToValidate,
-          workflowNodes,
-          workflowEdges,
-          selectedNode.id,
-        ),
-      );
-    if (typeId === "logic.condition")
-      nextConfigurationErrors.push(
-        ...validateConditionReferences(
-          configToValidate,
-          workflowNodes,
-          workflowEdges,
-          selectedNode.id,
-        ),
-      );
-    setConfigurationErrors(nextConfigurationErrors);
-    if (nextConfigurationErrors.length) return;
     if (typeId === "human.approval") {
       const timeout = formData.timeout_minutes;
       const nextErrors = {};
@@ -3543,9 +3598,6 @@ export default function NodeInspector({
               }
               setFormData(nextConfig);
               setHasLocalChanges(true);
-              setConfigurationErrors((previous) =>
-                previous.filter((error) => error.field !== "webhook_id"),
-              );
               if (onUpdateNode)
                 onUpdateNode(selectedNode.id, { config: nextConfig });
             }}
@@ -3689,6 +3741,7 @@ export default function NodeInspector({
 
   return (
     <div
+      ref={inspectorRef}
       className={`w-80 bg-[var(--surface)] border-l border-[var(--border-subtle)] flex flex-col h-full min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain select-text shrink-0 font-sans z-20 animate-in slide-in-from-right duration-150 ${className}`}
     >
       {/* Header */}
@@ -3774,20 +3827,33 @@ export default function NodeInspector({
       {/* Config form */}
       <form onSubmit={handleSave} className="shrink-0 p-3">
         <div className="space-y-3">
-          {configurationErrors.length > 0 && (
-            <div
-              role="alert"
-              className="rounded-[6px] border border-red-500/25 bg-red-500/5 p-2.5"
+          {validationPending && (
+            <p
+              role="status"
+              className="text-[11px] text-[var(--text-tertiary)]"
             >
-              <p className="text-[10px] font-semibold text-red-500">
-                Complete the required settings before applying this node:
-              </p>
-              <ul className="mt-1 list-inside list-disc space-y-0.5 text-[10px] text-red-500">
-                {configurationErrors.map((error) => (
-                  <li key={error.field}>{error.message}</li>
+              Checking workflow…
+            </p>
+          )}
+          {validationIssues
+            .filter((issue) => !issue.nodeId)
+            .map((issue, index) => (
+              <div key={index} className="text-[11px] text-amber-600">
+                <ValidationIssue issue={issue} />
+              </div>
+            ))}
+          {nodeIssues.length > 0 && (
+            <details className="rounded border border-red-500/25 p-2 text-red-600 dark:text-red-400">
+              <summary className="cursor-pointer text-[11px]">
+                {nodeIssues.length} validation{" "}
+                {nodeIssues.length === 1 ? "issue" : "issues"}
+              </summary>
+              <div className="mt-2 space-y-2">
+                {nodeIssues.map((issue, index) => (
+                  <ValidationIssue key={index} issue={issue} />
                 ))}
-              </ul>
-            </div>
+              </div>
+            </details>
           )}
           {/* Node label */}
           {typeId !== "trigger.webhook" && (
@@ -3818,7 +3884,14 @@ export default function NodeInspector({
             <InspectorReadOnly.Provider
               value={isReadOnly && typeId !== "trigger.webhook"}
             >
-              {renderConfigPanel()}
+              <InspectorValidation.Provider
+                value={{
+                  issues: nodeIssues,
+                  schema: contract?.configuration_schema,
+                }}
+              >
+                {renderConfigPanel()}
+              </InspectorValidation.Provider>
             </InspectorReadOnly.Provider>
           </div>
         </div>

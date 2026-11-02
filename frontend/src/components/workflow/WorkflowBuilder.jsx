@@ -23,13 +23,18 @@ import WorkflowExecutionPanel from "./WorkflowExecutionPanel";
 import NodeInspector from "./NodeInspector";
 import BranchConditionField from "./BranchConditionField";
 import WorkflowValidation from "./WorkflowValidation";
+import { useWorkflowValidation } from "./useWorkflowValidation";
+import {
+  normalizeValidation,
+  validateCanvas,
+  validationUnavailable,
+} from "./workflowValidation";
 import { clearExampleNodeConfig, getNodeDefinition } from "./nodeDefinitions";
 import { listAIConnections } from "@/services/aiProviderConnections";
 import {
   normalizeDecisionConfiguration,
   normalizeRAGConfiguration,
   ragKnowledgeBaseId,
-  validateWorkflowConfiguration,
   validateConditionBranches,
 } from "./configValidation";
 import { listKnowledgeBases } from "@/services/knowledgeBases";
@@ -41,6 +46,7 @@ import {
   deleteWorkflowEdge,
   updateWorkflowEdge,
   validateWorkflow,
+  validateWorkflowDefinition,
   publishWorkflow,
   getWorkflow,
   getWorkflowVersions,
@@ -198,7 +204,9 @@ async function validateRAGKnowledgeBases(nodes) {
 
 async function validateAIConnections(nodes) {
   const decisionNodes = nodes.filter(
-    (node) => node.data?.typeId === "ai.decision",
+    (node) =>
+      ["ai.decision", "ai.generate"].includes(node.data?.typeId) &&
+      !String(node.data.config?.connection_id ?? "").includes("{{"),
   );
   if (!decisionNodes.length) return [];
   try {
@@ -215,7 +223,7 @@ async function validateAIConnections(nodes) {
         code: "NODE_CONFIG_CONNECTION_ID",
         nodeId: node.data.nodeId,
         field: "connection_id",
-        message: `${node.data.label || "AI Decision"}: Choose an active AI provider connection before publishing.`,
+        message: `${node.data.label || "AI node"}: Choose an active AI provider connection before publishing.`,
       }));
   } catch {
     return [
@@ -474,10 +482,6 @@ export default function WorkflowBuilder({
   const [executionSnapshot, setExecutionSnapshot] = useState(null);
   const [runRequest, setRunRequest] = useState(null);
   const [executionFocus, setExecutionFocus] = useState(null);
-  const canvasNodes = useMemo(
-    () => canvasExecutionState(nodes, executionSnapshot, version?.id).nodes,
-    [nodes, executionSnapshot, version?.id],
-  );
   const focusExecutionNode = useCallback(
     (nodeId) => setExecutionFocus({ nodeId, key: Date.now() }),
     [],
@@ -511,6 +515,32 @@ export default function WorkflowBuilder({
     isValid: true,
     errors: [],
   });
+  const [validationSample, setValidationSample] = useState("");
+  const [validationNeedsCheck, setValidationNeedsCheck] = useState(false);
+  const [validationFocus, setValidationFocus] = useState(null);
+  const validationRequestRef = useRef(0);
+  const authoring = useWorkflowValidation(
+    nodes,
+    edges,
+    validationSample,
+    version?.id,
+  );
+  const canvasNodes = useMemo(
+    () =>
+      canvasExecutionState(nodes, executionSnapshot, version?.id).nodes.map(
+        (node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            validationErrors:
+              authoring.result?.errors.filter(
+                (issue) => issue.nodeId === (node.data?.nodeId ?? node.id),
+              ) ?? [],
+          },
+        }),
+      ),
+    [nodes, executionSnapshot, version?.id, authoring.result],
+  );
   const [currentVersionStatus, setCurrentVersionStatus] = useState(
     version?.status ?? "draft",
   );
@@ -673,6 +703,8 @@ export default function WorkflowBuilder({
   // ── Mark unsaved helper ───────────────────────────────────────────────────
   const markUnsaved = useCallback(() => {
     editRevisionRef.current += 1;
+    validationRequestRef.current += 1;
+    setValidationOpen(false);
     setSaveState((prev) => (prev !== "saving" ? "unsaved" : prev));
   }, []);
 
@@ -1108,23 +1140,6 @@ export default function WorkflowBuilder({
         (publishingRef.current && !forPublish)
       )
         return false;
-      const checkedIds = new Set(
-        nodes
-          .filter((node) =>
-            ["ai.rag_search", "ai.decision", "action.http_request"].includes(
-              node.data?.typeId,
-            ),
-          )
-          .map((node) => node.data?.nodeId ?? node.id),
-      );
-      const ragErrors = validateWorkflowConfiguration(nodes, edges, {
-        includeStructure: false,
-      }).filter((error) => checkedIds.has(error.nodeId));
-      if (ragErrors.length) {
-        setValidationResult({ isValid: false, errors: ragErrors });
-        setValidationOpen(true);
-        return false;
-      }
       savingRef.current = true;
       const savedRevision = editRevisionRef.current;
       setSaveState("saving");
@@ -1466,69 +1481,41 @@ export default function WorkflowBuilder({
       setValidationOpen(true);
       return;
     }
-    const validationRevision = editRevisionRef.current;
+    const requestId = ++validationRequestRef.current;
+    const isCurrent = () => validationRequestRef.current === requestId;
     setIsValidating(true);
+    setValidationNeedsCheck(false);
+    setValidationOpen(true);
     try {
-      const localErrors = validateWorkflowConfiguration(nodes, edges);
-      if (!localErrors.length)
-        localErrors.push(...(await validateRAGKnowledgeBases(nodes)));
-      if (!localErrors.length)
-        localErrors.push(...(await validateAIConnections(nodes)));
-      if (localErrors.length) {
-        setValidationResult({ isValid: false, errors: localErrors });
-        return;
-      }
-      // Save first if there are unsaved changes
-      if (saveState === "unsaved" || saveState === "failed") {
-        const saved = await handleSave();
-        if (!saved) {
-          setValidationResult({
-            isValid: false,
-            errors: [
-              {
-                code: "SAVE_FAILED",
-                message: "Save failed. Fix the save issue before validating.",
-              },
-            ],
-          });
-          return;
+      const result = await validateCanvas({
+        nodes,
+        edges,
+        sampleText: validationSample,
+        request: validateWorkflowDefinition,
+        isCurrent,
+      });
+      if (!result) return;
+      if (result.isValid) {
+        const resourceErrors = [
+          ...(await validateRAGKnowledgeBases(nodes)),
+          ...(await validateAIConnections(nodes)),
+        ];
+        if (resourceErrors.length) {
+          const resources = normalizeValidation(
+            { valid: false, errors: resourceErrors, warnings: [] },
+            nodes,
+          );
+          result.isValid = false;
+          result.errors = resources.errors;
         }
       }
-
-      if (!workflowId) throw new Error("Workflow is unavailable.");
-      const res = await validateWorkflow(workflowId, versionNumber);
-      if (typeof res?.valid !== "boolean")
-        throw new Error("Invalid validation response.");
-      if (editRevisionRef.current !== validationRevision) {
-        setValidationResult({
-          isValid: false,
-          errors: [
-            {
-              code: "WORKFLOW_CHANGED",
-              message:
-                "Workflow changed during validation. Save your changes and retry validation.",
-            },
-          ],
-        });
-        return;
-      }
-      setValidationResult({ isValid: res.valid, errors: res.errors ?? [] });
+      if (isCurrent()) setValidationResult(result);
     } catch {
-      setValidationResult({
-        isValid: false,
-        errors: [
-          {
-            code: "VALIDATION_UNAVAILABLE",
-            message:
-              "Unable to validate this workflow. Check your connection and retry validation.",
-          },
-        ],
-      });
+      if (isCurrent()) setValidationResult(validationUnavailable());
     } finally {
       setIsValidating(false);
-      setValidationOpen(true);
     }
-  }, [saveState, handleSave, nodes, edges, workflowId, versionNumber]);
+  }, [nodes, edges, validationSample]);
 
   // ── Publish ───────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async () => {
@@ -1553,15 +1540,38 @@ export default function WorkflowBuilder({
     }
     publishingRef.current = true;
     const publishRevision = editRevisionRef.current;
+    const requestId = ++validationRequestRef.current;
+    setValidationNeedsCheck(false);
     setIsPublishing(true);
     try {
-      const localErrors = validateWorkflowConfiguration(nodes, edges);
-      if (!localErrors.length)
-        localErrors.push(...(await validateRAGKnowledgeBases(nodes)));
-      if (!localErrors.length)
-        localErrors.push(...(await validateAIConnections(nodes)));
-      if (localErrors.length) {
-        setValidationResult({ isValid: false, errors: localErrors });
+      const isCurrent = () =>
+        editRevisionRef.current === publishRevision &&
+        validationRequestRef.current === requestId;
+      const preflight = await validateCanvas({
+        nodes,
+        edges,
+        sampleText: validationSample,
+        request: validateWorkflowDefinition,
+        isCurrent,
+      });
+      if (!preflight) return;
+      if (!preflight.isValid) {
+        setValidationResult(preflight);
+        setValidationOpen(true);
+        return;
+      }
+      const resourceErrors = [
+        ...(await validateRAGKnowledgeBases(nodes)),
+        ...(await validateAIConnections(nodes)),
+      ];
+      if (!isCurrent()) return;
+      if (resourceErrors.length) {
+        setValidationResult(
+          normalizeValidation(
+            { valid: false, errors: resourceErrors, warnings: [] },
+            nodes,
+          ),
+        );
         setValidationOpen(true);
         return;
       }
@@ -1573,21 +1583,14 @@ export default function WorkflowBuilder({
       if (!workflowId)
         throw new Error("Workflow is unavailable. Reload and retry.");
       if (workflowId) {
-        const validation = await validateWorkflow(workflowId, versionNumber);
-        if (typeof validation?.valid !== "boolean")
-          throw new Error("Invalid validation response.");
-        if (!validation.valid) {
-          setValidationResult({
-            isValid: false,
-            errors: validation.errors ?? [],
-          });
+        const response = await validateWorkflow(workflowId, versionNumber);
+        if (!isCurrent()) return;
+        const validation = normalizeValidation(response, nodes);
+        if (!validation.isValid) {
+          setValidationResult(validation);
           setValidationOpen(true);
           return;
         }
-        if (editRevisionRef.current !== publishRevision)
-          throw new Error(
-            "Workflow changed during validation. Save your changes and retry publishing.",
-          );
         const outcome = await publishWithSchedule(
           workflowId,
           versionNumber,
@@ -1646,6 +1649,7 @@ export default function WorkflowBuilder({
     handleSave,
     workflowId,
     versionNumber,
+    validationSample,
     onRefresh,
     nodes,
     edges,
@@ -2104,6 +2108,10 @@ export default function WorkflowBuilder({
                 scheduleRevision={`${currentVersionStatus}:${workflow?.status}:${workflow?.published_version_id}:${scheduleRevision}`}
                 workflowNodes={nodes}
                 workflowEdges={edges}
+                nodeCatalog={authoring.catalog}
+                validationIssues={authoring.result?.errors ?? []}
+                validationPending={authoring.pending}
+                validationFocus={validationFocus}
                 onSelectEdge={handleEdgeSelect}
                 onEdgeConditionChange={handleEdgeConditionChange}
               />
@@ -2117,6 +2125,32 @@ export default function WorkflowBuilder({
         open={validationOpen}
         isValid={validationResult.isValid}
         errors={validationResult.errors}
+        warnings={validationResult.warnings}
+        isValidating={isValidating}
+        needsValidation={validationNeedsCheck}
+        sampleText={validationSample}
+        onSampleChange={(value) => {
+          validationRequestRef.current += 1;
+          setValidationSample(value);
+          setValidationNeedsCheck(true);
+        }}
+        onValidate={handleValidate}
+        onSelectIssue={(issue) => {
+          const node = nodes.find(
+            (item) =>
+              (item.data?.nodeId ?? item.id) ===
+              (issue.nodeId ?? issue.node_id),
+          );
+          if (!node) return;
+          handleNodeSelect(node);
+          setValidationFocus({
+            nodeId: node.id,
+            field: issue.field,
+            key: Date.now(),
+          });
+          focusExecutionNode(node.data?.nodeId ?? node.id);
+          setValidationOpen(false);
+        }}
         onClose={() => setValidationOpen(false)}
       />
 

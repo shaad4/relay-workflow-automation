@@ -1421,6 +1421,7 @@ body {
   --workflow-node-config-bg: rgba(0, 0, 0, 0.25);
   --workflow-node-border: rgba(255, 255, 255, 0.1);
   --workflow-edge: #52545c;
+  --workflow-connection-line: #38bdf8;
   --workflow-edge-label-bg: #18191e;
   --workflow-edge-label-text: #dedee4;
   --workflow-shadow: rgba(0, 0, 0, 0.34);
@@ -1441,6 +1442,7 @@ body {
   --workflow-node-config-bg: #f4f5f7;
   --workflow-node-border: #e1e4ea;
   --workflow-edge: #9298a5;
+  --workflow-connection-line: #0284c7;
   --workflow-edge-label-bg: #ffffff;
   --workflow-edge-label-text: #303542;
   --workflow-shadow: rgba(31, 41, 55, 0.12);

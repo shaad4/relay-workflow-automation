@@ -79,8 +79,23 @@ function WorkflowNode({ data, selected }) {
       className={`workflow-node group relative w-[248px] overflow-visible rounded-xl border text-[var(--text-primary)] font-sans transition-all duration-150 ${selected ? "is-selected" : ""}`}
       data-execution-status={executionStatus}
       data-processing={processing ? "true" : undefined}
-      style={{ "--node-accent": color }}
+      data-validation-error={data.validationErrors?.length ? "true" : undefined}
+      style={{
+        "--node-accent": color,
+        ...(data.validationErrors?.length
+          ? { outline: "2px solid #ef4444", outlineOffset: "3px" }
+          : {}),
+      }}
     >
+      {data.validationErrors?.length > 0 && (
+        <div
+          className="absolute -top-6 left-0 rounded bg-[var(--surface)] px-2 text-[10px] font-semibold text-red-500"
+          title={data.validationErrors.map((issue) => issue.message).join("\n")}
+        >
+          {data.validationErrors.length} validation{" "}
+          {data.validationErrors.length === 1 ? "issue" : "issues"}
+        </div>
+      )}
       {!isTrigger && (
         <Handle
           type="target"
