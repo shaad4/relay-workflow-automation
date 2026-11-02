@@ -63,7 +63,7 @@ def create_consent_page(store: AuthorizationStore):
         scopes = pending.params.scopes or []
 
         scope_labels = {
-            "relay:read": "View workflows and execution history",
+            "relay:read": "View workflows, connection names and accounts, and execution history",
             "relay:write": "Create and modify workflows",
             "relay:execute": "Publish and execute workflows",
             "relay:delete": "Delete workflows and nodes",

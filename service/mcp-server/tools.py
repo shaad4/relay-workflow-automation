@@ -53,6 +53,41 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
         """Test the Relay MCP server connection."""
         return f"Hello {name}! Relay MCP Server is working."
 
+    # Connection Discovery
+
+    @tool
+    async def relay_list_connections(provider: str | None = None) -> list[dict]:
+        """Find saved app connections in the authenticated Relay workspace.
+
+        Call before configuring Gmail, HTTP, or other app action nodes; do not ask
+        the user to copy connection IDs. Optionally filter by provider, e.g. gmail
+        or http (case-insensitive); omit to list all app connections.
+        Returns id, name, provider, auth_type, Gmail account email (otherwise null),
+        and status=configured. Configured means saved, not a live health check.
+        Use the selected id as the node's configuration.connection_id. If multiple
+        accounts match, use the requested name/email or ask which account to use.
+        An empty list means no matching saved connection; ask the user to connect
+        it in Relay. Credentials are never returned. For AI nodes, use
+        relay_list_ai_provider_connections instead.
+        """
+        return await get_client().list_connections(provider=provider)
+
+    @tool
+    async def relay_list_ai_provider_connections(provider: str | None = None) -> list[dict]:
+        """Find saved AI provider connections in the authenticated Relay workspace.
+
+        Call before configuring AI nodes; do not ask the user to copy connection
+        IDs. Optionally filter by provider: openai, gemini, or anthropic
+        (case-insensitive); omit to list all AI provider connections.
+        Returns id, name, provider, and saved status (active or inactive), never
+        API keys. Select an active connection and use its id as the AI node's
+        configuration.connection_id. Active is not a live provider health check.
+        If multiple active connections match, use the requested name or ask which
+        to use. An empty list means no matching saved connection; ask the user to
+        connect the provider in Relay. For Gmail/HTTP, use relay_list_connections.
+        """
+        return await get_client().list_ai_provider_connections(provider=provider)
+
     # Workflow Management
 
     @tool
@@ -91,7 +126,11 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
         node_type: str,
         configuration: dict,
     ) -> dict:
-        """Add a node to an existing Relay draft workflow version."""
+        """Add a node to an existing Relay draft workflow version.
+
+        For nodes needing configuration.connection_id, discover it first with
+        relay_list_connections (apps) or relay_list_ai_provider_connections (AI).
+        """
         return await get_client().add_node(
             workflow_id=workflow_id,
             version=version,
@@ -107,7 +146,11 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
         node_id: str,
         configuration: dict,
     ) -> dict:
-        """Update the configuration of a node in a Relay draft workflow."""
+        """Update the configuration of a node in a Relay draft workflow.
+
+        Resolve connection IDs with relay_list_connections (apps) or
+        relay_list_ai_provider_connections (AI) when changing a node's connection.
+        """
         return await get_client().update_node(
             workflow_id=workflow_id,
             version=version,
@@ -223,6 +266,9 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
 
         Creates a draft and validates it.
         Does not publish or execute the workflow.
+        Before creating nodes that need configuration.connection_id, call
+        relay_list_connections for apps (including Gmail) or
+        relay_list_ai_provider_connections for AI providers to find IDs by name.
         """
         return await create_complete_workflow(
             client=get_client(),
