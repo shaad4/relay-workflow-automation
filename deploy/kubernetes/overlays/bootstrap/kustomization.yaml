@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../production
+replicas:
+- name: api-gateway
+  count: 0
+- name: auth-service
+  count: 0
+- name: workflow-service
+  count: 0
+- name: integration-service
+  count: 0
+- name: action-service
+  count: 0
+- name: execution-service
+  count: 0
+- name: rag-service
+  count: 0
+- name: integration-celery-worker
+  count: 0
+- name: integration-celery-beat
+  count: 0
+- name: rag-celery-worker
+  count: 0
+- name: frontend
+  count: 0
+namespace: relay

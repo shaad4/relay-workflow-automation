@@ -165,7 +165,7 @@ export default function DocumentUpload({
           type="button"
           disabled={busy}
           onClick={() => inputRef.current?.click()}
-          className="relative inline-flex h-10 shrink-0 items-center rounded-lg bg-[var(--accent)] px-4 text-[12px] font-medium text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:opacity-50 motion-reduce:transform-none"
+          className="relative inline-flex h-10 shrink-0 items-center rounded-lg bg-[var(--accent)] px-4 text-[12px] font-medium text-[var(--accent-foreground)] shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:opacity-50 motion-reduce:transform-none"
         >
           Browse files{" "}
           <span className="ml-3 text-white/70" aria-hidden="true">
@@ -260,7 +260,7 @@ export default function DocumentUpload({
                 type="button"
                 disabled={busy}
                 onClick={upload}
-                className="h-8 rounded-[7px] bg-[var(--accent)] px-3 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:opacity-50"
+                className="h-8 rounded-[7px] bg-[var(--accent)] px-3 text-[11px] font-medium text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:opacity-50"
               >
                 {busy
                   ? "Uploading…"

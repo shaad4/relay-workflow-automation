@@ -1,6 +1,8 @@
 import asyncio
 import sys
 from datetime import datetime, timedelta, timezone
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -568,7 +570,8 @@ def test_google_oauth_url_find_user_and_missing_settings(monkeypatch):
     )
 
 
-def test_email_sending_renders_template_and_sends(monkeypatch):
+@pytest.mark.parametrize("expiration_minutes", [1, 30])
+def test_email_sending_renders_template_and_sends(monkeypatch, expiration_minutes):
     from app.services import email_service
 
     sent = []
@@ -598,17 +601,44 @@ def test_email_sending_renders_template_and_sends(monkeypatch):
     monkeypatch.setattr(email_service, "SMTP_USERNAME", "mailer")
     monkeypatch.setattr(email_service, "SMTP_PASSWORD", "secret")
     monkeypatch.setattr(email_service, "SMTP_FROM_EMAIL", "noreply@example.com")
-    monkeypatch.setattr(email_service, "FRONTEND_URL", "https://frontend.test")
+    monkeypatch.setattr(email_service, "FRONTEND_URL", "https://frontend.test/")
     monkeypatch.setattr(email_service.smtplib, "SMTP", SMTP)
-    email_service.send_verification_email("u@example.com", "User", "verify", 30)
-    email_service.send_password_reset_email("u@example.com", "User", "reset", 30)
+    name = "<b>User & Team</b>"
+    email_service.send_verification_email("u@example.com", name, "verify", expiration_minutes)
+    email_service.send_password_reset_email("u@example.com", name, "reset", expiration_minutes)
     assert len(sent) == 2
-    assert (
-        "https://frontend.test/verify-email?token=verify" in sent[0].get_body("html").get_content()
-    )
-    assert (
-        "https://frontend.test/reset-password?token=reset" in sent[1].get_body("html").get_content()
-    )
+    for outgoing, path, subject in zip(
+        sent,
+        ("verify-email?token=verify", "reset-password?token=reset"),
+        ("Verify your Relay account", "Reset your Relay password"),
+    ):
+        # Check the actual serialized MIME message a mail client receives.
+        message = BytesParser(policy=policy.default).parsebytes(outgoing.as_bytes())
+        html = message.get_body(preferencelist=("html",)).get_content()
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        url = f"https://frontend.test/{path}"
+        assert message["Subject"] == subject
+        assert message["To"] == "u@example.com"
+        assert html.count(f'href="{url}"') == 2
+        assert url in plain
+        assert "&lt;b&gt;User &amp; Team&lt;/b&gt;" in html
+        assert name not in html
+        assert name in plain
+        duration = f"{expiration_minutes} minute" + ("s" if expiration_minutes != 1 else "")
+        assert duration in html
+        assert duration in plain
+        assert "safely ignore this email" in html
+        assert "safely ignore this email" in plain
+        assert "{{" not in html and "{%" not in html
+        related = list(message.iter_parts())[1]
+        assert related.get_content_type() == "multipart/related"
+        images = [part for part in related.iter_parts() if part.get_content_type() == "image/png"]
+        assert len(images) == 1
+        logo = images[0]
+        assert logo.get_content_disposition() == "inline"
+        assert logo.get_payload(decode=True) == email_service.LOGO_PATH.read_bytes()
+        assert f"cid:{logo['Content-ID'][1:-1]}" in html
+        assert 'alt="Relay"' in html
 
 
 def test_email_send_reraises_smtp_error(monkeypatch):

@@ -1,10 +1,16 @@
-import os
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
+from app.config import (
+    ACTION_SERVICE_URL,
+    AUTH_SERVICE_URL,
+    EXECUTION_SERVICE_URL,
+    INTEGRATION_SERVICE_URL,
+    RAG_SERVICE_URL,
+    WORKFLOW_SERVICE_URL,
+)
 from fastapi import Request
 from fastapi.responses import Response
-
-AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8000")
 
 # RFC 7230 hop-by-hop headers
 HOP_BY_HOP_HEADERS: set[str] = {
@@ -83,3 +89,32 @@ async def proxy_request(
         )
 
     return build_proxy_response(response)
+
+
+def public_redirect_location(location: str) -> str:
+    """Keep upstream slash redirects usable without exposing private service DNS.
+
+    OAuth/provider and public frontend redirects are intentionally untouched.
+    Returning a relative path lets either the direct gateway or frontend proxy
+    keep the caller's own public origin.
+    """
+    try:
+        target = urlsplit(location)
+        for base in (
+            AUTH_SERVICE_URL,
+            WORKFLOW_SERVICE_URL,
+            INTEGRATION_SERVICE_URL,
+            ACTION_SERVICE_URL,
+            EXECUTION_SERVICE_URL,
+            RAG_SERVICE_URL,
+        ):
+            upstream = urlsplit(base)
+            if (target.scheme, target.netloc) == (upstream.scheme, upstream.netloc):
+                prefix = upstream.path.rstrip("/")
+                path = target.path
+                if prefix and (path == prefix or path.startswith(prefix + "/")):
+                    path = path[len(prefix) :]
+                return urlunsplit(("", "", "/" + path.lstrip("/"), target.query, target.fragment))
+    except ValueError:
+        pass
+    return location

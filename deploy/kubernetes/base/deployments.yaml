@@ -1,0 +1,1004 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: api-gateway
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: api-gateway
+        image: relay/api-gateway:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        env:
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: relay-jwt
+              key: JWT_SECRET_KEY
+        ports:
+        - name: http
+          containerPort: 8000
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: auth-service
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: auth-service
+        image: relay/auth-service:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        - secretRef:
+            name: relay-auth-service
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        env:
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: relay-jwt
+              key: JWT_SECRET_KEY
+        - name: GRPC_BIND_ADDRESS
+          value: '[::]:50051'
+        ports:
+        - name: http
+          containerPort: 8000
+        - name: grpc
+          containerPort: 50051
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workflow-service
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: workflow-service
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: workflow-service
+        image: relay/workflow-service:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        - secretRef:
+            name: relay-workflow-service
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        env:
+        - name: GRPC_BIND_ADDRESS
+          value: '[::]:50052'
+        ports:
+        - name: http
+          containerPort: 8000
+        - name: grpc
+          containerPort: 50052
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: integration-service
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: integration-service
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: integration-service
+        image: relay/integration-service:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        - secretRef:
+            name: relay-integration-service
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        env:
+        - name: GRPC_BIND_ADDRESS
+          value: '[::]:50053'
+        ports:
+        - name: http
+          containerPort: 8000
+        - name: grpc
+          containerPort: 50053
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: action-service
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: action-service
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: action-service
+        image: relay/action-service:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        - secretRef:
+            name: relay-action-service
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        env:
+        - name: GRPC_BIND_ADDRESS
+          value: '[::]:50054'
+        ports:
+        - name: http
+          containerPort: 8000
+        - name: grpc
+          containerPort: 50054
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execution-service
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: execution-service
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 180
+      containers:
+      - name: execution-service
+        image: relay/execution-service:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        - secretRef:
+            name: relay-execution-service
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 768Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        env:
+        - name: GRPC_BIND_ADDRESS
+          value: '[::]:50055'
+        ports:
+        - name: http
+          containerPort: 8000
+        - name: grpc
+          containerPort: 50055
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-service
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: rag-service
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: rag-service
+        image: relay/rag-service:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        - secretRef:
+            name: relay-rag-service
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        env:
+        - name: GRPC_BIND_ADDRESS
+          value: '[::]:50056'
+        ports:
+        - name: http
+          containerPort: 8000
+        - name: grpc
+          containerPort: 50056
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: integration-celery-worker
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: integration-celery-worker
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 180
+      containers:
+      - name: integration-celery-worker
+        image: relay/integration-service:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        - secretRef:
+            name: relay-integration-service
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        command:
+        - celery
+        - -A
+        - app.celery_app:celery_app
+        - worker
+        - --loglevel=warning
+        - --queues=integration
+        - --concurrency=$(CELERY_WORKER_CONCURRENCY)
+        - --hostname=relay@%h
+        - --pidfile=/tmp/celery-worker.pid
+        env:
+        - name: CELERY_WORKER
+          value: 'true'
+        readinessProbe:
+          exec: &id002
+            command:
+            - python
+            - -c
+            - import socket; from app.celery_app import celery_app; replies=celery_app.control.ping(destination=['relay@'+socket.gethostname()],
+              timeout=5); raise SystemExit(0 if replies else 1)
+          timeoutSeconds: 10
+          periodSeconds: 30
+          failureThreshold: 3
+        startupProbe:
+          exec: *id002
+          timeoutSeconds: 10
+          periodSeconds: 30
+          failureThreshold: 20
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: integration-celery-beat
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: integration-celery-beat
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: integration-celery-beat
+        image: relay/integration-service:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        - secretRef:
+            name: relay-integration-service
+        resources:
+          requests:
+            cpu: 50m
+            memory: 96Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        command:
+        - celery
+        - -A
+        - app.celery_app:celery_app
+        - beat
+        - --loglevel=warning
+        - --schedule=/tmp/integration-celerybeat-schedule
+        - --pidfile=/tmp/celerybeat.pid
+        readinessProbe:
+          exec: &id002
+            command:
+            - python
+            - -c
+            - import os; from pathlib import Path; os.kill(int(Path('/tmp/celerybeat.pid').read_text().strip()),
+              0)
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          exec: *id002
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 30
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-celery-worker
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: rag-celery-worker
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 720
+      containers:
+      - name: rag-celery-worker
+        image: relay/rag-service:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        - secretRef:
+            name: relay-rag-service
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        command:
+        - celery
+        - -A
+        - app.celery_app:celery_app
+        - worker
+        - --loglevel=warning
+        - --queues=rag_ingestion
+        - --concurrency=$(CELERY_WORKER_CONCURRENCY)
+        - --hostname=relay@%h
+        - --pidfile=/tmp/celery-worker.pid
+        env:
+        - name: CELERY_WORKER
+          value: 'true'
+        readinessProbe:
+          exec: &id002
+            command:
+            - python
+            - -c
+            - import socket; from app.celery_app import celery_app; replies=celery_app.control.ping(destination=['relay@'+socket.gethostname()],
+              timeout=5); raise SystemExit(0 if replies else 1)
+          timeoutSeconds: 10
+          periodSeconds: 30
+          failureThreshold: 3
+        startupProbe:
+          exec: *id002
+          timeoutSeconds: 10
+          periodSeconds: 30
+          failureThreshold: 20
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: frontend
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: frontend
+        image: relay/frontend:dev
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: next-cache
+          mountPath: /app/.next/cache
+        ports:
+        - name: http
+          containerPort: 3000
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+      - name: next-cache
+        emptyDir:
+          sizeLimit: 128Mi

@@ -20,7 +20,7 @@ import {
 const buttonBase =
   "inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border px-3 text-[12px] font-medium transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40";
 const secondaryButton = `${buttonBase} border-[var(--border-default)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--elevated)]`;
-const primaryButton = `${buttonBase} border-transparent bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]`;
+const primaryButton = `${buttonBase} border-transparent bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]`;
 const rejectButton = `${buttonBase} border-red-500/30 bg-red-500/5 text-red-500 hover:bg-red-500/10 focus-visible:ring-red-500/30`;
 const PAGE_SIZE = 10;
 

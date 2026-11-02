@@ -2,9 +2,9 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-router = APIRouter(prefix="/webhooks")
+from app.config import INTEGRATION_SERVICE_URL
 
-INTEGRATION_SERVICE_URL = "http://integration-service:8000"
+router = APIRouter(prefix="/webhooks")
 
 
 @router.post("/")

@@ -113,6 +113,23 @@ function ApprovalsIcon(props) {
     </NavIcon>
   );
 }
+function IntegrationsIcon(props) {
+  return (
+    <svg
+      {...props}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 22v-5M9 8V2M15 8V2M7 8h10v4a5 5 0 0 1-10 0V8Z" />
+    </svg>
+  );
+}
+
 function ConnectionsIcon(props) {
   return (
     <NavIcon {...props}>
@@ -212,6 +229,7 @@ export default function DashboardSidebar({
 
   const resourceNavItems = [
     { label: "Connections", href: "/connections", icon: ConnectionsIcon },
+    { label: "Integrations", href: "/integrations", icon: IntegrationsIcon },
     {
       label: "Knowledge Bases",
       href: "/dashboard/knowledge-bases",

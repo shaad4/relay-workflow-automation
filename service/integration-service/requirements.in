@@ -1,0 +1,15 @@
+# Regenerate using scripts/lock-python-dependencies.sh; tests are separate.
+-c ../../deploy/docker/python-constraints.txt
+fastapi
+uvicorn
+sqlalchemy[asyncio]
+asyncpg
+alembic
+python-dotenv
+grpcio
+pwdlib[argon2]
+aiokafka
+httpx
+croniter
+celery[redis]
+protobuf>=7.36.2

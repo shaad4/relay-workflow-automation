@@ -14,7 +14,7 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv(
 )
 
 KAFKA_TOPIC = "workflow.triggered"
-KAFKA_GROUP_ID = "execution-service"
+KAFKA_GROUP_ID = os.getenv("KAFKA_CONSUMER_GROUP_ID", "execution-service")
 
 consumer: AIOKafkaConsumer | None = None
 

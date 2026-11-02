@@ -1,13 +1,11 @@
-import { apiRequest } from "@/lib/api";
+import { apiRequest, apiUrl } from "@/lib/api";
 
 export function listConnections() {
   return apiRequest("/connections/", { method: "GET" });
 }
 
 export function startGmailOAuth() {
-  const baseUrl = process.env.NEXT_PUBLIC_AUTH_API_URL?.replace(/\/$/, "");
-  if (!baseUrl) throw new Error("API URL is not configured");
-  return `${baseUrl}/connections/gmail/oauth/start`;
+  return apiUrl("/connections/gmail/oauth/start");
 }
 
 export function createConnection(data) {

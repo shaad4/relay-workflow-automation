@@ -24,6 +24,7 @@ async def run_ingestion(
     engine = create_async_engine(
         os.environ["DATABASE_URL"],
         poolclass=NullPool,
+        hide_parameters=True,
     )
 
     session_factory = async_sessionmaker(

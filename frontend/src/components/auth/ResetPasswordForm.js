@@ -170,14 +170,14 @@ export default function ResetPasswordForm() {
 
       const msg = err?.message || "";
       const isNetworkOrDevError =
-        !process.env.NEXT_PUBLIC_AUTH_API_URL ||
         err?.name === "TypeError" ||
         msg.toLowerCase().includes("failed to fetch") ||
         msg.toLowerCase().includes("networkerror");
 
       if (isNetworkOrDevError) {
-        // Dev fallback mode
-        setIsSuccess(true);
+        setBackendError(
+          "Unable to reset your password right now. Please try again.",
+        );
       } else {
         const errorInfo = mapResetPasswordError(msg);
         if (errorInfo.isTokenInvalid) {

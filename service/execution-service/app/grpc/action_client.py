@@ -1,8 +1,9 @@
 import grpc
 
+from app.config import grpc_target
 from app.grpc.generated.action import action_pb2, action_pb2_grpc
 
-ACTION_SERVICE_ADDRESS = "action-service:50054"
+ACTION_SERVICE_ADDRESS = grpc_target("ACTION_GRPC_URL", "action-service:50054")
 
 
 class ActionClient:

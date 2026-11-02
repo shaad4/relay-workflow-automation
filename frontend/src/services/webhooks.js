@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/api";
+import { apiRequest, apiUrl } from "@/lib/api";
 
 export function listWebhooks() {
   return apiRequest("/webhooks/", { method: "GET" });
@@ -26,8 +26,7 @@ export function regenerateWebhookToken(id) {
 }
 
 export function getWebhookEndpoint(token) {
-  const base = process.env.NEXT_PUBLIC_AUTH_API_URL?.replace(/\/$/, "") || "";
-  return `${base}/hooks/${token}`;
+  return apiUrl(`/hooks/${token}`, { absolute: true });
 }
 
 export function getWebhookTestEndpoint(token) {

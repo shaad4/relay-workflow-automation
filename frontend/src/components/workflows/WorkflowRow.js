@@ -445,7 +445,7 @@ export default function WorkflowRow({
                 type="button"
                 disabled={isChangingStatus}
                 onClick={handleToggleStatus}
-                className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-medium text-white disabled:opacity-50 ${isActive ? "bg-red-600 hover:bg-red-700" : "bg-[var(--accent)] hover:opacity-90"}`}
+                className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-medium disabled:opacity-50 ${isActive ? "bg-red-600 text-white hover:bg-red-700" : "bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90"}`}
               >
                 {isChangingStatus && (
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />

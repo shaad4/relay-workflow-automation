@@ -52,26 +52,13 @@ export default function ForgotPasswordForm() {
       setIsSubmitting(false);
       setSubmittedEmail(targetEmail);
       setIsSuccess(true);
-    } catch (err) {
+    } catch {
       setIsSubmitting(false);
 
-      const msg = err?.message || "";
-      const isNetworkOrDevError =
-        !process.env.NEXT_PUBLIC_AUTH_API_URL ||
-        err?.name === "TypeError" ||
-        msg.toLowerCase().includes("failed to fetch") ||
-        msg.toLowerCase().includes("networkerror");
-
-      if (isNetworkOrDevError) {
-        // Dev fallback mode
-        setSubmittedEmail(targetEmail);
-        setIsSuccess(true);
-      } else {
-        // Display generic server error without breaking account enumeration protection
-        setBackendError(
-          "Unable to process your request right now. Please try again.",
-        );
-      }
+      // Network failures must not claim an email was sent. Keep account enumeration protection.
+      setBackendError(
+        "Unable to process your request right now. Please try again.",
+      );
     }
   };
 

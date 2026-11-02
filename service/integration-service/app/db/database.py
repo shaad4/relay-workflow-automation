@@ -1,6 +1,5 @@
 import os
 
-from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -9,22 +8,22 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
 
-load_dotenv()
+from app.config import database_options, database_url
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL is not configured")
+DATABASE_URL = database_url()
 
 
-engine_options = {
-    "pool_pre_ping": True,
-}
+engine_options = database_options()
 
 # Celery creates a new asyncio event loop for each task.
 # Disable connection pooling only for Celery workers.
 if os.getenv("CELERY_WORKER") == "true":
-    engine_options["poolclass"] = NullPool
+    engine_options = {
+        "poolclass": NullPool,
+        "echo": False,
+        "hide_parameters": True,
+        "pool_pre_ping": True,
+    }
 
 
 engine = create_async_engine(

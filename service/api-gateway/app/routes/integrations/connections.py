@@ -5,12 +5,13 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, Response
 
+from app.config import ACTION_SERVICE_URL
+
 router = APIRouter(
     prefix="/connections",
     tags=["connections"],
 )
 
-ACTION_SERVICE_URL = "http://action-service:8000"
 
 HOP_BY_HOP_HEADERS = {
     "host",

@@ -4,9 +4,10 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+from app.config import EXECUTION_SERVICE_URL
+
 router = APIRouter(prefix="/executions")
 
-EXECUTION_SERVICE_URL = "http://execution-service:8000"
 
 EXCLUDED_HEADERS = {
     "host",

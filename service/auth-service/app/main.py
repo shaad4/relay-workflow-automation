@@ -1,4 +1,4 @@
-import os
+import asyncio
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -6,6 +6,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.config import allowed_origins as configured_origins
+from app.config import validate_startup
 from app.grpc.server import start_grpc_server
 from app.routes.auth import router as auth_router
 
@@ -14,11 +16,13 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_startup()
     grpc_server = await start_grpc_server()
 
-    yield
-
-    await grpc_server.stop(grace=5)
+    try:
+        yield
+    finally:
+        await grpc_server.stop(grace=5)
 
 
 app = FastAPI(
@@ -26,20 +30,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+allowed_origins = set(configured_origins())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("FRONTEND_URL")],
+    allow_origins=list(allowed_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-allowed_origins = {frontend_url.rstrip("/")}
-if "localhost" in frontend_url:
-    allowed_origins.add(frontend_url.replace("localhost", "127.0.0.1").rstrip("/"))
-elif "127.0.0.1" in frontend_url:
-    allowed_origins.add(frontend_url.replace("127.0.0.1", "localhost").rstrip("/"))
 
 
 @app.middleware("http")
@@ -65,3 +64,25 @@ app.include_router(auth_router)
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/health/live", include_in_schema=False)
+async def liveness():
+    """Process-only probe; dependency outages must not cause restart storms."""
+    return {"status": "ok"}
+
+
+@app.get("/ready", include_in_schema=False)
+async def readiness():
+    """Bounded DB probe; no schema mutation or dependency details in responses."""
+    from sqlalchemy import text
+
+    from app.db.database import engine
+
+    try:
+        async with asyncio.timeout(3):
+            async with engine.connect() as connection:
+                await connection.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+    return {"status": "ready"}

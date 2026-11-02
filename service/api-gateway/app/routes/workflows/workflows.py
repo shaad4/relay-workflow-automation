@@ -4,9 +4,9 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-router = APIRouter(prefix="/workflows")
+from app.config import WORKFLOW_SERVICE_URL
 
-WORKFLOW_SERVICE_URL = "http://workflow-service:8000"
+router = APIRouter(prefix="/workflows")
 
 
 @router.api_route("/", methods=["GET", "POST"])

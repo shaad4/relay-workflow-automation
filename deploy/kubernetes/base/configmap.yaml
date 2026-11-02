@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: relay-config
+  labels:
+    app.kubernetes.io/part-of: relay
+data:
+  RELAY_ENV: development
+  FRONTEND_URL: http://localhost:3000
+  BACKEND_URL: http://localhost:3000/api/relay
+  COOKIE_SECURE: 'false'
+  COOKIE_SAMESITE: lax
+  JWT_ALGORITHM: HS256
+  KAFKA_BOOTSTRAP_SERVERS: relay-infra.example.internal:19092
+  EXECUTION_MAX_CONCURRENCY: '2'
+  MAX_CONCURRENT_HTTP_REQUESTS: '2'
+  MAX_CONCURRENT_AI_REQUESTS: '2'
+  DB_POOL_SIZE: '2'
+  DB_MAX_OVERFLOW: '2'
+  DB_POOL_TIMEOUT: '30'
+  DB_POOL_RECYCLE: '1800'
+  API_GATEWAY_URL: http://api-gateway:8000
+  SMTP_PORT: '587'
+  SMTP_FROM_NAME: Relay
+  SUPABASE_STORAGE_BUCKET: relay-documents
+  AUTH_SERVICE_URL: http://auth-service:8000
+  AUTH_GRPC_URL: auth-service:50051
+  WORKFLOW_SERVICE_URL: http://workflow-service:8000
+  WORKFLOW_GRPC_URL: workflow-service:50052
+  INTEGRATION_SERVICE_URL: http://integration-service:8000
+  INTEGRATION_GRPC_URL: integration-service:50053
+  ACTION_SERVICE_URL: http://action-service:8000
+  ACTION_GRPC_URL: action-service:50054
+  EXECUTION_SERVICE_URL: http://execution-service:8000
+  EXECUTION_GRPC_URL: execution-service:50055
+  RAG_SERVICE_URL: http://rag-service:8000
+  RAG_GRPC_URL: rag-service:50056
+  CELERY_WORKER_CONCURRENCY: '1'
+  SMTP_HOST: smtp.example.com
+  SMTP_FROM_EMAIL: relay@example.com
+  GOOGLE_CLIENT_ID: ''
+  SUPABASE_URL: ''

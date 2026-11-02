@@ -3,6 +3,7 @@ from uuid import UUID
 
 import grpc
 
+from app.config import grpc_bind_address
 from app.db.database import AsyncSessionLocal
 from app.grpc.generated.rag import rag_pb2, rag_pb2_grpc
 from app.services.retrieval import RetrievalService
@@ -111,7 +112,7 @@ async def start_rag_grpc_server():
         server,
     )
 
-    port = server.add_insecure_port("[::]:50056")
+    port = server.add_insecure_port(grpc_bind_address(50056))
 
     if port == 0:
         raise RuntimeError("Failed to bind RAG gRPC port")

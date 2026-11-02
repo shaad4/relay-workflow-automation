@@ -2,12 +2,13 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+from app.config import EXECUTION_SERVICE_URL
+
 router = APIRouter(
     prefix="/ai/connections",
     tags=["AI Provider Connections"],
 )
 
-EXECUTION_SERVICE_URL = "http://execution-service:8000"
 
 HOP_BY_HOP_HEADERS = {
     "host",

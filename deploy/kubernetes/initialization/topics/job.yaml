@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-topics-init
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka-topics-init
+        app.kubernetes.io/part-of: relay
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+      - name: initialize
+        image: apache/kafka:4.0.1
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -ec
+        - for topic in workflow.triggered workflow.started workflow.completed workflow.failed;
+          do /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create
+          --if-not-exists --topic "$topic" --partitions 1 --replication-factor 1;
+          done
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi

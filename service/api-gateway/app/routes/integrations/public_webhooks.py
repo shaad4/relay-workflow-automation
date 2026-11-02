@@ -4,12 +4,13 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+from app.config import INTEGRATION_SERVICE_URL
+
 router = APIRouter(
     prefix="/hooks",
     tags=["public-webhooks"],
 )
 
-INTEGRATION_SERVICE_URL = "http://integration-service:8000"
 
 WEBHOOK_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 

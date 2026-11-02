@@ -1,4 +1,3 @@
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -6,12 +5,13 @@ from dotenv import load_dotenv
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import integer
 from app.models import EmailVerificationToken, User
 
 load_dotenv()
 
 
-VERIFICATION_TOKEN_EXPIRE_MINUTES = int(os.getenv("VERIFICATION_TOKEN_EXPIRE_MINUTES", "30"))
+VERIFICATION_TOKEN_EXPIRE_MINUTES = integer("VERIFICATION_TOKEN_EXPIRE_MINUTES", 30)
 
 
 def generate_verification_token() -> str:

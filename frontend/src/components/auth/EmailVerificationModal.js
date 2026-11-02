@@ -58,14 +58,14 @@ export default function EmailVerificationModal({ open, email, onClose }) {
       setCooldown(60);
     } catch (err) {
       const isNetworkOrDevError =
-        !process.env.NEXT_PUBLIC_AUTH_API_URL ||
         err?.name === "TypeError" ||
         err?.message?.toLowerCase().includes("failed to fetch") ||
         err?.message?.toLowerCase().includes("networkerror");
 
       if (isNetworkOrDevError) {
-        setResendSuccess("Verification email sent.");
-        setCooldown(60);
+        setResendError(
+          "Unable to resend the verification email. Please try again.",
+        );
       } else {
         let message =
           "Unable to resend the verification email. Please try again.";

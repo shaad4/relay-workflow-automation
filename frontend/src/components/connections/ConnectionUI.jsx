@@ -6,17 +6,28 @@ export const inputClass =
   "h-9 w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--input-bg)] px-3 text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)] focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--accent)]/40 disabled:opacity-50";
 export const buttonClass =
   "inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border px-3 text-[13px] font-medium transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-50";
-export const primaryClass = `${buttonClass} border-transparent bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]`;
+export const primaryClass = `${buttonClass} border-transparent bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]`;
 export const secondaryClass = `${buttonClass} border-[var(--border-default)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--elevated)]`;
 
-export function Modal({ title, description, onClose, children, wide = false }) {
+export function Modal({
+  title,
+  description,
+  onClose,
+  children,
+  wide = false,
+  className = "",
+  hideTitle = false,
+}) {
   const dialogRef = useRef(null);
   const titleId = useId();
   useEffect(() => {
     const previous = document.activeElement;
     const dialog = dialogRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     (dialog.querySelector("input, select, button") || dialog).focus();
     return () => {
+      document.body.style.overflow = previousOverflow;
       if (previous?.isConnected) previous.focus();
     };
   }, []);
@@ -29,7 +40,7 @@ export function Modal({ title, description, onClose, children, wide = false }) {
       if (event.key === "Tab") {
         const controls = [
           ...dialogRef.current.querySelectorAll(
-            'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]',
+            'a[href], summary, button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]',
           ),
         ];
         const first = controls[0];
@@ -68,10 +79,10 @@ export function Modal({ title, description, onClose, children, wide = false }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`connection-dialog max-h-[90vh] w-full ${wide ? "max-w-xl" : "max-w-md"} overflow-y-auto rounded-lg border border-[var(--border-default)] bg-[var(--surface)] p-5`}
+        className={`connection-dialog max-h-[90vh] w-full ${wide ? "max-w-xl" : "max-w-md"} overflow-y-auto rounded-lg border border-[var(--border-default)] bg-[var(--surface)] p-5 ${className}`}
       >
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div>
+        <div className="connection-dialog-header mb-5 flex items-start justify-between gap-4">
+          <div className={hideTitle ? "sr-only" : undefined}>
             <h2 id={titleId} className="text-[18px] font-semibold">
               {title}
             </h2>

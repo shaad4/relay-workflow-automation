@@ -1,4 +1,3 @@
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -6,17 +5,13 @@ from dotenv import load_dotenv
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import integer
 from app.core.security import hash_password
 from app.models import PasswordResetToken, RefreshSession, User
 
 load_dotenv()
 
-PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = int(
-    os.getenv(
-        "PASSWORD_RESET_TOKEN_EXPIRE_MINUTES",
-        "30",
-    )
-)
+PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = integer("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES", 30)
 
 
 def generate_password_reset_token() -> str:

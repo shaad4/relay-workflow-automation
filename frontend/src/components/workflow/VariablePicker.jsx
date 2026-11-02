@@ -227,7 +227,7 @@ export default function VariablePicker({
                       type="button"
                       onClick={insertTriggerPath}
                       disabled={!triggerPath.trim()}
-                      className="h-8 rounded-[5px] bg-[var(--accent)] px-2.5 text-[10px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                      className="h-8 rounded-[5px] bg-[var(--accent)] px-2.5 text-[10px] font-medium text-[var(--accent-foreground)] transition-opacity hover:opacity-90 disabled:opacity-40"
                     >
                       Insert
                     </button>

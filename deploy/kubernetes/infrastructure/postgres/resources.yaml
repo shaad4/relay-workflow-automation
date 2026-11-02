@@ -1,0 +1,545 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: auth-postgres
+    app.kubernetes.io/part-of: relay
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: auth-postgres
+spec:
+  serviceName: auth-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-postgres
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: auth-postgres
+        app.kubernetes.io/part-of: relay
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: auth-postgres
+        image: postgres:16
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        envFrom:
+        - secretRef:
+            name: auth-postgres
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        args:
+        - -c
+        - max_connections=40
+        - -c
+        - shared_buffers=64MB
+        - -c
+        - work_mem=2MB
+        - -c
+        - max_wal_size=256MB
+        readinessProbe:
+          exec: &id001
+            command:
+            - sh
+            - -ec
+            - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+          timeoutSeconds: 5
+          periodSeconds: 10
+        startupProbe:
+          exec: *id001
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 60
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workflow-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: workflow-postgres
+    app.kubernetes.io/part-of: relay
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: workflow-postgres
+spec:
+  serviceName: workflow-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workflow-postgres
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: workflow-postgres
+        app.kubernetes.io/part-of: relay
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: workflow-postgres
+        image: postgres:16
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        envFrom:
+        - secretRef:
+            name: workflow-postgres
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        args:
+        - -c
+        - max_connections=40
+        - -c
+        - shared_buffers=64MB
+        - -c
+        - work_mem=2MB
+        - -c
+        - max_wal_size=256MB
+        readinessProbe:
+          exec: &id001
+            command:
+            - sh
+            - -ec
+            - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+          timeoutSeconds: 5
+          periodSeconds: 10
+        startupProbe:
+          exec: *id001
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 60
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: integration-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: integration-postgres
+    app.kubernetes.io/part-of: relay
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: integration-postgres
+spec:
+  serviceName: integration-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: integration-postgres
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: integration-postgres
+        app.kubernetes.io/part-of: relay
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: integration-postgres
+        image: postgres:16
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        envFrom:
+        - secretRef:
+            name: integration-postgres
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        args:
+        - -c
+        - max_connections=40
+        - -c
+        - shared_buffers=64MB
+        - -c
+        - work_mem=2MB
+        - -c
+        - max_wal_size=256MB
+        readinessProbe:
+          exec: &id001
+            command:
+            - sh
+            - -ec
+            - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+          timeoutSeconds: 5
+          periodSeconds: 10
+        startupProbe:
+          exec: *id001
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 60
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: action-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: action-postgres
+    app.kubernetes.io/part-of: relay
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: action-postgres
+spec:
+  serviceName: action-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: action-postgres
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: action-postgres
+        app.kubernetes.io/part-of: relay
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: action-postgres
+        image: postgres:16
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        envFrom:
+        - secretRef:
+            name: action-postgres
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        args:
+        - -c
+        - max_connections=40
+        - -c
+        - shared_buffers=64MB
+        - -c
+        - work_mem=2MB
+        - -c
+        - max_wal_size=256MB
+        readinessProbe:
+          exec: &id001
+            command:
+            - sh
+            - -ec
+            - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+          timeoutSeconds: 5
+          periodSeconds: 10
+        startupProbe:
+          exec: *id001
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 60
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: execution-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: execution-postgres
+    app.kubernetes.io/part-of: relay
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: execution-postgres
+spec:
+  serviceName: execution-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: execution-postgres
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: execution-postgres
+        app.kubernetes.io/part-of: relay
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: execution-postgres
+        image: postgres:16
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        envFrom:
+        - secretRef:
+            name: execution-postgres
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        args:
+        - -c
+        - max_connections=40
+        - -c
+        - shared_buffers=64MB
+        - -c
+        - work_mem=2MB
+        - -c
+        - max_wal_size=256MB
+        readinessProbe:
+          exec: &id001
+            command:
+            - sh
+            - -ec
+            - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+          timeoutSeconds: 5
+          periodSeconds: 10
+        startupProbe:
+          exec: *id001
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 60
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: rag-postgres
+    app.kubernetes.io/part-of: relay
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rag-postgres
+spec:
+  serviceName: rag-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rag-postgres
+      app.kubernetes.io/part-of: relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rag-postgres
+        app.kubernetes.io/part-of: relay
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: rag-postgres
+        image: pgvector/pgvector:pg16
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        envFrom:
+        - secretRef:
+            name: rag-postgres
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        args:
+        - -c
+        - max_connections=40
+        - -c
+        - shared_buffers=64MB
+        - -c
+        - work_mem=2MB
+        - -c
+        - max_wal_size=256MB
+        readinessProbe:
+          exec: &id001
+            command:
+            - sh
+            - -ec
+            - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+          timeoutSeconds: 5
+          periodSeconds: 10
+        startupProbe:
+          exec: *id001
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 60
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 1Gi

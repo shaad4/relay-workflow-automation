@@ -14,7 +14,7 @@ import {
 const button =
   "inline-flex h-9 items-center justify-center gap-2 rounded-[7px] px-3.5 text-[12px] font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 disabled:cursor-not-allowed disabled:opacity-50";
 const secondaryButton = `${button} border border-[var(--border-default)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:bg-[var(--elevated)] hover:text-[var(--text-primary)]`;
-const primaryButton = `${button} bg-[#4F46E5] text-white shadow-sm hover:bg-[#6366F1] active:scale-[.98]`;
+const primaryButton = `${button} bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm hover:bg-[var(--accent-hover)] active:scale-[.98]`;
 const fieldClass =
   "w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--input-bg)] px-3.5 py-2.5 text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)] transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/15 disabled:opacity-50";
 

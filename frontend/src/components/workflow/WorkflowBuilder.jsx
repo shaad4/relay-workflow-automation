@@ -1859,7 +1859,7 @@ export default function WorkflowBuilder({
             onClick={() => setIsLibraryOpen((v) => !v)}
             className={`px-2.5 py-1 rounded-[6px] border text-[12px] font-medium flex items-center gap-1.5 transition-all duration-100 ease-out cursor-pointer ${
               isLibraryOpen
-                ? "bg-[#4F46E5] text-white border-[#4F46E5] shadow-xs"
+                ? "bg-[var(--accent)] text-[var(--accent-foreground)] border-[var(--accent)] shadow-xs"
                 : "bg-[var(--canvas)] hover:bg-[var(--elevated)] text-[var(--text-primary)] border-[var(--border-default)] hover:border-[var(--border-strong)]"
             }`}
           >
@@ -1876,7 +1876,7 @@ export default function WorkflowBuilder({
             onClick={() => setIsInspectorOpen(true)}
             className={`px-2.5 py-1 rounded-[6px] border text-[12px] font-medium flex items-center gap-1.5 transition-all duration-100 ease-out cursor-pointer ${
               isInspectorOpen
-                ? "bg-[#4F46E5] text-white border-[#4F46E5] shadow-xs"
+                ? "bg-[var(--accent)] text-[var(--accent-foreground)] border-[var(--accent)] shadow-xs"
                 : "bg-[var(--canvas)] hover:bg-[var(--elevated)] text-[var(--text-primary)] border-[var(--border-default)] hover:border-[var(--border-strong)]"
             }`}
           >

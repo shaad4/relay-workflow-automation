@@ -43,7 +43,7 @@ export default function WorkflowEmptyState({ onCreateNew }) {
         type="button"
         onClick={onCreateNew}
         disabled={!onCreateNew}
-        className="relative mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="relative mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-[13px] font-medium text-[var(--accent-foreground)] transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         <PlusIcon aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
         Create your first workflow

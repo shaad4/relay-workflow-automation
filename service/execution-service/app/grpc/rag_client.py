@@ -1,13 +1,9 @@
-import os
-
 import grpc
 
+from app.config import grpc_target
 from app.grpc.generated.rag import rag_pb2, rag_pb2_grpc
 
-RAG_SERVICE_ADDRESS = os.getenv(
-    "RAG_GRPC_ADDRESS",
-    "rag-service:50056",
-)
+RAG_SERVICE_ADDRESS = grpc_target("RAG_GRPC_URL", "rag-service:50056", "RAG_GRPC_ADDRESS")
 
 
 class RagClient:

@@ -76,7 +76,6 @@ function WorkspaceSetupContent() {
       const lowerMsg = msg.toLowerCase();
 
       const isNetworkOrDevError =
-        !process.env.NEXT_PUBLIC_AUTH_API_URL ||
         err?.name === "TypeError" ||
         lowerMsg.includes("failed to fetch") ||
         lowerMsg.includes("networkerror");

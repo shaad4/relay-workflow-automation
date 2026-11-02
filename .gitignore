@@ -95,3 +95,16 @@ benchmarks/results/
 coverage.xml
 coverage.json
 test-results.xml
+
+# Local deployment secrets, database backups and rendered manifests
+/deploy/**/secrets.local.yaml
+/deploy/**/secrets.local.yml
+/deploy/**/rendered*.yaml
+/backups/
+*.dump
+*.pem
+*.key
+
+# Operator-only full-K3s customization overlays
+/deploy/kubernetes/overlays/full-k3s-local/
+/deploy/kubernetes/overlays/full-k3s-migrations-local/

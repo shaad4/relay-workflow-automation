@@ -1,0 +1,389 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: auth-service-migrate
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: auth-service-migrate
+        app.kubernetes.io/part-of: relay
+    spec:
+      restartPolicy: Never
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: migrate
+        image: relay/auth-service:dev
+        imagePullPolicy: IfNotPresent
+        command:
+        - alembic
+        - upgrade
+        - head
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: relay-auth-service
+              key: DATABASE_URL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 32Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: workflow-service-migrate
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: workflow-service-migrate
+        app.kubernetes.io/part-of: relay
+    spec:
+      restartPolicy: Never
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: migrate
+        image: relay/workflow-service:dev
+        imagePullPolicy: IfNotPresent
+        command:
+        - alembic
+        - upgrade
+        - head
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: relay-workflow-service
+              key: DATABASE_URL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 32Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: integration-service-migrate
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: integration-service-migrate
+        app.kubernetes.io/part-of: relay
+    spec:
+      restartPolicy: Never
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: migrate
+        image: relay/integration-service:dev
+        imagePullPolicy: IfNotPresent
+        command:
+        - alembic
+        - upgrade
+        - head
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: relay-integration-service
+              key: DATABASE_URL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 32Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: action-service-migrate
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: action-service-migrate
+        app.kubernetes.io/part-of: relay
+    spec:
+      restartPolicy: Never
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: migrate
+        image: relay/action-service:dev
+        imagePullPolicy: IfNotPresent
+        command:
+        - alembic
+        - upgrade
+        - head
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: relay-action-service
+              key: DATABASE_URL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 32Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: execution-service-migrate
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: execution-service-migrate
+        app.kubernetes.io/part-of: relay
+    spec:
+      restartPolicy: Never
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: migrate
+        image: relay/execution-service:dev
+        imagePullPolicy: IfNotPresent
+        command:
+        - alembic
+        - upgrade
+        - head
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: relay-execution-service
+              key: DATABASE_URL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 32Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rag-service-migrate
+  labels:
+    app.kubernetes.io/part-of: relay
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rag-service-migrate
+        app.kubernetes.io/part-of: relay
+    spec:
+      restartPolicy: Never
+      serviceAccountName: relay-app
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: migrate
+        image: relay/rag-service:dev
+        imagePullPolicy: IfNotPresent
+        command:
+        - alembic
+        - upgrade
+        - head
+        envFrom:
+        - configMapRef:
+            name: relay-config
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: relay-rag-service
+              key: DATABASE_URL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 32Mi

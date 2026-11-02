@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+build
+coverage
+.git
+.env*
+!.env.example
+*.pem
+*.key
+npm-debug.log*
+tests
+README.md
