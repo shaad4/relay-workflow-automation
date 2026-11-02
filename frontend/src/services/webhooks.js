@@ -3,9 +3,6 @@ import { apiRequest, apiUrl } from "@/lib/api";
 export function listWebhooks() {
   return apiRequest("/webhooks/", { method: "GET" });
 }
-export function getWebhook(id) {
-  return apiRequest(`/webhooks/${id}/`, { method: "GET" });
-}
 export function createWebhook(data) {
   return apiRequest("/webhooks/", {
     method: "POST",

@@ -93,15 +93,6 @@ function PlusIcon(props) {
   );
 }
 
-function EditIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  );
-}
-
 function EdgeInspector({
   edge,
   nodes,
@@ -460,7 +451,6 @@ export default function WorkflowBuilder({
   const router = useRouter();
   const workflowId = workflow?.id ?? "";
   const versionNumber = version?.version_number ?? version?.version ?? 1;
-  const isReadOnly = (version?.status ?? "draft") === "published";
 
   // ── Initialise from props ──────────────────────────────────────────────────
   const { rfNodes, rfEdges, serverNodes, serverEdges } = useMemo(

@@ -206,20 +206,6 @@ export function scheduleError(error) {
   );
 }
 
-export async function createScheduleIfMissing(workflowId, config, api) {
-  const response = await api.listSchedules();
-  const rows = Array.isArray(response)
-    ? response
-    : response?.schedules || response?.results || response?.data || [];
-  const existing = rows.find(
-    (schedule) => String(schedule.workflow_id) === String(workflowId),
-  );
-  return (
-    existing ||
-    api.createSchedule({ workflow_id: workflowId, ...schedulePayload(config) })
-  );
-}
-
 export function parseTriggerPayload(text) {
   let input;
   try {
