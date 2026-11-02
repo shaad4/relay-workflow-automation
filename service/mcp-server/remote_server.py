@@ -244,8 +244,11 @@ def create_remote_app(
 
     @asynccontextmanager
     async def lifespan(application):
-        async with mcp_app.router.lifespan_context(mcp_app):
-            yield
+        try:
+            async with mcp_app.router.lifespan_context(mcp_app):
+                yield
+        finally:
+            provider.client_db.close()
 
     app.router.lifespan_context = lifespan
     if mode == "local":

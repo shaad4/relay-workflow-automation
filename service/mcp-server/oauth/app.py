@@ -84,9 +84,7 @@ def create_oauth_app(
             return error(description="client_id is required")
         client = await provider.get_client(params["client_id"])
         if client is None:
-            return error(
-                description="Unknown client registration; register again after a server restart"
-            )
+            return error(description="Unknown client registration; register this client again")
         # Compare decoded query/form values exactly, before SDK URL normalization.
         # Never send an error to an unregistered redirect or echo submitted values.
         if params.get("redirect_uri") not in [str(u) for u in client.redirect_uris]:

@@ -1,7 +1,9 @@
 """Single-process OAuth provider. HTTP validation lives in app.py and SDK handlers."""
 
+import os
 import re
 import secrets
+import sqlite3
 import time
 
 from mcp.server.auth.provider import (
@@ -12,7 +14,7 @@ from mcp.server.auth.provider import (
     RegistrationError,
     TokenError,
 )
-from mcp.shared.auth import OAuthToken
+from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
 from oauth.codes import AuthorizationCodeStore
 from oauth.login import LoginStore
@@ -26,7 +28,14 @@ class RelayOAuthProvider(OAuthAuthorizationServerProvider):
         self.authorization_store = authorization_store or AuthorizationStore()
         self.login_store = LoginStore()
         self.code_store = AuthorizationCodeStore()
-        self.clients = {}
+        database = os.environ.get("MCP_CLIENT_DB_PATH", ":memory:")
+        if database != ":memory:":
+            os.close(os.open(database, os.O_CREAT | os.O_RDWR, 0o600))
+            os.chmod(database, 0o600)
+        self.client_db = sqlite3.connect(database)
+        self.client_db.execute(
+            "CREATE TABLE IF NOT EXISTS oauth_clients (client_id TEXT PRIMARY KEY, metadata TEXT NOT NULL)"
+        )
         self.access_tokens = {}
         self.refresh_tokens = {}
         self.grants = {}
@@ -54,12 +63,15 @@ class RelayOAuthProvider(OAuthAuthorizationServerProvider):
                     store.pop(key, None)
 
     async def get_client(self, client_id):
-        return self.clients.get(client_id)
+        row = self.client_db.execute(
+            "SELECT metadata FROM oauth_clients WHERE client_id = ?", (client_id,)
+        ).fetchone()
+        return OAuthClientInformationFull.model_validate_json(row[0]) if row else None
 
     async def register_client(self, client_info):
         if (
             not client_info.client_id
-            or client_info.client_id in self.clients
+            or await self.get_client(client_info.client_id) is not None
             or not client_info.redirect_uris
             or set(client_info.grant_types) - {"authorization_code", "refresh_token"}
         ):
@@ -77,7 +89,14 @@ class RelayOAuthProvider(OAuthAuthorizationServerProvider):
                 )
             ):
                 raise RegistrationError("invalid_redirect_uri")
-        self.clients[client_info.client_id] = client_info.model_copy(deep=True)
+        try:
+            with self.client_db:
+                self.client_db.execute(
+                    "INSERT INTO oauth_clients (client_id, metadata) VALUES (?, ?)",
+                    (client_info.client_id, client_info.model_dump_json()),
+                )
+        except sqlite3.IntegrityError:
+            raise RegistrationError("invalid_client_metadata") from None
 
     async def authorize(self, client, params):
         self.cleanup()
