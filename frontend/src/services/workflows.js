@@ -50,12 +50,6 @@ export async function getWorkflowVersions(workflowId) {
   });
 }
 
-export async function getWorkflowVersion(workflowId, versionNumber) {
-  return apiRequest(`/workflows/${workflowId}/versions/${versionNumber}`, {
-    method: "GET",
-  });
-}
-
 export async function deleteWorkflowVersion(workflowId, versionNumber) {
   return apiRequest(`/workflows/${workflowId}/versions/${versionNumber}/`, {
     method: "DELETE",

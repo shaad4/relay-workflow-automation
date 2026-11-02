@@ -152,6 +152,8 @@ async def test_dispatcher_polling_wakeup_shutdown_and_invalid_capacity(monkeypat
             worker.running = False
 
     monkeypatch.setattr(worker, "dispatch_pending", dispatch)
+    cleanup = AsyncMock()
+    monkeypatch.setattr(dispatcher, "cleanup_expired_executions", cleanup)
     real_wait = asyncio.wait_for
     timeouts = []
 
@@ -162,6 +164,8 @@ async def test_dispatcher_polling_wakeup_shutdown_and_invalid_capacity(monkeypat
     monkeypatch.setattr(dispatcher.asyncio, "wait_for", wait)
     await worker.run()
     assert len(polls) == 3 and timeouts == [2, 2]
+    assert cleanup.await_count == 3
+    cleanup.assert_awaited_with(limit=100)
     assert not worker.running
     blocked = asyncio.create_task(asyncio.Event().wait())
     worker.active_tasks.add(blocked)

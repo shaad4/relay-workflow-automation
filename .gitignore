@@ -25,7 +25,6 @@ ENV/
 .coverage
 htmlcov/
 .coverage.*
-.pytest_cache/
 
 # =========================
 # Type checking / Linters
@@ -108,3 +107,6 @@ test-results.xml
 # Operator-only full-K3s customization overlays
 /deploy/kubernetes/overlays/full-k3s-local/
 /deploy/kubernetes/overlays/full-k3s-migrations-local/
+
+# Downloaded deployment validator
+/kubeconform.tar.gz

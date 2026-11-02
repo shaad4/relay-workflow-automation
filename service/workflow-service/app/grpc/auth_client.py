@@ -18,12 +18,5 @@ class AuthGrpcClient:
 
         return await self.stub.ValidateToken(request)
 
-    async def resolve_workspace(self, user_id: str):
-        request = auth_pb2.ResolveWorkspaceRequest(
-            user_id=user_id,
-        )
-
-        return await self.stub.ResolveWorkspace(request)
-
     async def close(self):
         await self.channel.close()

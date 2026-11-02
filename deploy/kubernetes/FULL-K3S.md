@@ -315,7 +315,7 @@ Run `KUBECONFIG=/dev/null bash scripts/k8s/validate.sh` (kubectl, Python/PyYAML,
 and kubeconform v0.7.0 required). Schema validation downloads public Kubernetes
 1.36.0 schemas; no Kubernetes API is contacted. Run `bash scripts/ci-compose-check.sh`
 for all three Compose configurations. CI runs these contract/schema checks alongside
-the existing backend/frontend/image checks. See [validation evidence](VALIDATION.md).
+the existing backend/frontend/image checks.
 
 Design references: [Apache Kafka Docker documentation](https://kafka.apache.org/40/getting-started/docker/)
 and [Redis persistence](https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/).
