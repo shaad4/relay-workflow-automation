@@ -1,4 +1,3 @@
-
 name: Relay CD
 
 on:
@@ -7,11 +6,16 @@ on:
 permissions:
   contents: read
 
-jobs:
-  publish-images:
-    name: Publish ${{ matrix.image }} to GHCR
-    runs-on: ubuntu-latest
+concurrency:
+  group: relay-production
+  cancel-in-progress: false
 
+jobs:
+  # Build images only for a manually selected main-branch release.
+  publish:
+    name: Publish ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -37,8 +41,16 @@ jobs:
             context: service/rag-service
           - image: frontend
             context: frontend
+          - image: mcp
+            context: service/mcp-server
 
     steps:
+      - name: Require main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo 'Run production CD from main only.' >&2
+          exit 1
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -50,14 +62,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Build and publish
         uses: docker/build-push-action@v6
         with:
           context: ./${{ matrix.context }}
@@ -66,3 +78,42 @@ jobs:
           tags: ghcr.io/shaad4/relay-${{ matrix.image }}:sha-${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  # The Production environment requires a reviewer before connecting to Oracle.
+  deploy:
+    name: Deploy to Oracle K3s
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: Production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.ORACLE_DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.ORACLE_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY" && test -n "$SSH_KNOWN_HOSTS"
+          mkdir -p -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Update Relay Deployments
+        env:
+          SSH_HOST: ${{ secrets.ORACLE_SSH_HOST }}
+          SSH_USER: ${{ secrets.ORACLE_SSH_USER }}
+          RELEASE_TAG: sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 "$SSH_USER@$SSH_HOST" \
+            "bash -s -- '$RELEASE_TAG'" < scripts/deploy-relay-k3s.sh
