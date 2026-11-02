@@ -9,7 +9,9 @@ permissions:
 
 jobs:
   test-connection:
+    name: Verify Oracle K3s SSH Access
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     environment: Production
 
     steps:
@@ -19,19 +21,44 @@ jobs:
           SSH_KNOWN_HOSTS: ${{ secrets.ORACLE_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
+
+          # Verify required secrets
+          test -n "$SSH_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+
+          # Create SSH directory
           install -m 700 -d ~/.ssh
+
+          # Install deployment private key
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+
+          # Install trusted server host key
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+
+          # Validate private key format
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
+
+          echo "SSH configuration validated"
 
       - name: Verify Oracle K3s connection
         env:
           SSH_HOST: ${{ secrets.ORACLE_SSH_HOST }}
           SSH_USER: ${{ secrets.ORACLE_SSH_USER }}
         run: |
-          ssh -o BatchMode=yes \
+          set -euo pipefail
+
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+
+          ssh \
+            -i ~/.ssh/id_ed25519 \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=15 \
             "$SSH_USER@$SSH_HOST" \
             "sudo -n kubectl get deployments -n relay"
+
+          echo "Oracle K3s SSH connection successful"
