@@ -1,6 +1,6 @@
 # Relay MCP server
 
-The server exposes the same 16 tools over two transports:
+The server exposes the same 18 tools over two transports:
 
 - **stdio:** `start_mcp.sh` runs `server.py` with a single-account `RelaySession`.
 - **Streamable HTTP:** `remote_server.py` serves `/mcp` and OAuth routes in one
@@ -78,7 +78,7 @@ increasing scopes. Revoking either current token invalidates the pair.
 
 | Scope | Tools |
 | --- | --- |
-| `relay:read` | `relay_list_workflows`, `relay_list_executions`, `relay_get_execution_steps` |
+| `relay:read` | `relay_list_connections`, `relay_list_ai_provider_connections`, `relay_list_workflows`, `relay_list_executions`, `relay_get_execution_steps` |
 | `relay:write` | `relay_create_workflow`, `relay_add_node`, `relay_update_node`, `relay_add_edge`, `relay_validate_workflow`, `relay_create_complete_workflow` |
 | `relay:execute` | `relay_publish_workflow`, `relay_deactivate_workflow`, `relay_run_workflow` |
 | `relay:delete` | `relay_delete_workflow`, `relay_delete_node`, `relay_delete_edge` |
@@ -99,6 +99,35 @@ isolated HTTP client, and revalidates the user's Relay identity and workspace be
 each API request. Identity overrides in tool arguments are rejected. The HTTP
 client closes after the invocation. Expired/revoked Relay sessions require a fresh
 login; there is no fallback account or silent refresh of delegated sessions.
+
+## Connection discovery
+
+Before creating or updating nodes that need a connection, clients can look up IDs
+without asking the user to copy them:
+
+- `relay_list_connections(provider="gmail")` returns saved Gmail connections with
+  `id`, `name` (for example, `Gmail - person@example.com`), `provider`, `auth_type`,
+  `email`, and `status: "configured"`. Omit `provider` to list all app connections,
+  including HTTP connections. Non-Gmail connections have `email: null`.
+- `relay_list_ai_provider_connections(provider="openai")` returns AI connections
+  with `id`, `name`, `provider`, and their saved `status` (`active` or `inactive`).
+  Omit `provider` to list all AI connections; `gemini` and `anthropic` are also
+  supported. Inactive connections are included so clients can explain why a
+  saved connection cannot be used.
+
+Provider filters ignore case and surrounding whitespace. Both tools return an
+empty list if no connection matches and only read the authenticated workspace.
+They return an explicit allowlist of metadata; credentials, API keys, tokens, and
+raw configuration are excluded in both transports.
+
+Use the selected result's `id` as `configuration.connection_id` in the appropriate
+app or AI node. Match the user's requested connection name or Gmail account; if
+multiple connections remain ambiguous, ask which named account to use. If none
+exist, the user must connect the app/provider in Relay. AI nodes require an active
+connection. Saved/configured or active status does not verify live provider health.
+
+Both tools require `relay:read` over HTTP. Restart/redeploy the MCP server and
+refresh the client's tool list to expose them to existing clients.
 
 ## Assets and operational limits
 

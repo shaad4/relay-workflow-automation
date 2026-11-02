@@ -18,6 +18,48 @@ class RelayClient:
     def __init__(self, session: RelaySession):
         self.session = session
 
+    # Connection Discovery
+
+    async def _list_connections(self, path: str, provider: str | None):
+        response = await self.session.get(path)
+        connections = response.json()
+        provider = provider.strip().casefold() if provider else ""
+        if provider:
+            connections = [
+                connection
+                for connection in connections
+                if connection["provider"].casefold() == provider
+            ]
+        return connections
+
+    async def list_connections(self, provider: str | None = None):
+        connections = await self._list_connections("/connections/", provider)
+        results = []
+        for connection in connections:
+            # Config can contain credentials. Only expose the Gmail account label.
+            email = None
+            if connection["provider"].casefold() == "gmail":
+                email = (connection.get("config") or {}).get("email")
+            results.append(
+                {
+                    "id": connection["id"],
+                    "name": connection["name"],
+                    "provider": connection["provider"],
+                    "auth_type": connection["auth_type"],
+                    "email": email if isinstance(email, str) else None,
+                    "status": "configured",
+                }
+            )
+        return results
+
+    async def list_ai_provider_connections(self, provider: str | None = None):
+        connections = await self._list_connections("/ai/connections/", provider)
+        # Use an allowlist for both transports, even if the upstream schema expands.
+        return [
+            {key: connection[key] for key in ("id", "name", "provider", "status")}
+            for connection in connections
+        ]
+
     # Workflow Management
 
     async def list_workflows(self):
