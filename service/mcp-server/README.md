@@ -129,17 +129,6 @@ connection. Saved/configured or active status does not verify live provider heal
 Both tools require `relay:read` over HTTP. Restart/redeploy the MCP server and
 refresh the client's tool list to expose them to existing clients.
 
-## Tests
-
-From `service/mcp-server`, after installing `requirements.txt`:
-
-```sh
-.venv/bin/python -m unittest discover -s tests -v
-```
-
-The connection discovery tests use mocked Relay HTTP responses and synthetic
-OAuth sessions; no live provider or database is required.
-
 ## Assets and operational limits
 
 The HTTP server advertises `/oauth/static/relay-icon-black.png` in server metadata.

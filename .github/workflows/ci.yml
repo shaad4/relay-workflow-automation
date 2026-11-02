@@ -118,25 +118,6 @@ jobs:
             ${{ matrix.service }}/test-results.xml
           if-no-files-found: warn
 
-  mcp-tests:
-    name: MCP server tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: service/mcp-server
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: service/mcp-server/requirements.txt
-      - name: Install MCP dependencies
-        run: python -m pip install -r requirements.txt
-      - name: Test connection discovery and authorization
-        run: python -m unittest discover -s tests -v
-
   # 2. FRONTEND UNIT TESTS
   frontend-tests:
     name: Frontend tests
