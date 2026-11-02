@@ -1,0 +1,21 @@
+"""Expression syntax shared by publication validation and execution."""
+
+import re
+
+PATH_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*|\.\d+|\[\d+\])*$")
+EXPRESSION_PATTERN = re.compile(r"\{\{\s*(.*?)\s*\}\}", re.DOTALL)
+
+
+def path_parts(path: str) -> list[str] | None:
+    if not PATH_PATTERN.fullmatch(path):
+        return None
+    return re.sub(r"\[(\d+)\]", r".\1", path).split(".")
+
+
+def expression_matches(value: str):
+    """Reject malformed opening markers; literal closing braces remain valid."""
+    matches = list(EXPRESSION_PATTERN.finditer(value))
+    remaining = EXPRESSION_PATTERN.sub("", value)
+    if "{{" in remaining or any(path_parts(match.group(1)) is None for match in matches):
+        raise ValueError("Expressions must contain a dot path inside {{...}}")
+    return matches

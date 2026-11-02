@@ -1,6 +1,6 @@
 # Relay MCP server
 
-The server exposes the same 18 tools over two transports:
+The server exposes the same 21 tools over two transports:
 
 - **stdio:** `start_mcp.sh` runs `server.py` with a single-account `RelaySession`.
 - **Streamable HTTP:** `remote_server.py` serves `/mcp` and OAuth routes in one
@@ -78,7 +78,7 @@ increasing scopes. Revoking either current token invalidates the pair.
 
 | Scope | Tools |
 | --- | --- |
-| `relay:read` | `relay_list_connections`, `relay_list_ai_provider_connections`, `relay_list_workflows`, `relay_list_executions`, `relay_get_execution_steps` |
+| `relay:read` | `relay_get_node_schema`, `relay_validate_workflow_definition`, `relay_list_ai_models`, `relay_list_connections`, `relay_list_ai_provider_connections`, `relay_list_workflows`, `relay_list_executions`, `relay_get_execution_steps` |
 | `relay:write` | `relay_create_workflow`, `relay_add_node`, `relay_update_node`, `relay_add_edge`, `relay_validate_workflow`, `relay_create_complete_workflow` |
 | `relay:execute` | `relay_publish_workflow`, `relay_deactivate_workflow`, `relay_run_workflow` |
 | `relay:delete` | `relay_delete_workflow`, `relay_delete_node`, `relay_delete_edge` |
@@ -128,6 +128,71 @@ connection. Saved/configured or active status does not verify live provider heal
 
 Both tools require `relay:read` over HTTP. Restart/redeploy the MCP server and
 refresh the client's tool list to expose them to existing clients.
+
+## Authoring workflows with an LLM
+
+The server's initialization instructions and creation-tool descriptions tell clients
+to discover contracts before constructing a workflow. The tools expose that guidance
+directly; clients do not need repository access or an independently maintained prompt.
+
+1. Call `relay_get_node_schema()` for all supported types, or pass `node_type`, for
+   example `ai.generate`. The Workflow Service generates configuration JSON Schemas
+   from its actual Pydantic validators and returns output schemas, examples,
+   expression rules, and edge conditions. Example IDs/models are placeholders.
+2. Discover app/AI connections by name. Call `relay_list_ai_models(connection_id)`
+   for the chosen active AI connection. Choose a returned model appropriate for
+   text/structured generation; provider catalogs may include other model types.
+3. Build the graph using `{{trigger.data.<field>}}` for incoming data and
+   `{{nodes.<node_id>.<field>}}` for previous outputs. Trigger IDs such as
+   `trigger_1` are not expression roots. There is no extra `.output` wrapper.
+4. Call `relay_validate_workflow_definition(nodes, edges, sample_input)` before
+   saving. `sample_input` is optional raw trigger data, e.g.
+   `{"research_topic": "How RAG works"}`. This operation performs no actions,
+   provider generation, or database writes. It returns structured `node_id`,
+   `field`, `expression`, and `suggestion` details when applicable.
+5. Correct errors, create the draft, and validate the saved version before asking
+   for publication/execution approval. `relay_create_complete_workflow` performs
+   preflight automatically and returns `status: "invalid_definition"` without
+   creating a workflow when validation fails. It also accepts `sample_input`.
+
+AI Generate accepts `connection_id`, `model`, `prompt`, and optional `instructions`
+and `rag_context`. It does not accept `provider`, `input_mappings`, or output format
+configuration. Provider comes from the AI connection. Generated text is available
+as `{{nodes.generate_1.content}}`, alongside `model`, `input_tokens`, `output_tokens`.
+
+`relay_add_edge` and complete-workflow edges support `condition`: use an exact
+branch value for `logic.condition`, or `approved`/`rejected` for `human.approval`.
+Referenced output nodes must execute before the consumer on every incoming path.
+HTTP body properties and legacy root aliases remain dynamic; known AI output
+fields are checked. Trigger data fields are only checked for existence when a
+sample is supplied. Provider health and future payload values remain runtime checks.
+
+The backing endpoints are `GET /workflows/node-types/` (optional `node_type` query)
+and `POST /workflows/validate-definition/`. They require Relay authentication.
+Saved-version validation and publication use the same validation implementation,
+including expression checks, regardless of whether a caller uses MCP, the UI, or
+the API. Historical published definitions are not rewritten. Runtime expression
+failures report `UNRESOLVED_EXPRESSION` with a field and, where available, the
+original reference; they do not expose resolved payload values in the error.
+
+## Keeping contracts aligned
+
+`service/workflow-service/app/contracts/` owns the shared expression syntax and
+AI Generate input/output models. Independently built service images use generated
+copies in `service/execution-service/app/contracts/`. After changing the source,
+run from the repository root:
+
+```sh
+python scripts/sync_workflow_contracts.py
+python scripts/sync_workflow_contracts.py --check
+```
+
+CI rejects stale copies. Authoring permits connection-ID expressions; execution
+validates the resolved UUID using the same model with `context={"resolved": True}`.
+Both paths enforce the same supported fields and text limits. Changes should be
+deployed to Workflow Service, Execution Service, and API Gateway before the MCP
+server, then clients should refresh discovery. The contract response includes
+`contract_version` for future incompatible changes.
 
 ## Assets and operational limits
 

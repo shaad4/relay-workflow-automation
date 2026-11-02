@@ -20,7 +20,7 @@ from pydantic import AnyHttpUrl
 from relay_client import RelayClient
 from starlette.responses import PlainTextResponse
 from starlette.routing import Mount
-from tools import register_tools
+from tools import AUTHORING_INSTRUCTIONS, register_tools
 from user_session import DelegatedRequestSession, RelayAccessError
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -200,6 +200,7 @@ def create_remote_app(
         raise ValueError("OAuth resource must exactly match the MCP endpoint")
     mcp = MCPServer(
         "Relay MCP Server",
+        instructions=AUTHORING_INSTRUCTIONS,
         icons=[
             Icon(
                 src=origin + "/oauth/static/relay-icon-black.png",

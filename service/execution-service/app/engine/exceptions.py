@@ -28,3 +28,21 @@ class RetryExhaustedError(Exception):
 
 class ExecutionCancellationRequested(Exception):
     """Workflow cancellation was requested by the user."""
+
+
+class ExpressionResolutionError(ValueError):
+    """Safe metadata about a failed reference; never includes resolved input data."""
+
+    def __init__(self, field: str, expression: str | None = None):
+        self.field = field or "configuration"
+        self.expression = expression
+        super().__init__("A workflow expression is malformed or its value is missing or null.")
+
+
+class NodeConfigurationError(ValueError):
+    """Safe schema failure containing a field and validation type, not its value."""
+
+    def __init__(self, field: str, validation_type: str):
+        self.field = field
+        self.validation_type = validation_type
+        super().__init__("The resolved node configuration does not match its schema.")

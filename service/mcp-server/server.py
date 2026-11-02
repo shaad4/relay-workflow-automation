@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 from mcp.server import MCPServer
 from relay_client import RelayClient
 from relay_session import RelaySession
-from tools import register_tools
+from tools import AUTHORING_INSTRUCTIONS, register_tools
 
-mcp = MCPServer("Relay MCP Server")
+mcp = MCPServer("Relay MCP Server", instructions=AUTHORING_INSTRUCTIONS)
 relay_session = RelaySession()
 relay_client = RelayClient(relay_session)
 

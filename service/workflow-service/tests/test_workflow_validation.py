@@ -237,7 +237,7 @@ def test_configuration_must_be_an_object(node_type, config):
             {"allowed_decisions": ["{{trigger.data.first}}", "{{trigger.data.second}}"]},
         ),
         ("human.approval", {"message": "{{trigger.data.message}}"}),
-        ("logic.condition", {"value": "{{nodes.decision.decision}}"}),
+        ("logic.condition", {"value": "{{trigger.data.decision}}"}),
     ],
 )
 def test_dynamic_inputs_are_not_resolved_during_validation(node_type, patch):

@@ -18,6 +18,30 @@ class RelayClient:
     def __init__(self, session: RelaySession):
         self.session = session
 
+    async def get_node_schema(self, node_type: str | None = None):
+        response = await self.session.request(
+            "GET", "/workflows/node-types/", params={"node_type": node_type} if node_type else {}
+        )
+        return response.json()
+
+    async def validate_workflow_definition(self, nodes, edges, sample_input=None):
+        response = await self.session.request(
+            "POST",
+            "/workflows/validate-definition/",
+            json={"nodes": nodes, "edges": edges, "sample_input": sample_input},
+        )
+        return response.json()
+
+    async def list_ai_models(self, connection_id: str):
+        response = await self.session.get(f"/ai/connections/{path_segment(connection_id)}/models/")
+        return {
+            "connection_id": connection_id,
+            "models": [
+                {"id": model["id"], "name": model.get("name", model["id"])}
+                for model in response.json()["models"]
+            ],
+        }
+
     # Connection Discovery
 
     async def _list_connections(self, path: str, provider: str | None):
@@ -160,6 +184,7 @@ class RelayClient:
         version: int,
         source_node_id: str,
         target_node_id: str,
+        condition: str | None = None,
     ):
         response = await self.session.request(
             "POST",
@@ -167,6 +192,7 @@ class RelayClient:
             json={
                 "source_node_id": source_node_id,
                 "target_node_id": target_node_id,
+                "condition": condition,
             },
         )
         return response.json()

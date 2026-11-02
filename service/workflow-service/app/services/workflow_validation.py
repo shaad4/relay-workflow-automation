@@ -1,78 +1,8 @@
 from app.models import WorkflowEdge, WorkflowNode
-from app.schemas.node_configuration import (
-    AIDecisionConfig,
-    AIGenerateConfig,
-    ConditionConfig,
-    EmailConfig,
-    HttpRequestConfig,
-    HumanApprovalConfig,
-    ManualTriggerConfig,
-    RagSearchConfig,
-    RefundConfig,
-    ScheduledTriggerConfig,
-    WebhookTriggerConfig,
-)
-from pydantic import BaseModel, ValidationError
-
-# Keep schema, public error code, and display name together for each node type.
-NODE_VALIDATORS: dict[str, tuple[type[BaseModel], str, str]] = {
-    "trigger.webhook": (
-        WebhookTriggerConfig,
-        "INVALID_WEBHOOK_CONFIGURATION",
-        "Webhook Trigger",
-    ),
-    "trigger.manual": (
-        ManualTriggerConfig,
-        "INVALID_MANUAL_TRIGGER_CONFIGURATION",
-        "Manual Trigger",
-    ),
-    "trigger.schedule": (
-        ScheduledTriggerConfig,
-        "INVALID_SCHEDULE_CONFIGURATION",
-        "Scheduled Trigger",
-    ),
-    "action.http_request": (
-        HttpRequestConfig,
-        "INVALID_HTTP_CONFIGURATION",
-        "HTTP Request",
-    ),
-    "action.email": (
-        EmailConfig,
-        "INVALID_EMAIL_CONFIGURATION",
-        "Send Email",
-    ),
-    "action.refund": (
-        RefundConfig,
-        "INVALID_REFUND_CONFIGURATION",
-        "Refund Payment",
-    ),
-    "human.approval": (
-        HumanApprovalConfig,
-        "INVALID_APPROVAL_CONFIGURATION",
-        "Human Approval",
-    ),
-    "ai.rag_search": (
-        RagSearchConfig,
-        "INVALID_RAG_CONFIGURATION",
-        "RAG Search",
-    ),
-    "ai.decision": (
-        AIDecisionConfig,
-        "INVALID_AI_DECISION_CONFIGURATION",
-        "AI Decision",
-    ),
-    "ai.generate": (
-        AIGenerateConfig,
-        "INVALID_AI_GENERATE_CONFIGURATION",
-        "AI Generate",
-    ),
-    "logic.condition": (
-        ConditionConfig,
-        "INVALID_CONDITION_CONFIGURATION",
-        "Condition",
-    ),
-}
-TRIGGER_TYPES = {"trigger.webhook", "trigger.manual", "trigger.schedule"}
+from app.schemas.node_registry import NODE_VALIDATORS as NODE_VALIDATORS
+from app.schemas.node_registry import TRIGGER_TYPES
+from app.services.expression_validation import validate_expression_references
+from pydantic import ValidationError
 
 
 def validate_node_configurations(nodes: list[WorkflowNode]) -> list[dict]:
@@ -101,7 +31,9 @@ def validate_node_configurations(nodes: list[WorkflowNode]) -> list[dict]:
                     {
                         "code": code,
                         "node_id": node.node_id,
+                        "field": field,
                         "message": f"{label} node '{node.node_id}': {field} - {error['msg']}",
+                        "suggestion": "Read the node's configuration_schema and correct this field.",
                     }
                 )
     return errors
@@ -274,3 +206,18 @@ def validate_reachability(
                     "message": ("Every node must be reachable from the trigger."),
                 }
             )
+
+
+def validate_definition(nodes, edges, sample_input=None):
+    """Shared by draft preflight, saved-version validation, and publication."""
+    errors = []
+    node_ids = validate_node_ids(nodes, errors)
+    errors.extend(validate_node_configurations(nodes))
+    triggers = validate_triggers(nodes, errors)
+    outgoing, indegree = validate_edges(edges, node_ids, errors)
+    validate_branching(nodes, outgoing, errors)
+    validate_cycles(outgoing, indegree, errors)
+    validate_reachability(triggers, outgoing, node_ids, errors)
+    if not any(error["code"] in {"WORKFLOW_CYCLE", "DUPLICATE_NODE_ID"} for error in errors):
+        errors.extend(validate_expression_references(nodes, edges, sample_input))
+    return {"valid": not errors, "errors": errors, "warnings": []}

@@ -6,6 +6,7 @@ from app.dependencies import get_current_identity
 from app.grpc.execution_client import ExecutionGrpcClient
 from app.schemas.workflow import (
     WorkflowCreate,
+    WorkflowDefinitionValidationRequest,
     WorkflowPublishResponse,
     WorkflowResponse,
     WorkflowStatusResponse,
@@ -15,6 +16,7 @@ from app.schemas.workflow import (
 from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeResponse, WorkflowEdgeUpdate
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeResponse, WorkflowNodeUpdate
 from app.schemas.workflow_version import WorkflowVersionResponse
+from app.services.node_catalog import get_node_catalog
 from app.services.webhook_lifecycle import (
     WebhookActivationError,
     WebhookCleanupError,
@@ -45,6 +47,7 @@ from app.services.workflow_service import (
     update_workflow_node,
     validate_workflow,
 )
+from app.services.workflow_validation import validate_definition
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +58,25 @@ router = APIRouter(prefix="/workflows", tags=["workflows"])
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
+
+
+@router.get("/node-types/")
+async def get_node_types_route(
+    node_type: str | None = None,
+    identity: dict = Depends(get_current_identity),
+):
+    try:
+        return get_node_catalog(node_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Unsupported node type") from exc
+
+
+@router.post("/validate-definition/", response_model=WorkflowValidationResponse)
+async def validate_workflow_definition_route(
+    data: WorkflowDefinitionValidationRequest,
+    identity: dict = Depends(get_current_identity),
+):
+    return validate_definition(data.nodes, data.edges, data.sample_input)
 
 
 @router.post("/", response_model=WorkflowResponse, status_code=201)
