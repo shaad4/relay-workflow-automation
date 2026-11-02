@@ -242,7 +242,7 @@ relay-workflow-automation/
 
 ## ⚡ Getting Started
 
-For the audited deployment paths, start with the **[deployment guide](deploy/README.md)**: [Docker Compose](deploy/docker/README.md), [Kubernetes/K3s](deploy/kubernetes/README.md), and [verification limits](deploy/VALIDATION.md). Production deployment remains manual; these assets do not modify a running server.
+Start with the **[deployment guide](deploy/README.md)** for [Docker Compose](deploy/docker/README.md), [Kubernetes/K3s](deploy/kubernetes/README.md), and the manual GitHub Actions release workflow.
 
 ### Requirements
 
@@ -291,10 +291,6 @@ The benchmark driver is at [`benchmarks/relay_load_test.py`](benchmarks/relay_lo
 ## 🔭 Future Scope
 
 Additional integrations and OAuth authorization flows, reusable workflow templates, real-time UI updates, deeper distributed tracing and broader recovery guarantees for external side effects.
-
-## 📄 License
-
-See [`LICENSE`](LICENSE) for the repository's license terms, if present.
 
 <div align="center">
 

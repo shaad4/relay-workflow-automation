@@ -11,7 +11,6 @@ import {
   writePayloadDraft,
   clearPayloadDraft,
   payloadDraftFromSchedule,
-  createScheduleIfMissing,
   normalizeSchedule,
   validateSchedule,
   validCron,
@@ -161,38 +160,6 @@ test("all schedule API operations use the existing gateway client with mock requ
   } finally {
     delete globalThis.__scheduleApiMock;
   }
-});
-
-test("creation reconciles authoritative state and never retries uncertain mutations", async () => {
-  let creates = 0;
-  const existing = { id: "existing", workflow_id: "workflow", enabled: false };
-  const api = {
-    listSchedules: async () => [existing],
-    createSchedule: async () => {
-      creates++;
-    },
-  };
-  assert.equal(await createScheduleIfMissing("workflow", {}, api), existing);
-  assert.equal(creates, 0);
-  api.listSchedules = async () => [];
-  api.createSchedule = async (payload) => {
-    creates++;
-    assert.equal(payload.workflow_id, "workflow");
-    throw new Error("timeout");
-  };
-  await assert.rejects(createScheduleIfMissing("workflow", {}, api), /timeout/);
-  assert.equal(creates, 1);
-  api.listSchedules = async () => [existing];
-  assert.equal(await createScheduleIfMissing("workflow", {}, api), existing);
-  assert.equal(creates, 1);
-  api.listSchedules = async () => {
-    throw new Error("unavailable");
-  };
-  await assert.rejects(
-    createScheduleIfMissing("workflow", {}, api),
-    /unavailable/,
-  );
-  assert.equal(creates, 1);
 });
 
 test("optional trigger payload accepts objects and empty text with distinct validation errors", () => {

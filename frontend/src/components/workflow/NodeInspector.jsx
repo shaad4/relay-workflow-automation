@@ -3258,38 +3258,6 @@ function HumanApprovalConfig({
   );
 }
 
-function ApprovalConfig({ config, onChange }) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <FieldLabel>Approver Email</FieldLabel>
-        <TextInput
-          value={config.approver}
-          onChange={(v) => onChange("approver", v)}
-        />
-      </div>
-      <div>
-        <FieldLabel>Timeout (hours)</FieldLabel>
-        <TextInput
-          value={String(config.timeout_hours ?? 24)}
-          onChange={(v) =>
-            onChange("timeout_hours", Number.parseInt(v, 10) || 24)
-          }
-          mono
-        />
-      </div>
-      <div>
-        <FieldLabel>Message</FieldLabel>
-        <TextareaInput
-          value={config.message}
-          onChange={(v) => onChange("message", v)}
-          rows={2}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // NodeInspector
 // ─────────────────────────────────────────────────────────────────────────────

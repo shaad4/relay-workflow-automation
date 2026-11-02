@@ -286,36 +286,44 @@ test("readiness checks the gateway at runtime and fails closed without config", 
   );
 });
 
-test("body reception shares the proxy deadline and cancels a stalled stream", async () => {
-  let cancelled = false;
-  let contactedGateway = false;
-  const body = new ReadableStream({
-    pull() {
-      return new Promise(() => {});
-    },
-    cancel() {
-      cancelled = true;
-      return new Promise(() => {});
-    },
-  });
-  const response = await proxyRequest(
-    request("/hooks/token", {
-      method: "POST",
-      body,
-      duplex: "half",
-    }),
-    {
-      env: { ...env, API_PROXY_TIMEOUT_SECONDS: "1" },
-      fetchImpl: async () => {
-        contactedGateway = true;
-        return Response.json({ ok: true });
+test(
+  "body reception shares the proxy deadline and cancels a stalled stream",
+  { timeout: 3000 },
+  async (t) => {
+    // AbortSignal.timeout is unref'ed; this synthetic request has no socket to keep
+    // the event loop alive while the real deadline elapses.
+    const keepAlive = setInterval(() => {}, 1000);
+    t.after(() => clearInterval(keepAlive));
+    let cancelled = false;
+    let contactedGateway = false;
+    const body = new ReadableStream({
+      pull() {
+        return new Promise(() => {});
       },
-    },
-  );
-  assert.equal(response.status, 408);
-  assert.equal(cancelled, true);
-  assert.equal(contactedGateway, false);
-});
+      cancel() {
+        cancelled = true;
+        return new Promise(() => {});
+      },
+    });
+    const response = await proxyRequest(
+      request("/hooks/token", {
+        method: "POST",
+        body,
+        duplex: "half",
+      }),
+      {
+        env: { ...env, API_PROXY_TIMEOUT_SECONDS: "1" },
+        fetchImpl: async () => {
+          contactedGateway = true;
+          return Response.json({ ok: true });
+        },
+      },
+    );
+    assert.equal(response.status, 408);
+    assert.equal(cancelled, true);
+    assert.equal(contactedGateway, false);
+  },
+);
 
 test("caller abort cancels a pending body read before any upstream request", async () => {
   const controller = new AbortController();

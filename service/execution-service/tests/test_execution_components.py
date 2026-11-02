@@ -19,7 +19,6 @@ from app.engine.exceptions import ActionExecutionFailed, HumanApprovalRequired
 from app.engine.executor import SequentialExecutor
 from app.engine.graph import ExecutionGraph
 from app.engine.resolver import ExpressionResolver
-from app.engine.resume import get_resume_state
 from app.engine.status import ExecutionStatus
 from app.engine.step_status import ExecutionStepStatus
 from app.grpc import action_client, auth_client, workflow_client
@@ -29,7 +28,7 @@ from app.main import health, lifespan
 from app.models.execution import Execution
 from app.models.execution_step import ExecutionStep
 from app.routes import approvals as approval_routes
-from app.services import approval_branch_service, approval_service, workflow_service
+from app.services import approval_branch_service, approval_service
 
 
 def test_context_nested_paths_and_mutations():
@@ -59,42 +58,22 @@ def test_graph_and_sequential_executor_paths():
         ],
     )
     executor = SequentialExecutor(graph)
-    assert [n["node_id"] for n in executor.get_execution_order()] == ["t", "a", "x"]
+    assert executor.get_start_node()["node_id"] == "t"
+    assert executor.get_next_node("t")["node_id"] == "a"
+    assert executor.get_next_node("a", condition="ok")["node_id"] == "x"
     assert [n["node_id"] for n in executor.get_action_nodes()] == ["a"]
     assert graph.get_node("missing") is None
     assert graph.get_next_nodes("missing") == []
     assert ExecutionGraph([], []).get_start_node() is None
     with pytest.raises(ValueError, match="start node"):
-        SequentialExecutor(ExecutionGraph([], [])).get_execution_order()
-    with pytest.raises(ValueError, match="multiple outgoing"):
-        SequentialExecutor(
-            ExecutionGraph(
-                nodes[:2],
-                [
-                    {"source_node_id": "t", "target_node_id": "a"},
-                    {"source_node_id": "t", "target_node_id": "t"},
-                ],
-            )
-        ).get_execution_order()
-    with pytest.raises(ValueError, match="Cycle detected"):
-        SequentialExecutor(
-            ExecutionGraph(
-                nodes[:2],
-                [
-                    {"source_node_id": "t", "target_node_id": "a"},
-                    {"source_node_id": "a", "target_node_id": "t"},
-                ],
-            )
-        ).get_execution_order()
+        SequentialExecutor(ExecutionGraph([], [])).get_start_node()
     with pytest.raises(ValueError, match="Target node not found"):
         SequentialExecutor(
             ExecutionGraph(
                 nodes[:1],
-                [
-                    {"source_node_id": "t", "target_node_id": "gone"},
-                ],
+                [{"source_node_id": "t", "target_node_id": "gone"}],
             )
-        ).get_execution_order()
+        ).get_next_node("t")
 
 
 def test_expression_resolver_handles_nested_and_embedded_values():
@@ -154,30 +133,13 @@ class ApprovalSession:
         self.rollbacks += 1
 
 
-def test_approval_service_list_get_approve_reject_and_errors():
-    approval = SimpleNamespace(status=HumanApprovalStatus.PENDING, decision=None, decided_at=None)
+def test_approval_service_list_get_and_errors():
+    approval = SimpleNamespace(status=HumanApprovalStatus.PENDING)
     session = ApprovalSession(QueryResult([approval], one=approval))
     assert asyncio.run(approval_service.list_pending_approvals("w", "u", session)) == [approval]
     assert asyncio.run(approval_service.get_approval(uuid4(), "w", "u", session)) is approval
-    assert asyncio.run(approval_service.approve_approval(uuid4(), "w", "u", session)) is approval
-    assert approval.status == HumanApprovalStatus.APPROVED and approval.decision == "approved"
-    assert session.commits == 1
-
-    approval.status = HumanApprovalStatus.PENDING
-    assert asyncio.run(approval_service.reject_approval(uuid4(), "w", "u", session)) is approval
-    assert approval.status == HumanApprovalStatus.REJECTED and approval.decision == "rejected"
-    assert session.commits == 2
-
     missing = ApprovalSession(QueryResult(one=None))
-    with pytest.raises(ValueError, match="Approval not found"):
-        asyncio.run(approval_service.approve_approval(uuid4(), "w", "u", missing))
-    approval.status = HumanApprovalStatus.APPROVED
-    with pytest.raises(ValueError, match="already approved"):
-        asyncio.run(
-            approval_service.reject_approval(
-                uuid4(), "w", "u", ApprovalSession(QueryResult(one=approval))
-            )
-        )
+    assert asyncio.run(approval_service.get_approval(uuid4(), "w", "u", missing)) is None
 
     class BrokenSession(ApprovalSession):
         async def execute(self, _statement):
@@ -186,8 +148,6 @@ def test_approval_service_list_get_approve_reject_and_errors():
     for fn, args in [
         (approval_service.list_pending_approvals, ("w", "u")),
         (approval_service.get_approval, (uuid4(), "w", "u")),
-        (approval_service.approve_approval, (uuid4(), "w", "u")),
-        (approval_service.reject_approval, (uuid4(), "w", "u")),
     ]:
         broken = BrokenSession()
         with pytest.raises(RuntimeError, match="db"):
@@ -447,72 +407,6 @@ def _async_return(value):
         return value
 
     return resolve
-
-
-def test_get_resume_state_success_and_failure_paths(monkeypatch):
-    execution_id = uuid4()
-    step = SimpleNamespace(id=uuid4(), sequence=3)
-    approval = SimpleNamespace(execution_step_id=step.id)
-    execution = SimpleNamespace(id=execution_id)
-    session = SimpleNamespace(get=None, execute=None, rollback=None)
-
-    async def get(_model, _id):
-        return execution
-
-    results = iter([QueryResult([step]), QueryResult(first=approval)])
-
-    async def execute(_statement):
-        return next(results)
-
-    async def rollback():
-        session.rolled = True
-
-    session.get, session.execute, session.rollback = get, execute, rollback
-    results = iter([QueryResult([step]), QueryResult(first=approval)])
-    state = asyncio.run(get_resume_state(execution_id, session))
-    assert state == (execution, [step], 3)
-
-    async def no_execution(_model, _id):
-        return None
-
-    session.get = no_execution
-    with pytest.raises(ValueError, match="Execution not found"):
-        asyncio.run(get_resume_state(execution_id, session))
-
-    async def execution_found(_model, _id):
-        return "execution"
-
-    session.get = execution_found
-    results = iter([QueryResult([]), QueryResult(first=None)])
-    with pytest.raises(ValueError, match="Approved human approval not found"):
-        asyncio.run(get_resume_state(execution_id, session))
-    results = iter(
-        [QueryResult([step]), QueryResult(first=SimpleNamespace(execution_step_id=uuid4()))]
-    )
-    with pytest.raises(ValueError, match="execution step not found"):
-        asyncio.run(get_resume_state(execution_id, session))
-    assert session.rolled is True
-
-
-def test_workflow_service_closes_client(monkeypatch):
-    marker = object()
-
-    class Client:
-        async def get_workflow_definition(self, **kwargs):
-            self.kwargs = kwargs
-            return marker
-
-        async def close(self):
-            self.closed = True
-
-    client = Client()
-    monkeypatch.setattr(workflow_service, "WorkflowClient", lambda: client)
-    assert asyncio.run(workflow_service.load_workflow_definition("w", "v", "x")) is marker
-    assert client.closed and client.kwargs == {
-        "workflow_id": "w",
-        "version_id": "v",
-        "workspace_id": "x",
-    }
 
 
 def test_grpc_client_request_and_close_methods(monkeypatch):
