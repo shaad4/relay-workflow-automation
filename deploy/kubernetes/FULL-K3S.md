@@ -154,6 +154,17 @@ Do not change Kafka CLUSTER_ID after initialization; startup refuses mismatches.
 Kubernetes Secrets are base64 objects, not automatically encrypted backups; restrict
 kubeconfig/RBAC and configure cluster encryption at rest separately.
 
+For the existing Oracle production installation, the authoritative private Secret
+files are `/home/ubuntu/relay-k8s-private/generated/`. Keep
+`application-secrets/` synchronized with those reviewed values; it is not a second
+deployment source. Never rerun `create-secrets.py` for this initialized cluster.
+Before updating a key, compare it with the live Secret and verify the intended
+connection without writes. Reject duplicate YAML keys, keep private directories
+at 0700 and files at 0600, and retain a private rollback copy. Obtain approval,
+update only the reviewed key, then restart only its consuming Deployments.
+Image CD does not apply configuration. Public production settings, including
+`SUPABASE_URL`, belong in `overlays/full-k3s/configmap-patch.yaml`.
+
 Supply your existing certificate and key (no certificate automation or DNS edits):
 
 ```bash

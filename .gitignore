@@ -41,6 +41,7 @@ htmlcov/
 # PostgreSQL / Database
 # =========================
 *.sqlite
+*.sqlite-*
 *.sqlite3
 
 # =========================

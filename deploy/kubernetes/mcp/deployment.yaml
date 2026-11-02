@@ -25,6 +25,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
 
@@ -43,6 +44,9 @@ spec:
 
             - name: MCP_PORT
               value: "8001"
+
+            - name: MCP_CLIENT_DB_PATH
+              value: "/data/oauth.sqlite"
 
             - name: MCP_PUBLIC_ORIGIN
               value: "https://mcp.relay.shaad.site"
@@ -78,10 +82,15 @@ spec:
                 - ALL
 
           volumeMounts:
+            - name: oauth-data
+              mountPath: /data
             - name: tmp
               mountPath: /tmp
 
       volumes:
+        - name: oauth-data
+          persistentVolumeClaim:
+            claimName: relay-mcp-data
         - name: tmp
           emptyDir:
             sizeLimit: 32Mi
