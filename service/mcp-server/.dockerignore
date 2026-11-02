@@ -21,6 +21,8 @@ test_*.py
 *.pem
 *.key
 *.crt
+*.sqlite
+*.sqlite-*
 
 start_mcp.sh
 README.md

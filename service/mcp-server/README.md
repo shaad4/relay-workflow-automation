@@ -35,8 +35,8 @@ narrowly scoped CIDRs. Supply `MCP_SESSION_SECRET` and `RELAY_API_URL` through
 Secrets/configuration. Run `remote_server.py`, as in the image's Dockerfile.
 
 K3s mode binds to `0.0.0.0:$MCP_PORT`. Keep one worker and one replica because OAuth
-state is held in memory. The original socket peer must match the trusted ingress
-allowlist before forwarded headers are interpreted. Wildcards and all-address CIDRs
+sessions and tokens are held in memory. The original socket peer must match the
+trusted ingress allowlist before forwarded headers are interpreted. Wildcards and all-address CIDRs
 are rejected; forwarded host headers cannot replace the configured public origin.
 
 The separate manifests are in [deploy/kubernetes/mcp](../../deploy/kubernetes/mcp/).
@@ -44,6 +44,18 @@ They require the referenced Secrets/configuration and TLS ingress to be provisio
 The release workflow updates an existing `relay-mcp` deployment. Configure Traefik
 to terminate HTTPS, preserve Host and sanitize forwarded headers. Use ingress-only
 network access and the narrowest valid trusted proxy ranges.
+
+Client registrations use Python's built-in SQLite support. The MCP manifests set
+`MCP_CLIENT_DB_PATH=/data/oauth.sqlite` and mount the `relay-mcp-data` PVC there;
+include `storage.yaml` when deploying this change. Keep the PVC when replacing
+the Pod. Image-only CD does not install the PVC or mount: deploy those settings
+with the updated MCP image, retaining the production image reference rather than
+the manifest's development placeholder. The container uses `fsGroup: 10001` for
+volume access, and the database file is restricted to mode 0600 because registrations
+can contain client secrets.
+Back it up while MCP is stopped. K3s local-path storage does not survive node/disk loss.
+For local persistence, set `MCP_CLIENT_DB_PATH` to a file in an existing private,
+writable directory; leaving it unset uses an in-memory SQLite database.
 
 ## OAuth and scopes
 
@@ -94,10 +106,11 @@ The HTTP server advertises `/oauth/static/relay-icon-black.png` in server metada
 The OAuth logo, icon and stylesheet are bundled under `oauth/static/`; clients may
 cache server metadata and need reconnection after an image change.
 
-OAuth clients, pending requests, grants and delegated credentials are in process
-memory. Restart invalidates them; multiple workers cannot share this state. Expiry
-cleanup is opportunistic. Persistent storage, quotas and production rate limiting
-are not provided by this implementation.
+Client registrations survive restarts when the SQLite file is on persistent storage.
+Pending requests, tokens, grants and delegated credentials remain in process memory;
+users must sign in again after a restart. Multiple workers cannot share that session
+state. Registrations lost before this change require one fresh registration. Expiry
+cleanup is opportunistic; quotas and production rate limiting are not provided.
 
 Scope checks narrow Relay access; Relay's API remains responsible for resource and
 workspace authorization. Revocation cannot undo mutations already accepted by
