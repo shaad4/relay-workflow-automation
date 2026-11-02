@@ -14,3 +14,4 @@ data:
   SMTP_PORT: "587"
   SMTP_FROM_EMAIL: groveworkspace@gmail.com
   SMTP_FROM_NAME: Relay
+  SUPABASE_URL: https://uufguupzrngjzvbpdbpc.supabase.co
