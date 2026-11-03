@@ -7,12 +7,17 @@ async def create_complete_workflow(
     description: str,
     nodes: list[dict],
     edges: list[dict],
+    sample_input: dict | None = None,
 ) -> dict:
     if not nodes:
         return {
             "success": False,
             "error": "At least one node is required",
         }
+
+    validation = await client.validate_workflow_definition(nodes, edges, sample_input)
+    if not validation["valid"]:
+        return {"success": False, "status": "invalid_definition", "validation": validation}
 
     workflow = await client.create_workflow(
         name=name,
@@ -38,6 +43,7 @@ async def create_complete_workflow(
                 version=version,
                 source_node_id=edge["source_node_id"],
                 target_node_id=edge["target_node_id"],
+                condition=edge.get("condition"),
             )
 
         validation = await client.validate_workflow(

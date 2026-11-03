@@ -12,7 +12,11 @@ from app.ai.exceptions import (
     AIServiceUnavailableError,
     AITimeoutError,
 )
-from app.engine.exceptions import ActionExecutionFailed
+from app.engine.exceptions import (
+    ActionExecutionFailed,
+    ExpressionResolutionError,
+    NodeConfigurationError,
+)
 
 HTTP = {
     400: (
@@ -235,7 +239,11 @@ def classify_error(
         code = "AI_INVALID_CONFIGURATION"
         message = "The AI node configuration is invalid."
 
-        suggestion = "Review the provider, model, input mappings, and output configuration."
+        suggestion = (
+            "Review connection_id, model, prompt, instructions, and rag_context against the AI Generate schema."
+            if node_type == "ai.generate"
+            else "Read this node type's configuration schema and correct its inputs."
+        )
 
     # Classify RAG retrieval failures.
     if node_type and "rag" in node_type:
@@ -309,6 +317,24 @@ def classify_error(
                     code = "RAG_INVALID_QUERY"
                     message = "The retrieval query is empty or too long."
 
+    if isinstance(exc, ExpressionResolutionError):
+        code = "UNRESOLVED_EXPRESSION"
+        message = "A workflow expression is malformed or its value is missing or null."
+        suggestion = (
+            "Check the reported field and expression. Trigger inputs use trigger.data; "
+            "upstream outputs use nodes.<node_id>.<field>. Supply missing trigger values."
+        )
+        temporary = False
+    elif isinstance(exc, NodeConfigurationError):
+        code = (
+            "AI_INVALID_CONFIGURATION"
+            if node_type and node_type.startswith("ai.")
+            else "INVALID_NODE_CONFIGURATION"
+        )
+        message = "The resolved node configuration does not match its schema."
+        suggestion = "Read the node's configuration_schema and correct the reported field and validation_type."
+        temporary = False
+
     # Determine whether the failure is temporary.
     is_temporary = temporary
 
@@ -328,6 +354,13 @@ def classify_error(
         "automatic_retries_exhausted": temporary and attempts >= MAX_ATTEMPTS,
         "suggestion": suggestion,
     }
+
+    if isinstance(exc, (ExpressionResolutionError, NodeConfigurationError)):
+        result["field"] = exc.field
+    if isinstance(exc, ExpressionResolutionError) and exc.expression is not None:
+        result["expression"] = exc.expression
+    if isinstance(exc, NodeConfigurationError):
+        result["validation_type"] = exc.validation_type
 
     if node_id:
         result["node_id"] = node_id

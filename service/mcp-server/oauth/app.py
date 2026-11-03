@@ -1,7 +1,9 @@
 """OAuth routes shared by the local and explicitly configured K3s applications."""
 
+import json
 import os
 import re
+import secrets
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -22,6 +24,7 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
 from oauth.approval import create_approval_handler
+from oauth.audit import audit_event, request_id
 from oauth.consent import HTML_CSP, create_consent_page
 from oauth.login import create_login_handler
 from oauth.provider import RelayOAuthProvider
@@ -53,7 +56,9 @@ def create_oauth_app(
     secret = session_secret or os.environ.get("MCP_SESSION_SECRET", "")
     if len(secret) < 32:
         raise ValueError("MCP_SESSION_SECRET must contain at least 32 random characters")
-    provider = provider or RelayOAuthProvider(origin + "/mcp", store)
+    provider = provider or RelayOAuthProvider(
+        origin + "/mcp", store, secret=secret, deployment_mode=deployment_mode
+    )
     # Registration scopes are the permissions a client may REQUEST, not a grant.
     # Clients that omit this optional DCR field must be able to request the scopes
     # advertised by discovery later. Explicit restricted registrations stay restricted.
@@ -123,7 +128,21 @@ def create_oauth_app(
             code = provider.code_store.get(params.get("code"), params.get("client_id"))
             if code and params.get("redirect_uri") != str(code.redirect_uri):
                 return error()
-        return await token_handler.handle(request)
+        response = await token_handler.handle(request)
+        kind = params.get("grant_type")
+        if kind not in {"authorization_code", "refresh_token"}:
+            kind = "unsupported"
+        error_code = None
+        if response.status_code >= 400:
+            error_code = json.loads(response.body).get("error")
+        audit_event(
+            "token_exchange",
+            client_id=params.get("client_id"),
+            grant_type=kind,
+            status=response.status_code,
+            error=error_code,
+        )
+        return response
 
     async def register(request):
         try:
@@ -215,8 +234,15 @@ def create_oauth_app(
     app.state.code_store = provider.code_store
 
     async def security_headers(request, call_next):
-        provider.cleanup()
-        response = await call_next(request)
+        correlation = secrets.token_hex(12)
+        binding = request_id.set(correlation)
+        try:
+            provider.cleanup()
+            response = await call_next(request)
+            if request.url.path in {"/mcp", "/token", "/register", "/revoke"}:
+                audit_event("oauth_http", endpoint=request.url.path, status=response.status_code)
+        finally:
+            request_id.reset(binding)
         csp = "default-src 'none'; frame-ancestors 'none'"
         if request.url.path.startswith("/oauth/") and response.headers.get(
             "content-type", ""
@@ -225,6 +251,7 @@ def create_oauth_app(
         response.headers.update(
             {
                 "Cache-Control": "no-store",
+                "X-Request-ID": correlation,
                 "Pragma": "no-cache",
                 # Keep the same-origin Referer fallback usable on form submissions,
                 # while suppressing referrers on external OAuth callbacks.

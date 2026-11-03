@@ -3,6 +3,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.workflow_edge import WorkflowEdgeCreate
+from app.schemas.workflow_node import WorkflowNodeCreate
+
 
 class WorkflowCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
@@ -34,6 +37,18 @@ class WorkflowUpdate(BaseModel):
 class WorkflowValidationIssue(BaseModel):
     code: str
     message: str
+    node_id: str | None = None
+    field: str | None = None
+    expression: str | None = None
+    suggestion: str | None = None
+
+
+class WorkflowDefinitionValidationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nodes: list[WorkflowNodeCreate]
+    edges: list[WorkflowEdgeCreate]
+    sample_input: dict | None = None
 
 
 class WorkflowValidationResponse(BaseModel):

@@ -299,7 +299,7 @@ async def run_execution(
 
                 configuration["headers"] = headers
 
-            resolved_configuration = resolver.resolve(configuration)
+            resolved_configuration = resolver.resolve(configuration, strict=True)
 
             # Execute RAG Search node
             if node_type == "ai.rag_search":

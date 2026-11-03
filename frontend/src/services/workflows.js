@@ -157,6 +157,17 @@ export async function validateWorkflow(workflowId, versionNumber) {
   );
 }
 
+export async function getWorkflowNodeTypes() {
+  return apiRequest("/workflows/node-types/", { method: "GET" });
+}
+
+export async function validateWorkflowDefinition(definition) {
+  return apiRequest("/workflows/validate-definition/", {
+    method: "POST",
+    body: JSON.stringify(definition),
+  });
+}
+
 export async function publishWorkflow(workflowId, versionNumber) {
   return apiRequest(
     `/workflows/${workflowId}/versions/${versionNumber}/publish/`,

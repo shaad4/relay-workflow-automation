@@ -194,7 +194,20 @@ def test_email_format_schema_and_publication_preserve_legacy_config(body_format)
     assert parsed.body_format == (body_format or "plain")
     assert parsed.model_dump()["body"] == config["body"]
     assert validate(
-        [node("t", "trigger.webhook"), node("mail", "action.email", config)], [edge("t", "mail")]
+        [
+            node("t", "trigger.webhook"),
+            node(
+                "generate_1",
+                "ai.generate",
+                {
+                    "connection_id": str(uuid4()),
+                    "model": "test-model",
+                    "prompt": "Write a report",
+                },
+            ),
+            node("mail", "action.email", config),
+        ],
+        [edge("t", "generate_1"), edge("generate_1", "mail")],
     )["valid"]
 
 

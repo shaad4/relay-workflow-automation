@@ -169,6 +169,9 @@ jobs:
       - name: Check Python formatting
         run: ruff format --check service
 
+      - name: Check shared workflow contracts
+        run: python scripts/sync_workflow_contracts.py --check
+
   # 4. FRONTEND QUALITY AND SECURITY
   frontend-quality:
     name: Frontend quality and security
@@ -283,6 +286,7 @@ jobs:
         run: |
           python scripts/check_full_k3s.py /tmp/relay-full-k3s.yaml
           python scripts/test_full_k3s.py
+          bash -n scripts/deploy-relay-k3s.sh
           for script in scripts/k8s/*.sh; do bash -n "$script"; done
           kubectl kustomize deploy/kubernetes/initialization/vector > /tmp/relay-vector-init.yaml
           kubectl kustomize deploy/kubernetes/initialization/topics > /tmp/relay-topics-init.yaml

@@ -278,9 +278,10 @@ export function validateNodeConfiguration(typeId, config = {}) {
     case "ai.generate": {
       if (
         typeof config.connection_id !== "string" ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          config.connection_id,
-        )
+        (!/^\{\{\s*[^{}]+\s*\}\}$/.test(config.connection_id) &&
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            config.connection_id,
+          ))
       )
         errors.push({
           field: "connection_id",

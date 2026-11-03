@@ -6,6 +6,9 @@ from user_session import RelayAccessError
 SCOPES = ["relay:read", "relay:write", "relay:execute", "relay:delete"]
 TOOL_SCOPES = {
     "relay_hello": None,
+    "relay_get_node_schema": "relay:read",
+    "relay_validate_workflow_definition": "relay:read",
+    "relay_list_ai_models": "relay:read",
     "relay_list_connections": "relay:read",
     "relay_list_ai_provider_connections": "relay:read",
     "relay_list_workflows": "relay:read",

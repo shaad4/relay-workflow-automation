@@ -99,6 +99,22 @@ route those separately at the ingress/reverse proxy and verify authentication.
 At the edge, configure appropriate request timeouts/body limits and request
 rate limits; the in-process proxy is not a substitute for those controls.
 
+## Workflow validation
+
+The manual builder and MCP use the same workflow-service validation contract.
+The builder reads `/workflows/node-types/` for field requirements and output
+names, and debounces `/workflows/validate-definition/` requests while editing.
+**Validate** checks the current canvas without saving it. The validation dialog
+accepts optional sample trigger input (the JSON object available at `trigger.data`)
+and links errors to the affected node and field. Editing discards stale results.
+
+**Publish** checks the canvas, verifies selected AI connections and knowledge
+bases, saves changes, and validates the saved version before publishing. Local
+field checks provide immediate feedback; backend validation decides whether a
+workflow can be published. Deploy the workflow-service and gateway endpoints
+before this frontend; validation failures or unavailable validation block
+publication. Schema discovery failures only disable schema-derived hints.
+
 ## Verification
 
 ```bash

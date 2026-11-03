@@ -229,7 +229,11 @@ function WorkflowCanvasInner({
         }
         nodeTypes={nodeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
-        connectionLineStyle={{ stroke: "var(--accent)", strokeWidth: 2 }}
+        connectionLineStyle={{
+          stroke: "var(--workflow-connection-line, #38bdf8)",
+          strokeWidth: 2.5,
+          strokeLinecap: "round",
+        }}
         nodesDraggable={!isReadOnly}
         nodesConnectable={!isReadOnly}
         edgesReconnectable={!isReadOnly}

@@ -5,15 +5,7 @@ from app.models import Workflow, WorkflowEdge, WorkflowNode, WorkflowVersion
 from app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 from app.schemas.workflow_edge import WorkflowEdgeCreate, WorkflowEdgeUpdate
 from app.schemas.workflow_node import WorkflowNodeCreate, WorkflowNodeUpdate
-from app.services.workflow_validation import (
-    validate_branching,
-    validate_cycles,
-    validate_edges,
-    validate_node_configurations,
-    validate_node_ids,
-    validate_reachability,
-    validate_triggers,
-)
+from app.services.workflow_validation import validate_definition
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -910,16 +902,7 @@ async def validate_workflow(
 
     edges = edge_result.scalars().all()
 
-    errors = []
-    node_ids = validate_node_ids(nodes, errors)
-    errors.extend(validate_node_configurations(nodes))
-    triggers = validate_triggers(nodes, errors)
-    outgoing, indegree = validate_edges(edges, node_ids, errors)
-    validate_branching(nodes, outgoing, errors)
-    validate_cycles(outgoing, indegree, errors)
-    validate_reachability(triggers, outgoing, node_ids, errors)
-
-    return {"valid": not errors, "errors": errors, "warnings": []}
+    return validate_definition(nodes, edges)
 
 
 async def _published_version_has_schedule_trigger(

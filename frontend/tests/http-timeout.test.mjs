@@ -8,6 +8,7 @@ import {
   validateWorkflowConfiguration,
 } from "../src/components/workflow/configValidation.js";
 import { workflowSaveSnapshot } from "../src/components/workflow/workflowSaveState.js";
+import { workflowDefinition } from "../src/components/workflow/workflowValidation.js";
 const config = {
   connection_id: "existing",
   method: "GET",
@@ -194,13 +195,8 @@ test("HTTP timeout input saves numbers, restores them and prevents read-only cha
   assert.equal(pathInput().props.value, "students/42");
   pathInput().props.onChange("students/43");
   assert.equal(saved.url, "https://another.example/api/students/43");
-  const builder = await readFile(
-    new URL("../src/components/workflow/WorkflowBuilder.jsx", import.meta.url),
-    "utf8",
+  assert.equal(
+    workflowDefinition([node], []).nodes[0].configuration.timeout,
+    20,
   );
-  assert.match(
-    builder,
-    /\["ai.rag_search", "ai.decision", "action.http_request"\]\.includes/,
-  );
-  assert.match(builder, /configuration: node.data.config/);
 });

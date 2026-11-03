@@ -14,6 +14,34 @@ export const outputsByType = {
   "action.refund": ["refund_id", "payment_id", "amount", "status", "success"],
 };
 
+// Offer only outputs available on every route into the current node. The server
+// remains authoritative; this keeps the picker from suggesting branch-only data.
+export function guaranteedPreviousNodesFor(nodes, edges, currentNodeId) {
+  const triggers = nodes.filter((node) =>
+    node.data?.typeId?.startsWith("trigger."),
+  );
+  if (triggers.length !== 1) return [];
+  const root = triggers[0].id;
+  const canReachWithout = (excluded) => {
+    const pending = [root];
+    const seen = new Set();
+    while (pending.length) {
+      const id = pending.pop();
+      if (id === excluded || seen.has(id)) continue;
+      if (id === currentNodeId) return true;
+      seen.add(id);
+      for (const edge of edges)
+        if (edge.source === id) pending.push(edge.target);
+    }
+    return false;
+  };
+  if (!canReachWithout(null)) return [];
+  return previousNodesFor(nodes, edges, currentNodeId).filter(
+    (node) =>
+      node.data?.typeId !== "human.approval" && !canReachWithout(node.id),
+  );
+}
+
 export function previousNodesFor(
   nodes,
   edges,

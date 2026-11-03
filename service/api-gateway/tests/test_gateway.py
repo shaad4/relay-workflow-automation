@@ -438,6 +438,8 @@ def test_public_auth_routes_proxy_to_auth_service(
     ("method", "path", "expected_path"),
     [
         ("GET", "/workflows/", "/workflows/"),
+        ("GET", "/workflows/node-types/?node_type=ai.generate", "/workflows/node-types/"),
+        ("POST", "/workflows/validate-definition/", "/workflows/validate-definition/"),
         ("POST", "/workflows/", "/workflows/"),
         ("GET", "/workflows/wf-1/", "/workflows/wf-1/"),
         ("PATCH", "/workflows/wf-1/", "/workflows/wf-1/"),
@@ -482,6 +484,8 @@ def test_workflow_routes_proxy_to_workflow_service(
     assert urlparse(forwarded["url"]).path.endswith(expected_path)
     assert forwarded["method"] == method
     assert forwarded["headers"]["x-client-header"] == "preserved"
+    if "node_type=ai.generate" in path:
+        assert forwarded["params"]["node_type"] == "ai.generate"
 
 
 def test_proxy_request_forwards_body_query_and_filters_hop_headers(monkeypatch, gateway_client):

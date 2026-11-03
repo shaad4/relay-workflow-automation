@@ -14,6 +14,16 @@ async def workflows(request: Request):
     return await proxy_workflow_request(request, "")
 
 
+@router.get("/node-types/")
+async def get_node_types(request: Request):
+    return await proxy_workflow_request(request, "node-types")
+
+
+@router.post("/validate-definition/")
+async def validate_workflow_definition(request: Request):
+    return await proxy_workflow_request(request, "validate-definition")
+
+
 @router.get("/{workflow_id}/")
 async def get_workflow(request: Request, workflow_id: str):
     return await proxy_workflow_request(request, workflow_id)

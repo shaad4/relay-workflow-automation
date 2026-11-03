@@ -1,11 +1,7 @@
-import re
 from copy import deepcopy
 from typing import Any
 
-PATH_PATTERN = re.compile(
-    r"^[A-Za-z_][A-Za-z0-9_]*"
-    r"(?:\.[A-Za-z_][A-Za-z0-9_]*|\.\d+|\[\d+\])*$"
-)
+from app.contracts.expressions import path_parts
 
 
 class ExecutionContext:
@@ -45,19 +41,13 @@ class ExecutionContext:
         if not isinstance(path, str) or not path:
             return None
 
-        if not PATH_PATTERN.fullmatch(path):
+        parts = path_parts(path)
+        if parts is None:
             return None
-
-        # Convert bracket indexes into dot-separated segments.
-        normalized_path = re.sub(
-            r"\[(\d+)\]",
-            r".\1",
-            path,
-        )
 
         current: Any = self.data
 
-        for part in normalized_path.split("."):
+        for part in parts:
             if isinstance(current, dict):
                 if part not in current:
                     return None

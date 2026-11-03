@@ -36,7 +36,9 @@ export default function DashboardNavbar({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 h-[56px] w-full bg-[var(--canvas)] border-b border-[var(--border-subtle)] px-4 sm:px-6 flex items-center justify-between select-none">
+    <header
+      className={`sticky top-0 ${profileMenuOpen ? "z-40" : "z-30"} h-[56px] w-full bg-[var(--canvas)] border-b border-[var(--border-subtle)] px-4 sm:px-6 flex items-center justify-between select-none`}
+    >
       {/* Left Section: Mobile Hamburger & Page Title */}
       <div className="flex items-center gap-3">
         <button

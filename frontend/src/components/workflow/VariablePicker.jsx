@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { outputsByType, previousNodesFor } from "./workflowVariables.js";
+import {
+  outputsByType,
+  previousNodesFor,
+  guaranteedPreviousNodesFor,
+} from "./workflowVariables.js";
+import { contractFor, contractOutputFields } from "./workflowValidation.js";
 
 function ExpressionOption({ expression, label, onClick }) {
   return (
@@ -31,6 +36,7 @@ export default function VariablePicker({
   upstreamOnly = true,
   ragOnly = false,
   scalarOnly = false,
+  nodeCatalog,
 }) {
   const [open, setOpen] = useState(false);
   const [dataPath, setDataPath] = useState("");
@@ -42,7 +48,7 @@ export default function VariablePicker({
   const menuRef = useRef(null);
   const previousNodes = useMemo(
     () =>
-      previousNodesFor(nodes, edges, currentNode?.id).filter(
+      guaranteedPreviousNodesFor(nodes, edges, currentNode?.id).filter(
         (node) => !ragOnly || node.data?.typeId === "ai.rag_search",
       ),
     [nodes, edges, currentNode?.id, ragOnly],
@@ -57,7 +63,7 @@ export default function VariablePicker({
     const query = search.trim().toLowerCase();
     return (
       !query ||
-      `${node.data?.label || node.data?.name || ""} ${node.data?.nodeId || ""} ${(outputsByType[node.data?.typeId] || []).join(" ")}`
+      `${node.data?.label || node.data?.name || ""} ${node.data?.nodeId || ""} ${(contractFor(nodeCatalog, node.data?.typeId) ? contractOutputFields(contractFor(nodeCatalog, node.data?.typeId)) : outputsByType[node.data?.typeId] || []).join(" ")}`
         .toLowerCase()
         .includes(query)
     );
@@ -287,9 +293,14 @@ export default function VariablePicker({
                       };
                       const fields = ragOnly
                         ? ["context"]
-                        : scalarOnly
-                          ? scalarFields[typeId] || []
-                          : outputsByType[typeId] || [];
+                        : contractFor(nodeCatalog, typeId)
+                          ? contractOutputFields(
+                              contractFor(nodeCatalog, typeId),
+                              scalarOnly,
+                            )
+                          : scalarOnly
+                            ? scalarFields[typeId] || []
+                            : outputsByType[typeId] || [];
                       const nodeId = node.data?.nodeId || node.id;
                       const label =
                         node.data?.label || node.data?.name || typeId;

@@ -4,8 +4,20 @@ import inspect
 from contextvars import ContextVar
 from functools import wraps
 
+from mcp.types import ToolAnnotations
 from oauth.scopes import TOOL_SCOPES, InsufficientScopeError
+from user_session import ReauthorizationRequired
 from workflow_builder import create_complete_workflow
+
+AUTHORING_INSTRUCTIONS = """Before building or modifying workflows, call relay_get_node_schema
+for the node types involved. Use the returned schemas, examples, and output fields.
+Discover connections with relay_list_connections or relay_list_ai_provider_connections;
+discover model IDs with relay_list_ai_models. Do not ask users to copy IDs or invent them.
+Trigger inputs use {{trigger.data.<field>}} regardless of the trigger node ID.
+Node outputs use {{nodes.<node_id>.<field>}}, with no .output wrapper.
+Validate definitions with relay_validate_workflow_definition and fix structured errors.
+Create a draft, validate the saved version, and publish or run only when authorized.
+"""
 
 
 def register_tools(mcp, client_context, *, oauth_resource=None):
@@ -31,7 +43,7 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
                         return result
                     finally:
                         current_client.reset(binding)
-            except InsufficientScopeError as error:
+            except (InsufficientScopeError, ReauthorizationRequired) as error:
                 if oauth_resource is None:
                     raise
                 # An ordinary ToolError loses the metadata ChatGPT needs to reauthorize.
@@ -43,7 +55,12 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
             # SDK 2.3 exposes extension fields through _meta. ChatGPT supports this
             # securitySchemes mirror; stdio tools keep their existing descriptors.
             meta = {"securitySchemes": [{"type": "oauth2", "scopes": [scope] if scope else []}]}
-        mcp.tool(meta=meta)(invoke)
+        annotations = None
+        if TOOL_SCOPES[fn.__name__] == "relay:read":
+            annotations = ToolAnnotations(
+                read_only_hint=True, destructive_hint=False, idempotent_hint=True
+            )
+        mcp.tool(meta=meta, annotations=annotations)(invoke)
         return invoke
 
     # Connection Test
@@ -52,6 +69,43 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
     def relay_hello(name: str) -> str:
         """Test the Relay MCP server connection."""
         return f"Hello {name}! Relay MCP Server is working."
+
+    @tool
+    async def relay_get_node_schema(node_type: str | None = None) -> dict:
+        """Read Relay's live node configuration schemas before authoring a workflow.
+
+        Pass a node_type such as ai.generate, or omit it to discover all supported
+        types. Returns configuration/output schemas, examples, expression rules,
+        edge conditions, and authoring steps. Example IDs/models are placeholders.
+        Use trigger.data for inputs and nodes.<id>.<field> for upstream outputs.
+        """
+        return await get_client().get_node_schema(node_type=node_type)
+
+    @tool
+    async def relay_validate_workflow_definition(
+        nodes: list[dict], edges: list[dict], sample_input: dict | None = None
+    ) -> dict:
+        """Validate a proposed graph without saving it or executing any nodes.
+
+        Returns errors with node_id, field, expression, and correction guidance.
+        Checks configuration schemas, graph structure, expression paths and known
+        outputs. Optional sample_input is the raw trigger data object and checks
+        whether referenced trigger fields exist. It does not call AI providers,
+        verify credentials, or guarantee future input values. Fix errors before
+        creating or publishing the workflow.
+        """
+        return await get_client().validate_workflow_definition(nodes, edges, sample_input)
+
+    @tool
+    async def relay_list_ai_models(connection_id: str) -> dict:
+        """List model IDs available through an active workspace AI connection.
+
+        First discover connection_id with relay_list_ai_provider_connections.
+        Use a returned model ID supporting the intended text/structured generation
+        task; provider catalogs can include models for other tasks. No generation
+        is performed and credentials are never returned.
+        """
+        return await get_client().list_ai_models(connection_id)
 
     # Connection Discovery
 
@@ -128,6 +182,9 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
     ) -> dict:
         """Add a node to an existing Relay draft workflow version.
 
+        First read relay_get_node_schema(node_type) for supported fields and
+        expressions. Trigger inputs use {{trigger.data.<field>}} and previous
+        outputs use {{nodes.<node_id>.<field>}}.
         For nodes needing configuration.connection_id, discover it first with
         relay_list_connections (apps) or relay_list_ai_provider_connections (AI).
         """
@@ -148,6 +205,7 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
     ) -> dict:
         """Update the configuration of a node in a Relay draft workflow.
 
+        Read relay_get_node_schema for the node type before changing fields.
         Resolve connection IDs with relay_list_connections (apps) or
         relay_list_ai_provider_connections (AI) when changing a node's connection.
         """
@@ -179,13 +237,17 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
         version: int,
         source_node_id: str,
         target_node_id: str,
+        condition: str | None = None,
     ) -> dict:
-        """Connect two nodes in an existing Relay draft workflow."""
+        """Connect nodes in a draft. For logic.condition, set condition to the
+        exact branch value; for human.approval, use approved or rejected.
+        """
         return await get_client().add_edge(
             workflow_id=workflow_id,
             version=version,
             source_node_id=source_node_id,
             target_node_id=target_node_id,
+            condition=condition,
         )
 
     @tool
@@ -260,15 +322,21 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
         description: str,
         nodes: list[dict],
         edges: list[dict],
+        sample_input: dict | None = None,
     ) -> dict:
         """
         Create a complete Relay workflow from nodes and edges.
 
-        Creates a draft and validates it.
+        First read relay_get_node_schema for each node type. Trigger inputs use
+        {{trigger.data.<field>}}, never a trigger node ID. Previous outputs use
+        {{nodes.<node_id>.<field>}}, without an extra .output level.
+        Validates the definition before saving, then creates and validates a draft.
+        Optional sample_input checks trigger references without executing nodes.
         Does not publish or execute the workflow.
         Before creating nodes that need configuration.connection_id, call
         relay_list_connections for apps (including Gmail) or
         relay_list_ai_provider_connections for AI providers to find IDs by name.
+        Use relay_list_ai_models to discover model IDs for the selected connection.
         """
         return await create_complete_workflow(
             client=get_client(),
@@ -276,4 +344,5 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
             description=description,
             nodes=nodes,
             edges=edges,
+            sample_input=sample_input,
         )
