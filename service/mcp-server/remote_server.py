@@ -15,13 +15,14 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.exceptions import MCPError
 from mcp.types import Icon
 from oauth.app import create_oauth_app
+from oauth.audit import configure_audit_logging
 from oauth.scopes import SCOPES, TOOL_SCOPES, InsufficientScopeError
 from pydantic import AnyHttpUrl
 from relay_client import RelayClient
 from starlette.responses import PlainTextResponse
 from starlette.routing import Mount
 from tools import AUTHORING_INSTRUCTIONS, register_tools
-from user_session import DelegatedRequestSession, RelayAccessError
+from user_session import DelegatedRequestSession, ReauthorizationRequired, RelayAccessError
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 
@@ -82,7 +83,8 @@ class TrustedIngressMiddleware:
 class RemoteRelayClient(RelayClient):
     def __init__(self, session, secrets):
         super().__init__(session)
-        self.secrets = [value for value in secrets if value]
+        # Shared with the request session so newly rotated credentials are redacted too.
+        self.secrets = secrets
 
     def sanitize_result(self, result):
         if isinstance(result, dict):
@@ -111,7 +113,8 @@ class RemoteRelayClient(RelayClient):
 
         if isinstance(result, str):
             for value in self.secrets:
-                result = result.replace(value, "[redacted]")
+                if value:
+                    result = result.replace(value, "[redacted]")
 
         return result
 
@@ -121,28 +124,25 @@ def remote_client_context(provider, *, relay_transport=None):
     async def context(tool_name):
         token = get_access_token()
         if token is None:
-            raise RelayAccessError("OAuth authentication required")
+            raise ReauthorizationRequired("OAuth authentication required")
 
         current = await provider.load_access_token(token.token)
         if current is None:
-            raise RelayAccessError("OAuth authorization expired or revoked")
+            raise ReauthorizationRequired("OAuth authorization expired or revoked")
 
         scope = TOOL_SCOPES[tool_name]
         if scope and scope not in current.scopes:
             raise InsufficientScopeError(scope)
 
-        grant = provider.grants.get(current.grant_id)
-        if grant is None:
-            raise RelayAccessError("OAuth authorization expired or revoked")
-
-        session = grant["session"]
+        async with provider.session_lock(current.grant_id):
+            session = provider.load_session(current.grant_id)
         if session.user_id != current.subject:
-            raise RelayAccessError("Relay identity mismatch; authorize again")
+            raise ReauthorizationRequired("Relay identity mismatch; authorize again")
 
         async def check_grant():
             active = await provider.load_access_token(token.token)
             if active is None or active.grant_id != current.grant_id:
-                raise RelayAccessError("OAuth authorization expired or revoked")
+                raise ReauthorizationRequired("OAuth authorization expired or revoked")
 
         # A new client for each tool invocation, with only this user's bearer credential.
         async with httpx.AsyncClient(
@@ -150,13 +150,16 @@ def remote_client_context(provider, *, relay_transport=None):
             timeout=15.0,
             follow_redirects=False,
             transport=relay_transport,
-            headers={"Authorization": f"Bearer {session.access_token}"},
         ) as http:
-            request_session = DelegatedRequestSession(session, http, check_grant)
             credentials = [token.token, session.access_token, session.refresh_token]
-            credentials += [
-                t.token for t in provider.refresh_tokens.values() if t.grant_id == current.grant_id
-            ]
+            request_session = DelegatedRequestSession(
+                session,
+                http,
+                check_grant,
+                provider=provider,
+                grant_id=current.grant_id,
+                credentials=credentials,
+            )
             client = RemoteRelayClient(request_session, credentials)
             try:
                 if tool_name != "relay_hello":
@@ -185,6 +188,7 @@ async def reject_identity_arguments(ctx, call_next):
 def create_remote_app(
     *, provider=None, public_origin=None, session_secret=None, relay_transport=None
 ):
+    configure_audit_logging()
     mode = os.environ.get("MCP_DEPLOYMENT_MODE", "local")
     if mode not in {"local", "k3s"}:
         raise ValueError("MCP_DEPLOYMENT_MODE must be local or k3s")
@@ -249,7 +253,7 @@ def create_remote_app(
             async with mcp_app.router.lifespan_context(mcp_app):
                 yield
         finally:
-            provider.client_db.close()
+            provider.close()
 
     app.router.lifespan_context = lifespan
     if mode == "local":

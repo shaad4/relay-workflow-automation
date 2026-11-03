@@ -35,7 +35,35 @@ def env_keys(path):
     }
 
 
+def check_mcp_persistence():
+    deployment = yaml.safe_load((ROOT / "deploy/kubernetes/mcp/deployment.yaml").read_text())
+    storage = yaml.safe_load((ROOT / "deploy/kubernetes/mcp/storage.yaml").read_text())
+    release = (ROOT / "scripts/deploy-relay-k3s.sh").read_text()
+    # The release script is streamed to the host without a repository checkout.
+    # Its embedded storage contract must stay consistent with the source manifests.
+    embedded_storage = release.split("<<'MCP_STORAGE'\n", 1)[1].split("\nMCP_STORAGE", 1)[0]
+    check(yaml.safe_load(embedded_storage) == storage, "MCP release PVC differs from manifest")
+    embedded_patch = release.split("<<MCP_PATCH\n", 1)[1].split("\nMCP_PATCH", 1)[0]
+    for source in (deployment, json.loads(embedded_patch)):
+        spec = source["spec"]
+        check(spec["replicas"] == 1, "MCP persistent credentials require one replica")
+        check(spec["strategy"]["type"] == "Recreate", "MCP must not overlap writers")
+        pod = spec["template"]["spec"]
+        check(pod["securityContext"]["fsGroup"] == 10001, "MCP volume ownership missing")
+        container = next(c for c in pod["containers"] if c["name"] == "relay-mcp")
+        env = {e["name"]: e.get("value") for e in container["env"]}
+        check(env.get("MCP_CLIENT_DB_PATH") == "/data/oauth.sqlite", "MCP database path missing")
+        mounts = {m["name"]: m["mountPath"] for m in container["volumeMounts"]}
+        check(mounts.get("oauth-data") == "/data", "MCP database PVC not mounted")
+        volume = next(v for v in pod["volumes"] if v["name"] == "oauth-data")
+        check(
+            volume["persistentVolumeClaim"]["claimName"] == storage["metadata"]["name"],
+            "MCP database volume uses the wrong PVC",
+        )
+
+
 def check_sources():
+    check_mcp_persistence()
     for service in SERVICES:
         folder = ROOT / "service" / service
         dockerfile = (folder / "Dockerfile").read_text()

@@ -48,6 +48,10 @@ spec:
             - name: MCP_CLIENT_DB_PATH
               value: "/data/oauth.sqlite"
 
+            # Absolute session lifetime; also capped by the Relay refresh credential.
+            - name: MCP_GRANT_TTL_SECONDS
+              value: "604800"
+
             - name: MCP_PUBLIC_ORIGIN
               value: "https://mcp.relay.shaad.site"
 

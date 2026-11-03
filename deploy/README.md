@@ -26,6 +26,8 @@ Choose the guide for the environment you operate:
 - CD requires the application, worker and `relay-mcp` deployments to exist already.
   Initial provisioning, secrets, ingress and schema migrations are separate steps.
   MCP manifests live in `kubernetes/mcp/`, outside the application Kustomize base.
+  CD also reconciles MCP's persistent storage mount and verifies its OAuth schema.
+  Preserve the MCP session/encryption key and PVC across releases.
 
 ## Configuration and recovery
 

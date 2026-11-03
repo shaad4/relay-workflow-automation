@@ -6,6 +6,7 @@ from functools import wraps
 
 from mcp.types import ToolAnnotations
 from oauth.scopes import TOOL_SCOPES, InsufficientScopeError
+from user_session import ReauthorizationRequired
 from workflow_builder import create_complete_workflow
 
 AUTHORING_INSTRUCTIONS = """Before building or modifying workflows, call relay_get_node_schema
@@ -42,7 +43,7 @@ def register_tools(mcp, client_context, *, oauth_resource=None):
                         return result
                     finally:
                         current_client.reset(binding)
-            except InsufficientScopeError as error:
+            except (InsufficientScopeError, ReauthorizationRequired) as error:
                 if oauth_resource is None:
                     raise
                 # An ordinary ToolError loses the metadata ChatGPT needs to reauthorize.

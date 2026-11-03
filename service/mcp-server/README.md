@@ -34,8 +34,9 @@ Set `MCP_DEPLOYMENT_MODE=k3s`, `MCP_PUBLIC_ORIGIN=https://mcp.relay.shaad.site`,
 narrowly scoped CIDRs. Supply `MCP_SESSION_SECRET` and `RELAY_API_URL` through
 Secrets/configuration. Run `remote_server.py`, as in the image's Dockerfile.
 
-K3s mode binds to `0.0.0.0:$MCP_PORT`. Keep one worker and one replica because OAuth
-sessions and tokens are held in memory. The original socket peer must match the
+K3s mode binds to `0.0.0.0:$MCP_PORT`. Keep one worker and one replica with a
+`Recreate` rollout strategy. An exclusive database lock prevents another process
+from independently rotating delegated credentials. The original socket peer must match the
 trusted ingress allowlist before forwarded headers are interpreted. Wildcards and all-address CIDRs
 are rejected; forwarded host headers cannot replace the configured public origin.
 
@@ -45,17 +46,31 @@ The release workflow updates an existing `relay-mcp` deployment. Configure Traef
 to terminate HTTPS, preserve Host and sanitize forwarded headers. Use ingress-only
 network access and the narrowest valid trusted proxy ranges.
 
-Client registrations use Python's built-in SQLite support. The MCP manifests set
+Client registrations, established grants, token hashes, revocation and rotation
+history use Python's built-in SQLite support. The MCP manifests set
 `MCP_CLIENT_DB_PATH=/data/oauth.sqlite` and mount the `relay-mcp-data` PVC there;
 include `storage.yaml` when deploying this change. Keep the PVC when replacing
-the Pod. Image-only CD does not install the PVC or mount: deploy those settings
-with the updated MCP image, retaining the production image reference rather than
-the manifest's development placeholder. The container uses `fsGroup: 10001` for
+the Pod. CD reconciles the PVC, mount, database path, `Recreate` strategy and
+volume ownership together with the release image, then checks the mounted schema.
+K3s startup rejects a missing or non-absolute database path. The container uses `fsGroup: 10001` for
 volume access, and the database file is restricted to mode 0600 because registrations
 can contain client secrets.
 Back it up while MCP is stopped. K3s local-path storage does not survive node/disk loss.
 For local persistence, set `MCP_CLIENT_DB_PATH` to a file in an existing private,
 writable directory; leaving it unset uses an in-memory SQLite database.
+
+Relay API credentials are encrypted with Fernet. By default, its key is derived
+from the stable `MCP_SESSION_SECRET` using HKDF with a separate encryption context.
+Optionally supply `MCP_CREDENTIAL_ENCRYPTION_KEY` as a dedicated Fernet key before
+initializing the database. Keep the selected key stable and back it up securely;
+changing it without migrating encrypted records prevents startup. Never generate
+a new key on each deployment. The additive schema migration preserves existing
+client registrations. Authorizations from the old memory-only implementation need
+a one-time reconnect; subsequent established sessions survive process replacement.
+
+Pending browser authorization/login state and 60-second codes remain ephemeral.
+An interrupted initial connection flow must be restarted; established connections
+do not depend on those temporary records. The MCP HTTP transport remains stateless.
 
 ## OAuth and scopes
 
@@ -72,9 +87,33 @@ tools; initialize with the SDK's required protocol and Accept headers.
 Authorization requires an exact registered redirect URI, explicit S256 PKCE and
 the configured `/mcp` resource audience. Login and consent enforce Origin and
 session-bound CSRF protection. Credentials remain server-side. Codes expire after
-60 seconds; access tokens after five minutes; delegated grants/refresh tokens after
-at most one hour. Refresh rotates both tokens without extending the grant or
-increasing scopes. Revoking either current token invalidates the pair.
+60 seconds; access tokens after at most five minutes. `MCP_GRANT_TTL_SECONDS`
+controls the absolute grant lifetime (default `604800`, seven days), additionally
+capped by the delegated Relay refresh token's expiry. Token responses report the
+remaining effective access lifetime. Rotation does not extend the absolute grant
+deadline or increase scopes. Previously issued access tokens remain valid until
+their own expiry unless the grant is revoked. Refresh tokens are single-use;
+reusing a consumed token revokes its entire grant. Clients must serialize refresh
+requests. Revocation and reuse history survive restart.
+
+Remote calls refresh Relay API credentials before access expiry, or once after an
+identity preflight returns 401. A per-grant lock prevents concurrent tools from
+refreshing the same credential twice. Both replacement credentials are committed
+before checking identity again. Workflow mutations are never automatically replayed.
+Identity outages return a retryable availability message; invalid/revoked
+authorization returns MCP authentication metadata for reconnecting.
+
+A delegated refresh is marked pending before contacting the auth service. If the
+process crashes or the refresh response is ambiguous, reconnect is required: the
+old refresh credential may already have been consumed. This fails closed rather
+than replaying it. Ordinary restarts outside that exchange preserve authorization.
+Eliminating this cross-service crash window requires idempotent recovery support
+from the auth service, not merely a local SQLite transaction.
+
+Authentication logs contain request IDs, endpoint/status, grant type and hashed
+client/grant references. They never include raw tokens, cookies, codes, user IDs or
+upstream response bodies. Responses expose `X-Request-ID` for correlation; generic
+HTTP access logs remain disabled to keep OAuth callback query strings out of logs.
 
 | Scope | Tools |
 | --- | --- |
@@ -97,8 +136,9 @@ Clients still need explicit user consent for additional permissions.
 For every tool call, the server checks the token, scope and grant, creates an
 isolated HTTP client, and revalidates the user's Relay identity and workspace before
 each API request. Identity overrides in tool arguments are rejected. The HTTP
-client closes after the invocation. Expired/revoked Relay sessions require a fresh
-login; there is no fallback account or silent refresh of delegated sessions.
+client closes after the invocation. Valid delegated refresh credentials renew access
+automatically. Expired/revoked refresh credentials require a fresh login; there is
+no fallback account.
 
 ## Connection discovery
 
@@ -200,11 +240,11 @@ The HTTP server advertises `/oauth/static/relay-icon-black.png` in server metada
 The OAuth logo, icon and stylesheet are bundled under `oauth/static/`; clients may
 cache server metadata and need reconnection after an image change.
 
-Client registrations survive restarts when the SQLite file is on persistent storage.
-Pending requests, tokens, grants and delegated credentials remain in process memory;
-users must sign in again after a restart. Multiple workers cannot share that session
-state. Registrations lost before this change require one fresh registration. Expiry
-cleanup is opportunistic; quotas and production rate limiting are not provided.
+Client registrations and established authorization survive restarts when the SQLite
+file and encryption key are preserved. Pending browser flows and authorization
+codes remain in memory. Multiple workers are rejected by the database lock.
+Registrations lost before this change require one fresh registration. Expiry cleanup
+is opportunistic; quotas and production rate limiting are not provided.
 
 Scope checks narrow Relay access; Relay's API remains responsible for resource and
 workspace authorization. Revocation cannot undo mutations already accepted by
