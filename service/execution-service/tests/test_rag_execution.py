@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import asyncio
 from types import SimpleNamespace as NS
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -119,23 +120,35 @@ def test_rag_success_resolves_and_persists_output(monkeypatch):
     assert all(step.status == Status.COMPLETED for step in state["steps"])
 
 
-@pytest.mark.parametrize("failure", ["timeout", "resolution", "missing"])
+@pytest.mark.parametrize("failure", ["timeout", "resolution", "missing", "empty"])
 def test_full_lifecycle_failure_closes_active_step(monkeypatch, failure):
     state = runner_setup(monkeypatch, *graph())
+    trigger_data = {"question": "question"}
+    handler = AsyncMock(wraps=rag_search.execute_rag_search)
+    monkeypatch.setattr(runner, "execute_rag_search", handler)
     if failure == "timeout":
-
-        async def timeout(**kw):
-            raise RuntimeError("sensitive provider detail")
-
-        monkeypatch.setattr(runner, "execute_rag_search", timeout)
+        handler.side_effect = RuntimeError("sensitive provider detail")
     elif failure == "resolution":
 
-        def broken(self, value):
+        def broken(self, value, **kwargs):
             raise ValueError("resolution failed")
 
         monkeypatch.setattr(runner.ExpressionResolver, "resolve", broken)
+    elif failure == "missing":
+        trigger_data = {}
+    elif failure == "empty":
+        trigger_data = {"question": "  "}
     with pytest.raises((RuntimeError, ValueError)):
-        asyncio.run(runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID, {}))
+        asyncio.run(
+            runner.run_execution(state["execution"].id, "w", "v", RUNNER_WORKSPACE_ID, trigger_data)
+        )
+    if failure in {"timeout", "empty"}:
+        handler.assert_awaited_once_with(
+            configuration={**VALID, "query": trigger_data["question"]},
+            workspace_id=RUNNER_WORKSPACE_ID,
+        )
+    else:
+        handler.assert_not_awaited()
     assert state["steps"][0].status == Status.COMPLETED
     step = state["steps"][-1]
     assert step.status == Status.FAILED and step.completed_at and step.duration_ms is not None
@@ -144,9 +157,13 @@ def test_full_lifecycle_failure_closes_active_step(monkeypatch, failure):
         == {
             "timeout": "EXECUTION_FAILED",
             "resolution": "RAG_INVALID_CONFIGURATION",
-            "missing": "RAG_INVALID_QUERY",
+            "missing": "UNRESOLVED_EXPRESSION",
+            "empty": "RAG_INVALID_QUERY",
         }[failure]
     )
+    if failure == "missing":
+        assert step.error["field"] == "query"
+        assert step.error["expression"] == VALID["query"]
     assert step.error["node_id"] == "r" and step.error["node_type"] == "ai.rag_search"
     assert "sensitive provider detail" not in str(step.error)
     assert "trigger" in state["execution"].context
