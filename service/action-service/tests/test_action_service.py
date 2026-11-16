@@ -284,9 +284,12 @@ def test_http_connector_success_text_and_validation(monkeypatch):
 @pytest.mark.parametrize(
     ("body", "content_type", "expected"),
     [
-        ('{"title": "Ticket", "priority": "high"}', "application/json",
-         {"title": "Ticket", "priority": "high"}),
-        ('[1, 2]', "application/json; charset=utf-8", [1, 2]),
+        (
+            '{"title": "Ticket", "priority": "high"}',
+            "application/json",
+            {"title": "Ticket", "priority": "high"},
+        ),
+        ("[1, 2]", "application/json; charset=utf-8", [1, 2]),
         ('{"title": "Ticket"}', "text/plain", '{"title": "Ticket"}'),
         ("plain text", "application/json", "plain text"),
         ({"title": "Ticket"}, "application/json", {"title": "Ticket"}),
@@ -319,16 +322,18 @@ def test_http_connector_json_body_normalization(monkeypatch, body, content_type,
             return Response()
 
     monkeypatch.setattr(http.httpx, "AsyncClient", Client)
-    result = asyncio.run(http.HTTPConnector().execute(
-        "request",
-        {},
-        {
-            "method": "POST",
-            "url": "https://example.test/tickets/",
-            "headers": {"Content-Type": content_type},
-            "body": body,
-        },
-    ))
+    result = asyncio.run(
+        http.HTTPConnector().execute(
+            "request",
+            {},
+            {
+                "method": "POST",
+                "url": "https://example.test/tickets/",
+                "headers": {"Content-Type": content_type},
+                "body": body,
+            },
+        )
+    )
     assert calls[0]["json"] == expected
     assert result["status_code"] == 201
 
