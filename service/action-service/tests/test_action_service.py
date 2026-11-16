@@ -281,6 +281,63 @@ def test_http_connector_success_text_and_validation(monkeypatch):
         asyncio.run(connector.execute("request", {}, {}))
 
 
+@pytest.mark.parametrize(
+    ("body", "content_type", "expected"),
+    [
+        (
+            '{"title": "Ticket", "priority": "high"}',
+            "application/json",
+            {"title": "Ticket", "priority": "high"},
+        ),
+        ("[1, 2]", "application/json; charset=utf-8", [1, 2]),
+        ('{"title": "Ticket"}', "text/plain", '{"title": "Ticket"}'),
+        ("plain text", "application/json", "plain text"),
+        ({"title": "Ticket"}, "application/json", {"title": "Ticket"}),
+    ],
+)
+def test_http_connector_json_body_normalization(monkeypatch, body, content_type, expected):
+    calls = []
+
+    class Response:
+        status_code = 201
+        headers = {}
+        is_success = True
+        text = "created"
+
+        def json(self):
+            return {"id": 1}
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def request(self, **kwargs):
+            calls.append(kwargs)
+            return Response()
+
+    monkeypatch.setattr(http.httpx, "AsyncClient", Client)
+    result = asyncio.run(
+        http.HTTPConnector().execute(
+            "request",
+            {},
+            {
+                "method": "POST",
+                "url": "https://example.test/tickets/",
+                "headers": {"Content-Type": content_type},
+                "body": body,
+            },
+        )
+    )
+    assert calls[0]["json"] == expected
+    assert result["status_code"] == 201
+
+
 def test_gmail_connector_and_token_refresh(monkeypatch):
     with pytest.raises(ValueError, match="Unsupported Gmail action"):
         asyncio.run(gmail.GmailConnector().execute("read", {}, {}))

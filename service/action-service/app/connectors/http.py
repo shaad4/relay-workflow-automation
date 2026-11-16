@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from app.connectors.base import Connector
@@ -23,6 +25,22 @@ class HTTPConnector(Connector):
         headers = input_data.get("headers")
         params = input_data.get("params")
         body = input_data.get("body")
+
+        # Workflow editors can supply JSON object/array text. Decode once to
+        # avoid httpx double-encoding it. Preserve other body types unchanged.
+        if isinstance(body, str):
+            content_type = next(
+                (value for key, value in (headers or {}).items() if key.lower() == "content-type"),
+                "",
+            )
+            if content_type.split(";", 1)[0].strip().lower() == "application/json":
+                try:
+                    decoded = json.loads(body)
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    if isinstance(decoded, (dict, list)):
+                        body = decoded
 
         async with httpx.AsyncClient(timeout=config.get("timeout", 10)) as client:
             response = await client.request(
