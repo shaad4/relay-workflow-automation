@@ -13,6 +13,11 @@ RUN npm run build
 FROM node:24.22.1-bookworm-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 WORKDIR /app
+# Refresh Debian packages in the runtime image to include security fixes
+# for apt/libapt-pkg6.0 supplied by the base distribution.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y --only-upgrade apt libapt-pkg6.0 \
+    && rm -rf /var/lib/apt/lists/*
 # Standalone needs Node only. Keep package managers/build tooling in build stages;
 # unused npm transitive packages otherwise enlarge the production attack surface.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
