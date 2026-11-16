@@ -30,8 +30,7 @@ class HTTPConnector(Connector):
         # avoid httpx double-encoding it. Preserve other body types unchanged.
         if isinstance(body, str):
             content_type = next(
-                (value for key, value in (headers or {}).items()
-                 if key.lower() == "content-type"),
+                (value for key, value in (headers or {}).items() if key.lower() == "content-type"),
                 "",
             )
             if content_type.split(";", 1)[0].strip().lower() == "application/json":
