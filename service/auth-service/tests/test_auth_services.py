@@ -5,6 +5,7 @@ from email import policy
 from email.parser import BytesParser
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import jwt
@@ -103,6 +104,7 @@ def test_register_user_creates_workspace_user_and_verification(monkeypatch):
 
 
 def test_login_user_validates_credentials_and_verification(monkeypatch):
+    monkeypatch.setattr(auth_service.auth_limits, "limit_email", AsyncMock())
     unverified = SimpleNamespace(
         id=uuid4(),
         workspace_id=uuid4(),

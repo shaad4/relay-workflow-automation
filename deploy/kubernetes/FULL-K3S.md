@@ -94,7 +94,7 @@ patches:
 - path: public-config.yaml
 - target:
     kind: Ingress
-    name: relay
+    labelSelector: app.kubernetes.io/part-of=relay
   patch: |-
     - op: replace
       path: /spec/rules/0/host

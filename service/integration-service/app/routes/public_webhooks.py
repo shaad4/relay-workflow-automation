@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.kafka.producer import publish_workflow_triggered
 from app.schemas.events import WorkflowTriggeredEvent
+from app.services import trigger_limits
 from app.services.webhook_service import (
     InactiveWorkflowError,
     UnpublishedWorkflowVersionError,
@@ -72,6 +73,8 @@ async def receive_webhook(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid webhook secret",
             )
+
+    await trigger_limits.webhook(webhook.id, webhook.workspace_id)
 
     # Validate legacy webhook rows as well as newly configured ones. This
     # happens before producing Kafka events so a draft version cannot start
@@ -224,6 +227,8 @@ async def test_webhook(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid webhook secret",
             )
+
+    await trigger_limits.webhook(webhook.id, webhook.workspace_id)
 
     # 4. Read the incoming test payload
     try:

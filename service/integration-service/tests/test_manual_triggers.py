@@ -16,6 +16,7 @@ from app.routes import manual_triggers as routes
 
 @pytest.fixture
 def manual(monkeypatch):
+    monkeypatch.setattr(routes.trigger_limits, "manual", AsyncMock())
     workflow_id, workspace_id, version_id = uuid4(), uuid4(), uuid4()
     client = NS(
         get_published_version=AsyncMock(return_value=NS(version_id=str(version_id))),
@@ -54,7 +55,9 @@ def run(manual, req=None, identity=None):
         routes.run_workflow_manually(
             manual.workflow_id,
             req or request(),
-            identity if identity is not None else {"workspace_id": str(manual.workspace_id)},
+            identity
+            if identity is not None
+            else {"workspace_id": str(manual.workspace_id), "user_id": str(uuid4())},
         )
     )
 
@@ -152,3 +155,12 @@ def test_manual_publish_failure_reports_unavailable(manual):
         run(manual)
     assert exc.value.status_code == 503
     assert "dispatch" in exc.value.detail
+
+
+def test_throttled_manual_run_never_dispatches(manual):
+    routes.trigger_limits.manual.side_effect = HTTPException(429, "Too many requests")
+    with pytest.raises(HTTPException) as exc:
+        run(manual)
+    assert exc.value.status_code == 429
+    manual.client.get_published_version.assert_not_awaited()
+    manual.publish.assert_not_awaited()

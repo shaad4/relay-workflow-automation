@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from app import rate_limit
 from app.config import validate_startup
 from app.grpc.server import start_grpc_server
 from app.kafka.producer import start_producer, stop_producer
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
         grpc_server = await start_grpc_server()
         yield
     finally:
+        await rate_limit.close()
         if grpc_server is not None:
             await grpc_server.stop(grace=5)
         await stop_producer()

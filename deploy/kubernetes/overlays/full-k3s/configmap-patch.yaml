@@ -3,6 +3,7 @@ kind: ConfigMap
 metadata:
   name: relay-config
 data:
+  RATE_LIMIT_REDIS_URL: redis://redis:6379/2
   RELAY_ENV: production
   KAFKA_BOOTSTRAP_SERVERS: kafka:9092
   COOKIE_SECURE: 'true'

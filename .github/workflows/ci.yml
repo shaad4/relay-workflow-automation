@@ -47,6 +47,7 @@ jobs:
       JWT_ALGORITHM: HS256
       FRONTEND_URL: http://localhost:3000
       AUTH_SERVICE_URL: http://localhost:8000
+      RATE_LIMIT_TEST_REDIS_URL: redis://localhost:6379/15
       OPENAI_API_KEY: ci-synthetic-key-no-network-calls
 
     services:
@@ -168,6 +169,9 @@ jobs:
 
       - name: Check Python formatting
         run: ruff format --check service
+
+      - name: Check rate limiter copies for standalone service images
+        run: cmp service/auth-service/app/rate_limit.py service/integration-service/app/rate_limit.py
 
       - name: Check shared workflow contracts
         run: python scripts/sync_workflow_contracts.py --check
@@ -298,7 +302,10 @@ jobs:
             https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz \
             --output /tmp/kubeconform.tar.gz
           tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
-          /tmp/kubeconform -strict -kubernetes-version 1.36.0 -summary /tmp/relay-*.yaml
+          /tmp/kubeconform -strict -kubernetes-version 1.36.0 -summary \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/784ec895547a36e548e6810b41f27baade3a0890/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            /tmp/relay-*.yaml
 
   # 7. IDENTICAL APPLICATION IMAGES FOR COMPOSE AND KUBERNETES
   container-builds:

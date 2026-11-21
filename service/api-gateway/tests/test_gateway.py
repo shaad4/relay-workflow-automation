@@ -611,3 +611,11 @@ def test_slash_redirect_does_not_expose_private_service_dns(gateway_client, monk
 def test_process_and_gateway_readiness_endpoints(gateway_client):
     assert gateway_client.get("/health/live").json() == {"status": "ok"}
     assert gateway_client.get("/ready").json() == {"status": "ready"}
+
+
+@pytest.mark.parametrize("path", ["/auth/login", "/hooks/sample"])
+def test_proxy_preserves_retry_after(gateway_client, monkeypatch, path):
+    fake_upstream(monkeypatch, status_code=429, headers={"retry-after": "17"})
+    response = gateway_client.post(path, json={})
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "17"

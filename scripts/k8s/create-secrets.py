@@ -75,6 +75,8 @@ for service in ["auth", "workflow", "integration", "action", "execution", "rag"]
     values["DATABASE_URL"] = (
         f"postgresql+asyncpg://{user}:{password}@{service}-postgres:5432/{database}"
     )
+    if service in {"auth", "integration"}:
+        values["RATE_LIMIT_REDIS_URL"] = "redis://redis:6379/2"
     if service in {"integration", "rag"}:
         values["CELERY_BROKER_URL"] = "redis://redis:6379/" + (
             "1" if service == "integration" else "0"

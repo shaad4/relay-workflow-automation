@@ -3,6 +3,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -43,6 +44,9 @@ class InProcessClient:
 
 @pytest.fixture
 def client(monkeypatch):
+    monkeypatch.setattr(auth.rate_limit, "take", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth.auth_limits, "release", AsyncMock())
+
     async def noop_email(*_args):
         return None
 
@@ -134,6 +138,7 @@ def test_login(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"token_type": "bearer"}
+    auth.auth_limits.release.assert_awaited_once()
     cookies = response.headers.get_list("set-cookie")
     assert len(cookies) == 2
     assert any(
@@ -161,6 +166,7 @@ def test_login_rejects_invalid_credentials(client, monkeypatch):
     )
 
     assert response.status_code == 401
+    auth.auth_limits.release.assert_not_awaited()
 
 
 def test_login_requests_email_verification(client, monkeypatch):
@@ -459,3 +465,19 @@ def test_google_signup_completion_rejects_invalid_session(client, monkeypatch):
     )
 
     assert response.status_code == 400
+
+
+@pytest.mark.parametrize("path", ["login", "forgot-password", "resend-verification"])
+def test_rate_limit_precedes_auth_work(client, path, monkeypatch):
+    from fastapi import HTTPException
+
+    auth.rate_limit.take.side_effect = HTTPException(
+        429, "Too many requests", headers={"Retry-After": "9"}
+    )
+    work = AsyncMock()
+    for name in ("login_user", "create_password_reset_token", "resend_verification_email"):
+        monkeypatch.setattr(auth, name, work)
+    response = client.post(f"/auth/{path}", json={"email": test_user.email, "password": "password"})
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "9"
+    work.assert_not_awaited()

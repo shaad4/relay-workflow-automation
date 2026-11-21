@@ -34,6 +34,8 @@ services:
     - path: ./service/auth-service/.env
       required: false
     depends_on:
+      rag-redis:
+        condition: service_healthy
       auth-postgres:
         condition: service_healthy
     restart: unless-stopped

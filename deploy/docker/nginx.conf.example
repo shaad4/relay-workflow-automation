@@ -5,6 +5,21 @@ map $http_upgrade $relay_connection_upgrade {
     default upgrade;
     '' close;
 }
+# Empty keys skip the limiter. The public edge owns the socket peer address.
+map $uri $relay_auth_ip {
+    default "";
+    ~^/(?:api/relay/)?auth/(?:login|register|forgot-password|reset-password|resend-verification)/?$ $binary_remote_addr;
+}
+map $uri $relay_hook_ip {
+    default "";
+    ~^/(?:api/relay/)?hooks/ $binary_remote_addr;
+}
+map $relay_auth_ip $relay_edge_retry {
+    "" 1;
+    default 6;
+}
+limit_req_zone $relay_auth_ip zone=relay_auth:1m rate=10r/m;
+limit_req_zone $relay_hook_ip zone=relay_hooks:4m rate=120r/m;
 server {
     listen 80;
     server_name relay.example.com;
@@ -17,6 +32,15 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/relay.example.com/privkey.pem;
     # Match the application upload policy, not an unlimited body size.
     client_max_body_size 25m;
+    limit_req zone=relay_auth burst=9 nodelay;
+    limit_req zone=relay_hooks burst=119 nodelay;
+    limit_req_status 429;
+    error_page 429 = @relay_rate_limited;
+    location @relay_rate_limited {
+        default_type application/json;
+        add_header Retry-After $relay_edge_retry always;
+        return 429 '{"detail":"Too many requests"}';
+    }
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
