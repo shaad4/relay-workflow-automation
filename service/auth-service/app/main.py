@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app import rate_limit
 from app.config import allowed_origins as configured_origins
 from app.config import validate_startup
 from app.grpc.server import start_grpc_server
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await rate_limit.close()
         await grpc_server.stop(grace=5)
 
 

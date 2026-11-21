@@ -16,6 +16,7 @@ from app.grpc.workflow_client import WorkflowGrpcClient
 from app.kafka.producer import publish_workflow_triggered
 from app.schemas.events import WorkflowTriggeredEvent
 from app.schemas.manual_trigger import ManualRunRequest
+from app.services import trigger_limits
 
 router = APIRouter(
     prefix="/workflows",
@@ -34,6 +35,18 @@ async def run_workflow_manually(
     request: Request,
     identity: dict = Depends(get_current_identity),
 ):
+    # The auth service supplies both IDs.
+    try:
+        workspace_id = str(UUID(identity["workspace_id"]))
+        user_id = str(UUID(identity["user_id"]))
+    except (ValueError, TypeError, KeyError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid trigger identity",
+        )
+
+    await trigger_limits.manual(user_id, workspace_id)
+
     # 1. Validate Content-Type
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
 
@@ -99,15 +112,6 @@ async def run_workflow_manually(
                 include_context=False,
             ),
         ) from exc
-
-    # 6. Resolve authenticated workspace
-    try:
-        workspace_id = str(UUID(identity["workspace_id"]))
-    except (ValueError, TypeError, KeyError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid workspace identity",
-        )
 
     # 7. Validate published workflow
     client = WorkflowGrpcClient()

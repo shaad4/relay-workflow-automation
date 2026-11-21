@@ -417,3 +417,19 @@ test("an already aborted request releases its unread body", async () => {
   assert.equal(response.status, 400);
   assert.equal(cancelled, true);
 });
+
+test("rate limited requests keep the upstream retry delay", async () => {
+  const response = await proxyRequest(
+    request("/auth/login", { method: "POST" }),
+    {
+      env,
+      fetchImpl: async () =>
+        Response.json(
+          { detail: "Too many requests" },
+          { status: 429, headers: { "Retry-After": "17" } },
+        ),
+    },
+  );
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("retry-after"), "17");
+});

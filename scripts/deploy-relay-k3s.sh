@@ -37,6 +37,12 @@ k patch configmap relay-config --type=merge \
     }
   }'
 
+# Older full-K3s ConfigMaps predate rate limiting. Preserve operator overrides.
+if [[ -z "$(k get configmap relay-config -o jsonpath='{.data.RATE_LIMIT_REDIS_URL}')" ]]; then
+  k patch configmap relay-config --type=merge \
+    -p '{"data":{"RATE_LIMIT_REDIS_URL":"redis://redis:6379/2"}}'
+fi
+
 # Verify the API Gateway configuration.
 GATEWAY_URL="$(k get configmap relay-config \
   -o jsonpath='{.data.API_GATEWAY_URL}')"

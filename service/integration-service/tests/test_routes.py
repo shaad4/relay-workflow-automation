@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -51,7 +52,8 @@ class Client:
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setattr(public_webhooks.trigger_limits, "webhook", AsyncMock())
     app = FastAPI()
     app.include_router(webhooks.router)
     app.include_router(public_webhooks.router)
@@ -445,3 +447,21 @@ def test_public_test_webhook_reports_invalid_json_into_session(client, monkeypat
     state = asyncio.run(get_session(session_id, str(WEBHOOK_ID), str(WORKSPACE_ID)))
     assert state["status"] == "failed"
     assert state["result"]["status_code"] == 400
+
+
+@pytest.mark.parametrize("suffix", ["", "/test"])
+def test_throttled_webhook_skips_downstream_work(client, monkeypatch, suffix):
+    from fastapi import HTTPException
+
+    target = webhook()
+    monkeypatch.setattr(public_webhooks, "get_webhook_by_public_token", async_return(target))
+    public_webhooks.trigger_limits.webhook.side_effect = HTTPException(
+        429, "Too many requests", headers={"Retry-After": "3"}
+    )
+    work = AsyncMock()
+    for name in ("validate_workflow_version", "publish_workflow_triggered", "publish_result"):
+        monkeypatch.setattr(public_webhooks, name, work)
+    response = client.post(f"/hooks/public-token{suffix}", json={})
+    assert response.status_code == 429 and response.headers["retry-after"] == "3"
+    public_webhooks.trigger_limits.webhook.assert_awaited_once_with(target.id, target.workspace_id)
+    work.assert_not_awaited()

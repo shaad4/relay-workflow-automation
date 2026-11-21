@@ -5,6 +5,7 @@ from app.core.exceptions import EmailVerificationRequired
 from app.core.security import hash_password, verify_password
 from app.models import User, Workspace
 from app.schemas.auth import LoginRequest, RegisterRequest
+from app.services import auth_limits
 from app.services.email_verification_service import create_verification_token
 from app.services.token_sessions import create_refresh_session, rotate_refresh_token
 
@@ -70,6 +71,7 @@ async def login_user(
         raise ValueError("Invalid email or password")
 
     if user.email_verified_at is None:
+        await auth_limits.limit_email("verification", user.email)
         try:
             verification_token = await create_verification_token(
                 user_id=user.id,

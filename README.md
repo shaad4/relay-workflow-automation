@@ -242,7 +242,7 @@ relay-workflow-automation/
 
 ## ⚡ Getting Started
 
-Start with the **[deployment guide](deploy/README.md)** for [Docker Compose](deploy/docker/README.md), [Kubernetes/K3s](deploy/kubernetes/README.md), and the manual GitHub Actions release workflow.
+Start with the **[deployment guide](deploy/README.md)** for [Docker Compose](deploy/docker/README.md), [Kubernetes/K3s](deploy/kubernetes/README.md), and the manual GitHub Actions release workflow. See [endpoint rate limiting](docs/rate-limiting.md) for quotas, Redis settings and public proxy configuration.
 
 ### Requirements
 

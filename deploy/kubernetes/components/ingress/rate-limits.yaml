@@ -1,0 +1,99 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: relay-auth-limit
+spec:
+  rateLimit:
+    average: 10
+    period: 1m
+    burst: 10
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: relay-auth-limit
+  labels:
+    app.kubernetes.io/part-of: relay
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: relay-relay-auth-limit@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - relay.example.com
+    secretName: relay-tls
+  rules:
+  - host: relay.example.com
+    http:
+      paths:
+      - path: /api/relay/auth/login
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              name: http
+      - path: /api/relay/auth/register
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              name: http
+      - path: /api/relay/auth/forgot-password
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              name: http
+      - path: /api/relay/auth/reset-password
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              name: http
+      - path: /api/relay/auth/resend-verification
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              name: http
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: relay-hooks-limit
+spec:
+  rateLimit:
+    average: 120
+    period: 1m
+    burst: 120
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: relay-hooks-limit
+  labels:
+    app.kubernetes.io/part-of: relay
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: relay-relay-hooks-limit@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - relay.example.com
+    secretName: relay-tls
+  rules:
+  - host: relay.example.com
+    http:
+      paths:
+      - path: /api/relay/hooks
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              name: http

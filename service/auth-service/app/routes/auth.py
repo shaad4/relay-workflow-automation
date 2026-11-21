@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, 
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import rate_limit
 from app.config import integer
 from app.core.dependencies import get_current_user
 from app.core.exceptions import EmailVerificationRequired
@@ -30,6 +31,7 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     ResetPasswordResponse,
 )
+from app.services import auth_limits
 from app.services.auth_service import login_user, refresh_access_token, register_user
 from app.services.email_service import (
     send_password_reset_email,
@@ -149,6 +151,8 @@ async def login(
     response: Response,
     session: AsyncSession = Depends(get_db),
 ):
+    key = auth_limits.account_key("login", data.email)
+    reset = await rate_limit.take(900, (key, auth_limits.LOGIN_FAILURES))
     try:
         access_token, refresh_token = await login_user(
             data,
@@ -178,6 +182,12 @@ async def login(
             detail=str(exc),
         )
 
+    except Exception:
+        # An upstream failure did not establish an invalid credential.
+        await auth_limits.release(key, reset)
+        raise
+
+    await auth_limits.release(key, reset)
     set_access_cookie(response, access_token)
     set_refresh_cookie(response, refresh_token)
     return LoginResponse(
@@ -270,6 +280,7 @@ async def resend_verification(
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db),
 ):
+    await auth_limits.limit_email("verification", data.email)
     result = await resend_verification_email(
         data.email,
         session,
@@ -297,6 +308,7 @@ async def forgot_password(
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db),
 ):
+    await auth_limits.limit_email("recovery", data.email)
     result = await create_password_reset_token(
         data.email,
         session,
