@@ -59,7 +59,7 @@ def test_correct_expression_preserves_whole_types_and_json_closing_braces():
         ({"model": "x" * 151}, "model"),
         ({"prompt": "x" * 10001}, "prompt"),
         ({"instructions": "x" * 10001}, "instructions"),
-        ({"rag_context": "x" * 2001}, "rag_context"),
+        ({"rag_context": "x" * 20001}, "rag_context"),
         ({"input_mappings": {}}, "input_mappings"),
         ({"output_format": "json"}, "output_format"),
         ({"provider": "openai"}, "provider"),
