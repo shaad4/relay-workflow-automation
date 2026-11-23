@@ -44,7 +44,7 @@ class AIGenerateConfig(BaseModel):
     model: str = Field(min_length=1, max_length=150)
     instructions: str = Field(default="", max_length=10000)
     prompt: str = Field(min_length=1, max_length=10000)
-    rag_context: str = Field(default="", max_length=2000)
+    rag_context: str = Field(default="", max_length=20000)
 
     @field_validator("model", "instructions", "prompt")
     @classmethod
