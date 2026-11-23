@@ -209,7 +209,7 @@ class AIDecisionConfig(BaseModel):
 
     rag_context: str = Field(
         default="",
-        max_length=2000,
+        max_length=20000,
     )
 
     allowed_decisions: list[str] = Field(
