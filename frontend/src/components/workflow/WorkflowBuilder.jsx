@@ -26,11 +26,14 @@ import WorkflowValidation from "./WorkflowValidation";
 import { useWorkflowValidation } from "./useWorkflowValidation";
 import {
   normalizeValidation,
+  publicationValidation,
+  validateAppConnections,
   validateCanvas,
   validationUnavailable,
 } from "./workflowValidation";
 import { clearExampleNodeConfig, getNodeDefinition } from "./nodeDefinitions";
 import { listAIConnections } from "@/services/aiProviderConnections";
+import { listConnections } from "@/services/connections";
 import {
   normalizeDecisionConfiguration,
   normalizeRAGConfiguration,
@@ -1499,6 +1502,7 @@ export default function WorkflowBuilder({
         const resourceErrors = [
           ...(await validateRAGKnowledgeBases(nodes)),
           ...(await validateAIConnections(nodes)),
+          ...(await validateAppConnections(nodes, listConnections)),
         ];
         if (resourceErrors.length) {
           const resources = normalizeValidation(
@@ -1563,6 +1567,7 @@ export default function WorkflowBuilder({
       const resourceErrors = [
         ...(await validateRAGKnowledgeBases(nodes)),
         ...(await validateAIConnections(nodes)),
+        ...(await validateAppConnections(nodes, listConnections)),
       ];
       if (!isCurrent()) return;
       if (resourceErrors.length) {
@@ -1625,18 +1630,20 @@ export default function WorkflowBuilder({
         setIsInspectorOpen(true);
       }
     } catch (err) {
-      setValidationResult({
-        isValid: false,
-        errors: [
-          {
-            code: "PUBLISH_FAILED",
-            message:
-              err?.status && err.status < 500
-                ? `Publishing failed: ${err.message}`
-                : "Publishing could not be confirmed. Refresh workflow state before retrying; publication may already have completed. Any changes made during validation must be saved first.",
-          },
-        ],
-      });
+      setValidationResult(
+        publicationValidation(err, nodes) ?? {
+          isValid: false,
+          errors: [
+            {
+              code: "PUBLISH_FAILED",
+              message:
+                err?.status && err.status < 500
+                  ? `Publishing failed: ${err.message}`
+                  : "Publishing could not be confirmed. Refresh workflow state before retrying; publication may already have completed. Any changes made during validation must be saved first.",
+            },
+          ],
+        },
+      );
       setValidationOpen(true);
     } finally {
       publishingRef.current = false;

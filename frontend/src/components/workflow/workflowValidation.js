@@ -118,3 +118,66 @@ export function contractOutputFields(contract, scalarOnly = false) {
     )
     .map(([name]) => name);
 }
+
+
+// Publication can reject a draft even after a successful preflight (for example,
+// if another editor changed the saved definition). Keep the server's field issues.
+export function publicationValidation(error, nodes) {
+  if (
+    error?.status !== 400 ||
+    error.detail?.code !== "WORKFLOW_VALIDATION_FAILED"
+  )
+    return null;
+  try {
+    const result = normalizeValidation(error.detail, nodes);
+    return result.isValid ? null : result;
+  } catch {
+    return null;
+  }
+}
+
+const actionProviders = {
+  "action.email": "gmail",
+  "action.http_request": "http",
+  "action.refund": "stripe",
+};
+
+// Check saved connection membership and provider compatibility without sending
+// a test email, making a payment, or exposing credentials.
+export async function validateAppConnections(nodes, listConnections) {
+  const actions = nodes.filter(
+    (node) =>
+      Object.hasOwn(actionProviders, node.data?.typeId) &&
+      !/^\{\{\s*[^{}]+\s*\}\}$/.test(
+        String(node.data.config?.connection_id ?? ""),
+      ),
+  );
+  if (!actions.length) return [];
+  try {
+    const connections = await listConnections();
+    if (!Array.isArray(connections))
+      throw new Error("Invalid app connection list");
+    return actions
+      .filter((node) => {
+        const provider = actionProviders[node.data.typeId];
+        const connection = connections.find(
+          (item) => item.id === node.data.config?.connection_id,
+        );
+        return !connection || connection.provider !== provider;
+      })
+      .map((node) => ({
+        code: "NODE_CONFIG_CONNECTION_ID",
+        node_id: node.data.nodeId ?? node.id,
+        field: "connection_id",
+        message: `${node.data.label || "Action"}: Choose a saved ${actionProviders[node.data.typeId]} connection before publishing.`,
+      }));
+  } catch {
+    return [
+      {
+        code: "APP_CONNECTION_CHECK_FAILED",
+        message:
+          "Unable to verify app connections. Retry validation before publishing.",
+      },
+    ];
+  }
+}

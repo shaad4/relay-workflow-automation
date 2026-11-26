@@ -689,3 +689,20 @@ test("Activation recovery retries lifecycle synchronization only for a confirmed
   await retryScheduleActivation("workflow", {}, fixture.api);
   assert.equal(fixture.calls.filter((call) => call === "sync-retry").length, 1);
 });
+
+
+test("publication validation rejection never reconciles or activates a schedule", async () => {
+  const error = Object.assign(new Error("Workflow validation failed"), {
+    status: 400,
+    detail: { code: "WORKFLOW_VALIDATION_FAILED" },
+  });
+  await assert.rejects(
+    publishWithSchedule("workflow", 1, "version", {}, {
+      publishWorkflow: async () => {
+        throw error;
+      },
+      getWorkflow: () => assert.fail("Rejected publication is definitive"),
+    }),
+    (actual) => actual === error,
+  );
+});

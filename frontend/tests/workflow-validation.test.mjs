@@ -8,6 +8,8 @@ import {
   workflowDefinition,
   validateCanvas,
   contractOutputFields,
+  publicationValidation,
+  validateAppConnections,
 } from "../src/components/workflow/workflowValidation.js";
 import { guaranteedPreviousNodesFor } from "../src/components/workflow/workflowVariables.js";
 
@@ -217,5 +219,57 @@ test("variable picker excludes branch-only and approval outputs at a merge", () 
       (n) => n.data.nodeId,
     ),
     ["split"],
+  );
+});
+
+
+test("publication rejects with actionable field-level errors", () => {
+  const result = publicationValidation(
+    {
+      status: 400,
+      detail: {
+        code: "WORKFLOW_VALIDATION_FAILED",
+        valid: false,
+        errors: [issue],
+        warnings: [],
+      },
+    },
+    nodes,
+  );
+  assert.equal(result.isValid, false);
+  assert.equal(result.errors[0].canvasNodeId, "temp-generate_1");
+  assert.equal(result.errors[0].field, "prompt");
+  assert.equal(publicationValidation({ status: 503 }, nodes), null);
+});
+
+test("app connection preflight blocks missing and incompatible providers", async () => {
+  const graph = [
+    node("email", "action.email"),
+    node("refund", "action.refund"),
+    node("http", "action.http_request"),
+    node("dynamic", "action.email"),
+  ];
+  graph[0].data.config.connection_id = "wrong-provider";
+  graph[1].data.config.connection_id = "missing";
+  graph[2].data.config.connection_id = "http";
+  graph[3].data.config.connection_id = "{{trigger.data.connection}}";
+  const errors = await validateAppConnections(graph, async () => [
+    { id: "wrong-provider", provider: "http" },
+    { id: "http", provider: "http" },
+  ]);
+  assert.deepEqual(
+    errors.map((error) => error.node_id),
+    ["email", "refund"],
+  );
+  assert.ok(errors.every((error) => error.field === "connection_id"));
+  const unavailable = await validateAppConnections(graph, async () => {
+    throw new Error("offline");
+  });
+  assert.equal(unavailable[0].code, "APP_CONNECTION_CHECK_FAILED");
+  assert.deepEqual(
+    await validateAppConnections([graph[3]], () =>
+      assert.fail("Dynamic connections cannot be checked before runtime"),
+    ),
+    [],
   );
 });
