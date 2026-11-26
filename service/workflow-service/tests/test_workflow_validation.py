@@ -100,6 +100,7 @@ def test_valid_configuration_for_every_supported_type(node_type):
 @pytest.mark.parametrize(
     "node_type,field",
     [
+        ("trigger.webhook", "webhook_id"),
         ("trigger.schedule", "schedule_type"),
         ("action.http_request", "connection_id"),
         ("action.http_request", "url"),
@@ -114,8 +115,12 @@ def test_valid_configuration_for_every_supported_type(node_type):
         ("human.approval", "message"),
         ("ai.rag_search", "knowledge_base_id"),
         ("ai.rag_search", "query"),
+        ("ai.decision", "connection_id"),
+        ("ai.decision", "model"),
         ("ai.decision", "instructions"),
         ("ai.decision", "allowed_decisions"),
+        ("ai.generate", "connection_id"),
+        ("ai.generate", "model"),
         ("ai.generate", "prompt"),
         ("logic.condition", "value"),
     ],
@@ -247,7 +252,6 @@ def test_dynamic_inputs_are_not_resolved_during_validation(node_type, patch):
 @pytest.mark.parametrize(
     "node_type,patch",
     [
-        ("trigger.webhook", {}),
         (
             "action.http_request",
             {"method": "head", "headers": {"X-Value": "{{trigger.data.value}}"}, "timeout": 1.5},
@@ -263,7 +267,7 @@ def test_dynamic_inputs_are_not_resolved_during_validation(node_type, patch):
     ],
 )
 def test_compatible_optional_and_legacy_values(node_type, patch):
-    config = {} if node_type == "trigger.webhook" else {**VALID_CONFIGS[node_type], **patch}
+    config = {**VALID_CONFIGS[node_type], **patch}
     assert validate_config(node_type, config)["valid"]
 
 
@@ -366,3 +370,78 @@ def test_kahn_algorithm_does_not_mutate_indegree():
     validate_cycles({"a": [edge("a", "b")], "b": []}, indegree, errors)
     assert errors == []
     assert indegree == {"a": 0, "b": 1}
+
+
+@pytest.mark.parametrize("node_type", VALID_CONFIGS)
+def test_all_schema_required_fields_are_enforced(node_type):
+    schema = NODE_VALIDATORS[node_type][0]
+    for field, definition in schema.model_fields.items():
+        if not definition.is_required():
+            continue
+        for value in (None, "", "   "):
+            config = {**VALID_CONFIGS[node_type], field: value}
+            result = validate_config(node_type, config)
+            assert not result["valid"], (node_type, field, value)
+            assert any(issue.get("field") == field for issue in result["errors"])
+
+
+@pytest.mark.parametrize(
+    "node_type,field,value",
+    [
+        ("action.email", "to", "not-an-email"),
+        ("action.email", "to", "user@example.com\nBcc: other@example.com"),
+        ("action.email", "subject", "Hello\r\nInjected"),
+        ("action.email", "connection_id", "prefix {{trigger.data.connection}}"),
+        ("action.http_request", "timeout", "{{trigger.data.timeout}} seconds"),
+        ("ai.rag_search", "top_k", "top {{trigger.data.limit}}"),
+        ("ai.decision", "allowed_decisions", "prefix {{trigger.data.decisions}}"),
+        ("action.refund", "amount", "{{trigger.data.amount}} dollars"),
+    ],
+)
+def test_invalid_literal_or_partial_typed_template(node_type, field, value):
+    result = validate_config(node_type, {**VALID_CONFIGS[node_type], field: value})
+    assert not result["valid"]
+    assert any(issue.get("field") == field for issue in result["errors"])
+
+
+@pytest.mark.parametrize(
+    "config,field",
+    [
+        ({"schedule_type": "interval"}, "interval_minutes"),
+        ({"schedule_type": "cron"}, "cron_expression"),
+        ({"schedule_type": "cron", "cron_expression": "   "}, "cron_expression"),
+        ({"schedule_type": "interval", "interval_minutes": 1, "timezone": ""}, "timezone"),
+    ],
+)
+def test_conditional_schedule_requirements_identify_field(config, field):
+    result = validate_config("trigger.schedule", config)
+    assert not result["valid"]
+    assert any(issue.get("field") == field for issue in result["errors"])
+
+
+def test_publish_rejects_incomplete_email_and_preserves_current_version(integration_client):
+    workflow = NS(id=WORKFLOW_ID, status="active", published_version_id=WORKFLOW_ID)
+    draft = NS(id=VERSION_ID, version=2, status="draft")
+    nodes = [node("start", "trigger.manual"), node("email", "action.email", {})]
+    session = FakeSession(
+        [
+            Result(scalar=workflow),
+            Result(scalar=draft),
+            Result(scalar=workflow),
+            Result(scalar=draft),
+            Result(scalars=nodes),
+            Result(scalars=[edge("start", "email")]),
+        ]
+    )
+    with pytest.raises(service.WorkflowPublicationValidationError) as raised:
+        asyncio.run(service.publish_workflow(WORKFLOW_ID, 2, WORKSPACE_ID, session))
+    assert {issue["field"] for issue in raised.value.validation["errors"]} == {
+        "connection_id",
+        "to",
+        "subject",
+        "body",
+    }
+    assert session.commits == 0
+    assert draft.status == "draft"
+    assert workflow.published_version_id == WORKFLOW_ID
+    integration_client.sync_workflow_schedule.assert_not_awaited()
