@@ -222,7 +222,6 @@ test("variable picker excludes branch-only and approval outputs at a merge", () 
   );
 });
 
-
 test("publication rejects with actionable field-level errors", () => {
   const result = publicationValidation(
     {

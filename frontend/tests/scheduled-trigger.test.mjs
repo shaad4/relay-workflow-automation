@@ -690,7 +690,6 @@ test("Activation recovery retries lifecycle synchronization only for a confirmed
   assert.equal(fixture.calls.filter((call) => call === "sync-retry").length, 1);
 });
 
-
 test("publication validation rejection never reconciles or activates a schedule", async () => {
   const error = Object.assign(new Error("Workflow validation failed"), {
     status: 400,

@@ -95,7 +95,6 @@ class EmailConfig(BaseModel):
         "plain"
     )
 
-
     @field_validator("to", "subject")
     @classmethod
     def validate_email_headers(cls, value: str) -> str:

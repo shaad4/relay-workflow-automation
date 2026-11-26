@@ -946,7 +946,8 @@ async def validate_workflow(
     return validate_definition(
         nodes,
         edges,
-        allow_legacy_webhook=not for_publication and getattr(version, "status", None) == "published",
+        allow_legacy_webhook=not for_publication
+        and getattr(version, "status", None) == "published",
     )
 
 
