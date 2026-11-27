@@ -696,12 +696,18 @@ test("publication validation rejection never reconciles or activates a schedule"
     detail: { code: "WORKFLOW_VALIDATION_FAILED" },
   });
   await assert.rejects(
-    publishWithSchedule("workflow", 1, "version", {}, {
-      publishWorkflow: async () => {
-        throw error;
+    publishWithSchedule(
+      "workflow",
+      1,
+      "version",
+      {},
+      {
+        publishWorkflow: async () => {
+          throw error;
+        },
+        getWorkflow: () => assert.fail("Rejected publication is definitive"),
       },
-      getWorkflow: () => assert.fail("Rejected publication is definitive"),
-    }),
+    ),
     (actual) => actual === error,
   );
 });
