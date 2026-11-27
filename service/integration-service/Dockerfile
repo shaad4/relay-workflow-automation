@@ -14,6 +14,11 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOME=/tmp
+# Refresh vulnerable PAM packages from Debian security updates before dropping privileges.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y --only-upgrade \
+       libpam0g libpam-modules libpam-modules-bin libpam-runtime \
+    && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 10001 relay && useradd --uid 10001 --gid 10001 --no-create-home relay
 WORKDIR /app
 COPY --from=dependencies /opt/venv /opt/venv
