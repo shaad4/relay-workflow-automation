@@ -404,6 +404,12 @@ export async function publishWithSchedule(
   try {
     await api.publishWorkflow(workflowId, versionNumber);
   } catch (error) {
+    // A validation rejection is definitive, not an ambiguous lifecycle error.
+    if (
+      error?.status === 400 &&
+      error.detail?.code === "WORKFLOW_VALIDATION_FAILED"
+    )
+      throw error;
     publicationError = error;
   }
   let workflow;

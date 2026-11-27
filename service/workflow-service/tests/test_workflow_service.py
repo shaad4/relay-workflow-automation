@@ -293,7 +293,7 @@ def test_publish_workflow_updates_version_and_workflow(integration_client):
             Result(scalar=draft),
             Result(
                 scalars=[
-                    SimpleNamespace(node_id="start", node_type="trigger.webhook", configuration={})
+                    SimpleNamespace(node_id="start", node_type="trigger.manual", configuration={})
                 ]
             ),
             Result(scalars=[]),
@@ -680,7 +680,7 @@ def test_mutation_failures_roll_back(operation, result_count):
             Result(scalar=draft),
             Result(
                 scalars=[
-                    SimpleNamespace(node_id="ok", node_type="trigger.webhook", configuration={})
+                    SimpleNamespace(node_id="ok", node_type="trigger.manual", configuration={})
                 ]
             ),
             Result(scalars=[]),

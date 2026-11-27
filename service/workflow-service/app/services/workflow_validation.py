@@ -5,7 +5,9 @@ from app.services.expression_validation import validate_expression_references
 from pydantic import ValidationError
 
 
-def validate_node_configurations(nodes: list[WorkflowNode]) -> list[dict]:
+def validate_node_configurations(
+    nodes: list[WorkflowNode], *, allow_legacy_webhook: bool = False
+) -> list[dict]:
     errors = []
     for node in nodes:
         validator = NODE_VALIDATORS.get(node.node_type)
@@ -23,10 +25,30 @@ def validate_node_configurations(nodes: list[WorkflowNode]) -> list[dict]:
         try:
             # None is a legacy empty configuration; other non-objects are invalid.
             configuration = {} if node.configuration is None else node.configuration
+            # Published legacy snapshots may be inspected without rewriting them.
+            if (
+                allow_legacy_webhook
+                and node.node_type == "trigger.webhook"
+                and isinstance(configuration, dict)
+                and "webhook_id" not in configuration
+            ):
+                configuration = {
+                    **configuration,
+                    "webhook_id": "00000000-0000-0000-0000-000000000000",
+                }
             schema.model_validate(configuration)
         except ValidationError as exc:
-            for error in exc.errors():
-                field = ".".join(str(part) for part in error["loc"]) or "configuration"
+            for error in exc.errors(include_input=False, include_context=False, include_url=False):
+                location = error["loc"]
+                # Pydantic adds type-specific suffixes for failed union branches,
+                # e.g. ("amount", "str"). The public field is still "amount".
+                if (
+                    len(location) > 1
+                    and location[0] in schema.model_fields
+                    and location[1] in {"str", "int", "float", "bool"}
+                ):
+                    location = (location[0], *location[2:])
+                field = ".".join(str(part) for part in location) or "configuration"
                 errors.append(
                     {
                         "code": code,
@@ -208,11 +230,11 @@ def validate_reachability(
             )
 
 
-def validate_definition(nodes, edges, sample_input=None):
+def validate_definition(nodes, edges, sample_input=None, *, allow_legacy_webhook=False):
     """Shared by draft preflight, saved-version validation, and publication."""
     errors = []
     node_ids = validate_node_ids(nodes, errors)
-    errors.extend(validate_node_configurations(nodes))
+    errors.extend(validate_node_configurations(nodes, allow_legacy_webhook=allow_legacy_webhook))
     triggers = validate_triggers(nodes, errors)
     outgoing, indegree = validate_edges(edges, node_ids, errors)
     validate_branching(nodes, outgoing, errors)

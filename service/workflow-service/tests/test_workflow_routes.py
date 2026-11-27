@@ -593,3 +593,32 @@ def test_delete_workflow_cancels_if_approval_cleanup_fails(client, monkeypatch):
     assert response.status_code == 503
     assert "Human approval requests could not be deleted" in response.json()["detail"]
     assert closed == [True]
+
+
+def test_publish_returns_structured_validation_errors(client, monkeypatch):
+    from app.services.workflow_service import WorkflowPublicationValidationError
+
+    async def reject_publication(**kwargs):
+        raise WorkflowPublicationValidationError(
+            {
+                "valid": False,
+                "errors": [
+                    {
+                        "code": "INVALID_EMAIL_CONFIGURATION",
+                        "node_id": "email",
+                        "field": "to",
+                        "message": "Recipient is required",
+                    }
+                ],
+                "warnings": [],
+            }
+        )
+
+    monkeypatch.setattr(workflows, "publish_workflow", reject_publication)
+    response = client.post(f"/workflows/{uuid4()}/versions/1/publish/")
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "WORKFLOW_VALIDATION_FAILED"
+    assert not detail["valid"]
+    assert detail["errors"][0]["node_id"] == "email"
+    assert detail["errors"][0]["field"] == "to"

@@ -10,6 +10,14 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+class WorkflowPublicationValidationError(ValueError):
+    """Publication rejected before changing the live version."""
+
+    def __init__(self, validation: dict):
+        super().__init__("Workflow validation failed")
+        self.validation = validation
+
+
 class ScheduleSynchronizationError(RuntimeError):
     """Publication committed, but schedule lifecycle synchronization failed."""
 
@@ -77,10 +85,13 @@ async def update_workflow(
     session: AsyncSession,
 ) -> Workflow | None:
     result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
 
     workflow = result.scalar_one_or_none()
@@ -110,10 +121,13 @@ async def delete_workflow(
     session: AsyncSession,
 ) -> bool:
     result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     workflow = result.scalar_one_or_none()
     if workflow is None:
@@ -166,6 +180,7 @@ async def delete_workflow_version(
         version_number=version_number,
         workspace_id=workspace_id,
         session=session,
+        for_update=True,
     )
     if workflow is None or version is None:
         return False
@@ -226,13 +241,16 @@ async def get_workflow_version(
     version_number: int,
     workspace_id: str,
     session: AsyncSession,
+    *,
+    for_update: bool = False,
 ):
-    workflow_result = await session.execute(
-        select(Workflow).where(
-            Workflow.id == workflow_id,
-            Workflow.workspace_id == workspace_id,
-        )
+    statement = select(Workflow).where(
+        Workflow.id == workflow_id,
+        Workflow.workspace_id == workspace_id,
     )
+    if for_update:
+        statement = statement.with_for_update().execution_options(populate_existing=True)
+    workflow_result = await session.execute(statement)
 
     workflow = workflow_result.scalar_one_or_none()
 
@@ -258,10 +276,13 @@ async def create_draft_version(
 ):
     # Verify the workflow belongs to the current workspace.
     workflow_result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
 
     workflow = workflow_result.scalar_one_or_none()
@@ -356,10 +377,13 @@ async def create_workflow_node(
     session: AsyncSession,
 ):
     workflow_result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
 
     workflow = workflow_result.scalar_one_or_none()
@@ -462,10 +486,13 @@ async def update_workflow_node(
     session: AsyncSession,
 ):
     workflow_result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
 
     workflow = workflow_result.scalar_one_or_none()
@@ -540,10 +567,13 @@ async def delete_workflow_node(
     session: AsyncSession,
 ):
     workflow_result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
 
     workflow = workflow_result.scalar_one_or_none()
@@ -603,10 +633,13 @@ async def create_workflow_edge(
     session: AsyncSession,
 ):
     workflow_result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
 
     workflow = workflow_result.scalar_one_or_none()
@@ -721,10 +754,13 @@ async def update_workflow_edge(
     session: AsyncSession,
 ):
     workflow_result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
 
     workflow = workflow_result.scalar_one_or_none()
@@ -804,10 +840,13 @@ async def delete_workflow_edge(
     session: AsyncSession,
 ):
     workflow_result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
 
     workflow = workflow_result.scalar_one_or_none()
@@ -857,6 +896,8 @@ async def validate_workflow(
     version_number: int,
     workspace_id: str,
     session: AsyncSession,
+    *,
+    for_publication: bool = False,
 ):
     # 1. Validate workflow ownership
     workflow_result = await session.execute(
@@ -902,7 +943,12 @@ async def validate_workflow(
 
     edges = edge_result.scalars().all()
 
-    return validate_definition(nodes, edges)
+    return validate_definition(
+        nodes,
+        edges,
+        allow_legacy_webhook=not for_publication
+        and getattr(version, "status", None) == "published",
+    )
 
 
 async def _published_version_has_schedule_trigger(
@@ -927,10 +973,13 @@ async def publish_workflow(
     session: AsyncSession,
 ):
     workflow_result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     workflow = workflow_result.scalar_one_or_none()
     if workflow is None:
@@ -962,16 +1011,19 @@ async def publish_workflow(
         )
 
     if not already_published:
+        # The workflow row is locked until commit; all draft graph writers
+        # acquire the same lock before inspecting version status.
         validation_result = await validate_workflow(
             workflow_id=workflow_id,
             version_number=version_number,
             workspace_id=workspace_id,
             session=session,
+            for_publication=True,
         )
         if validation_result is None:
             return None
         if not validation_result["valid"]:
-            raise ValueError("Workflow validation failed")
+            raise WorkflowPublicationValidationError(validation_result)
 
     has_schedule_trigger = await _published_version_has_schedule_trigger(version.id, session)
 
@@ -1016,10 +1068,13 @@ async def deactivate_workflow(
     session: AsyncSession,
 ):
     workflow_result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     workflow = workflow_result.scalar_one_or_none()
     if workflow is None:
@@ -1056,10 +1111,13 @@ async def activate_workflow(
     session: AsyncSession,
 ):
     workflow_result = await session.execute(
-        select(Workflow).where(
+        select(Workflow)
+        .where(
             Workflow.id == workflow_id,
             Workflow.workspace_id == workspace_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     workflow = workflow_result.scalar_one_or_none()
     if workflow is None:

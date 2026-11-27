@@ -121,6 +121,7 @@ export async function apiRequest(endpoint, options = {}) {
         "Something went wrong",
     );
     error.status = response.status;
+    error.detail = data.detail;
     throw error;
   }
 

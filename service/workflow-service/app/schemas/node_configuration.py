@@ -13,6 +13,7 @@ from pydantic import (
     StrictFloat,
     StrictInt,
     StrictStr,
+    ValidationInfo,
     ValidatorFunctionWrapHandler,
     WrapValidator,
     field_validator,
@@ -20,6 +21,7 @@ from pydantic import (
 )
 
 from app.contracts.ai_generate import AIGenerateConfig as AIGenerateConfig
+from app.contracts.expressions import EXPRESSION_PATTERN
 
 
 def validate_required_text(value: str) -> str:
@@ -32,9 +34,13 @@ def is_expression(value: Any) -> bool:
     return isinstance(value, str) and bool(re.search(r"\{\{\s*[^{}\s]+.*?\}\}", value))
 
 
+def is_whole_expression(value: Any) -> bool:
+    return isinstance(value, str) and EXPRESSION_PATTERN.fullmatch(value) is not None
+
+
 def validate_runtime_value(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
     """Defer expression values until the executor has resolved their inputs."""
-    return value if is_expression(value) else handler(value)
+    return value if is_whole_expression(value) else handler(value)
 
 
 RequiredText = Annotated[str, AfterValidator(validate_required_text)]
@@ -42,10 +48,10 @@ RuntimeUUID = Annotated[UUID, WrapValidator(validate_runtime_value)]
 
 
 class WebhookTriggerConfig(BaseModel):
-    # Endpoints live in Integration Service. Older nodes have {} or method/path.
+    # A draft must identify the endpoint created by Integration Service.
     model_config = ConfigDict(extra="allow")
 
-    webhook_id: UUID | None = None
+    webhook_id: UUID
     method: Literal["POST"] = "POST"
     path: str | None = None
 
@@ -89,6 +95,22 @@ class EmailConfig(BaseModel):
         "plain"
     )
 
+    @field_validator("to", "subject")
+    @classmethod
+    def validate_email_headers(cls, value: str) -> str:
+        if "\r" in value or "\n" in value:
+            raise ValueError("Email headers cannot contain line breaks")
+        return value
+
+    @field_validator("to")
+    @classmethod
+    def validate_recipient(cls, value: str) -> str:
+        if not is_expression(value) and not re.fullmatch(
+            r"[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+", value.strip()
+        ):
+            raise ValueError("Enter a valid recipient email address")
+        return value
+
 
 class RefundConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -102,7 +124,7 @@ class RefundConfig(BaseModel):
     @field_validator("amount")
     @classmethod
     def validate_amount(cls, value: str | int | float) -> str | int | float:
-        if is_expression(value):
+        if is_whole_expression(value):
             return value
         try:
             amount = Decimal(str(value))
@@ -236,7 +258,7 @@ class AIDecisionConfig(BaseModel):
         normalized = []
 
         for value in values:
-            if is_expression(value):
+            if is_whole_expression(value):
                 normalized.append(value)
                 continue
             decision = value.strip().upper()
@@ -333,43 +355,51 @@ class ScheduledTriggerConfig(BaseModel):
         ge=1,
         le=10080,
         strict=True,
+        validate_default=True,
     )
 
     cron_expression: str | None = Field(
         default=None,
         max_length=100,
+        validate_default=True,
     )
 
     timezone: str = Field(
         default="UTC",
         max_length=100,
+        validate_default=True,
     )
 
     enabled: bool = True
 
-    @model_validator(mode="after")
-    def validate_schedule(self):
-        # Validate timezone
+    @field_validator("interval_minutes")
+    @classmethod
+    def validate_interval(cls, value: int | None, info: ValidationInfo) -> int | None:
+        schedule_type = info.data.get("schedule_type")
+        if schedule_type == "interval" and value is None:
+            raise ValueError("interval_minutes is required")
+        if schedule_type == "cron" and value is not None:
+            raise ValueError("interval_minutes is not allowed for cron")
+        return value
+
+    @field_validator("cron_expression")
+    @classmethod
+    def validate_cron(cls, value: str | None, info: ValidationInfo) -> str | None:
+        schedule_type = info.data.get("schedule_type")
+        if schedule_type == "interval" and value is not None:
+            raise ValueError("cron_expression is not allowed for interval")
+        if schedule_type == "cron":
+            if not value or not value.strip():
+                raise ValueError("cron_expression is required")
+            if not croniter.is_valid(value):
+                raise ValueError("Invalid cron expression")
+        return value
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
         try:
-            ZoneInfo(self.timezone)
+            ZoneInfo(value)
         except (ZoneInfoNotFoundError, ValueError):
             raise ValueError("Invalid timezone")
-
-        if self.schedule_type == "interval":
-            if self.interval_minutes is None:
-                raise ValueError("interval_minutes is required")
-
-            if self.cron_expression is not None:
-                raise ValueError("cron_expression is not allowed for interval")
-
-        if self.schedule_type == "cron":
-            if self.interval_minutes is not None:
-                raise ValueError("interval_minutes is not allowed for cron")
-
-            if not self.cron_expression:
-                raise ValueError("cron_expression is required")
-
-            if not croniter.is_valid(self.cron_expression):
-                raise ValueError("Invalid cron expression")
-
-        return self
+        return value

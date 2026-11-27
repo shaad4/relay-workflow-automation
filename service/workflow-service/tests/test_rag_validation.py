@@ -53,6 +53,8 @@ def test_legacy_matching_and_input_immutability():
 
 
 def node(id, type, config=None):
+    if config is None and type == "trigger.webhook":
+        config = {"webhook_id": KB}
     return NS(node_id=id, node_type=type, configuration=config or {})
 
 

@@ -9,7 +9,7 @@ from app.schemas.workflow_edge import WorkflowEdgeCreate
 EXAMPLE_ID = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa"
 EXAMPLES = {
     "trigger.manual": {},
-    "trigger.webhook": {},
+    "trigger.webhook": {"webhook_id": EXAMPLE_ID},
     "trigger.schedule": {"schedule_type": "interval", "interval_minutes": 60, "timezone": "UTC"},
     "action.http_request": {
         "connection_id": EXAMPLE_ID,

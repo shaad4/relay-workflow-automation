@@ -25,6 +25,7 @@ from app.services.webhook_lifecycle import (
 )
 from app.services.workflow_service import (
     ScheduleSynchronizationError,
+    WorkflowPublicationValidationError,
     activate_workflow,
     create_draft_version,
     create_workflow,
@@ -641,6 +642,15 @@ async def publish_workflow_version_route(
         raise HTTPException(
             status_code=503,
             detail="Workflow published — scheduling needs attention. Schedule synchronization could not be confirmed. Refresh workflow and schedule state before retrying activation.",
+        ) from exc
+    except WorkflowPublicationValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "WORKFLOW_VALIDATION_FAILED",
+                "message": str(exc),
+                **exc.validation,
+            },
         ) from exc
     except ValueError as exc:
         raise HTTPException(
