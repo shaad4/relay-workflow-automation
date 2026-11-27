@@ -154,7 +154,8 @@ export async function validateAppConnections(nodes, listConnections) {
   if (!actions.length) return [];
   try {
     const connections = await listConnections();
-    if (!Array.isArray(connections)) throw new Error("Invalid app connection list");
+    if (!Array.isArray(connections))
+      throw new Error("Invalid app connection list");
     return actions
       .filter((node) => {
         const provider = actionProviders[node.data.typeId];
