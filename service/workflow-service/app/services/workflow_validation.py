@@ -39,7 +39,16 @@ def validate_node_configurations(
             schema.model_validate(configuration)
         except ValidationError as exc:
             for error in exc.errors(include_input=False, include_context=False, include_url=False):
-                field = ".".join(str(part) for part in error["loc"]) or "configuration"
+                location = error["loc"]
+                # Pydantic adds type-specific suffixes for failed union branches,
+                # e.g. ("amount", "str"). The public field is still "amount".
+                if (
+                    len(location) > 1
+                    and location[0] in schema.model_fields
+                    and location[1] in {"str", "int", "float", "bool"}
+                ):
+                    location = (location[0], *location[2:])
+                field = ".".join(str(part) for part in location) or "configuration"
                 errors.append(
                     {
                         "code": code,
